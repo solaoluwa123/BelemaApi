@@ -1,0 +1,157 @@
+/*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+package com.transgate.api.app.controllers;
+
+import com.transgate.api.interfaces.UnlockAccountsInterface;
+import com.transgate.api.interfaces.UsersInterface;
+import com.transgate.api.models.LoginRequest;
+import com.transgate.api.models.LoginResponse;
+import com.transgate.api.models.UserModel;
+import com.transgate.api.util.ResponseManager;
+import com.transgate.api.util.Validators;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RestController;
+
+/**
+ *
+ * @author Makintola
+ */
+@RestController
+public class UsersController {
+    
+    @Autowired
+    private UsersInterface usersInterface;
+    
+    @Autowired
+    private UnlockAccountsInterface unlockAccountsInterface;
+    
+    ResponseManager responseManager = new ResponseManager();
+    
+    Validators validators = new Validators();
+    
+    @RequestMapping(value = "/users/crons/unlock", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity Unlock() {
+        unlockAccountsInterface.Unlock();
+        return responseManager.ResponseAccepted();
+    }
+    
+    @RequestMapping(value = "/users/crons/reducelocktime", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity ReduceLockTime() {
+        unlockAccountsInterface.ReduceLockTime();
+        return responseManager.ResponseAccepted();
+    }
+    
+    @RequestMapping(value = "/users/login", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity Login(@RequestHeader(value = "Authorization") String header,
+            @RequestBody LoginRequest login) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.Login(login.getUsername(), login.getPassword());
+    }
+    
+    @RequestMapping(value = "/users/resetpassword", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity ResetPassword(@RequestHeader(value = "Authorization") String header,
+            @RequestBody LoginResponse login) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.ResetPassword(login.getUsername(), login.getSurname(), login.getFirstname());
+    }
+    
+    @RequestMapping(value = "/users/recoverpassword", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity SendPasswordRecoveryCode(@RequestHeader(value = "Authorization") String header,
+            @RequestBody LoginRequest login) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.SendPasswordRecoveryCode(login.getUsername());
+    }
+    
+    @RequestMapping(value = "/users/logout", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity Logout(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody LoginRequest login) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.ClearUserSession(sessiontoken, login.getUsername());
+    }
+    
+    @RequestMapping(value = "/users/get", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetUsers(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetUsers();
+    }
+    
+    @RequestMapping(value = "/roles/get", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetRoles(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetRoles();
+    }
+    
+    @RequestMapping(value = "/users/create", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Create(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.Create(sessiontoken, user.getRole(), user.getUsername(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getRoleid(), user.getSecurity());
+    }
+    
+    @RequestMapping(value = "/users/{userid}/{username}", method = RequestMethod.DELETE, headers = "Accept=application/json")
+    public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("userid") int userid, @PathVariable("username") String username) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.Delete(sessiontoken, userid, username);
+    }
+    
+    @RequestMapping(value = "/users/{userid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetUserById(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("userid") int userid) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetUserById(sessiontoken, userid);
+    }
+    
+    @RequestMapping(value = "/users/edit", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.Edit(sessiontoken, user.getId(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getRoleid(), user.getUsername());
+    }
+    
+    @RequestMapping(value = "/users/approval", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity UserApprovals(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername());
+    }
+    
+    @RequestMapping(value = "/users/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetUsersForActions(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetUsersForActions();
+    }
+}

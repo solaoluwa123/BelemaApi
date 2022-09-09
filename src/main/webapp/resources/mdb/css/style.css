@@ -1,0 +1,80 @@
+.bg-purple-opaque {
+    background: rgb(99, 81, 206) !important;
+}
+
+.btn-app {
+    background: #ffb606 !important;
+    color: #fff !important;
+}
+.btn-app-blue {background: #6351ce !important; color: #fff;}
+.vertical-line {border-left: #ffb606 3px solid; padding-left: 15px;}
+.span-social-rounded {
+    border: #fff solid 1px;
+}
+.btn-app-blue:hover {color: #fff !important;}
+.span-social-rounded a:hover {color: #ffb606;}
+.card-tile i {
+    font-size: 5px;
+}
+span a:hover, footer p a:hover, .topbar li a:hover, p .p-a:hover, span .p-a:hover {
+    color: rgba(255, 255, 255, 0.8) !important;
+}
+.footer-copyright .text-md-right a:hover, .footer-copyright a:hover {
+    color: #fff !important;
+}
+.card-tile {
+    font-size: 10px;
+}
+
+.card-lay {
+ 
+}
+
+.bg-app {
+    background: #ffb606 !important;
+}
+
+.app-color {
+    background: #ffb606 !important;
+}
+
+.text-white-fade {
+    color: rgba(255, 255, 255, 0.6) !important;
+}
+
+.rgba-app-strong {
+    background: rgba(255, 182, 6, 0.6) !important;
+}
+
+.rgba-app-light {background: rgba(255, 182, 6, 0.1) !important;}
+ 
+.text-app {
+    color: #ffb606 !important;
+}
+
+.navbar-nav li a {
+    border-bottom: solid 2px #6351ce;
+}
+
+.navbar-nav li a:hover {
+    border-bottom: solid 2px #ffb606;
+}
+
+.top-bar {
+    height: 50px;     
+} 
+
+.top-bar ul li {list-style-type: none; font-size: 14px;}
+
+.separate {
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.news-title a:hover {
+    color: #ffb606 !important;    
+}
+
+@media (max-width: 740px) {
+    
+}
