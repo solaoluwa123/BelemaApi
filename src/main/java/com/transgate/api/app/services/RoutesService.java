@@ -5,9 +5,9 @@
  */
 package com.transgate.api.app.services;
 
-import com.transgate.api.interfaces.NodesInterface;
-import com.transgate.api.models.NodeModel;
+import com.transgate.api.interfaces.RoutesInterface;
 import com.transgate.api.models.NetworkResponse;
+import com.transgate.api.models.RouteModel;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
  * @author Makintola
  */
 @Service
-public class NodesService implements NodesInterface {
+public class RoutesService implements RoutesInterface {
     @Autowired
     DataSource dataSource;
 
@@ -40,18 +40,19 @@ public class NodesService implements NodesInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            List<NodeModel> transactions;
-            SQL = "SELECT * FROM sparkpay.station_pcis ORDER BY id DESC";
-            transactions = jdbcTemplate.query(SQL, new NodesMapper());
+            List<RouteModel> routes;
+            SQL = "SELECT * FROM sparkpay.transaction_route ORDER BY id DESC";
+            routes = jdbcTemplate.query(SQL, new RoutesMapper());
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("All Nodes");
-            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMessage("All Routes");
+            networkResponse.setData((ArrayList) routes);
             networkResponse.setMeta(meta);
             
             return responseManager.ResponseOk(networkResponse);
@@ -61,27 +62,20 @@ public class NodesService implements NodesInterface {
         }
     }
     
-    class NodesMapper implements RowMapper<NodeModel> {
+    class RoutesMapper implements RowMapper<RouteModel> {
 
         @Override
-        public NodeModel mapRow(ResultSet rs, int arg1) throws SQLException {
-            NodeModel node = new NodeModel();
-            node.setId(rs.getInt("id"));
-            node.setStation_name(rs.getString("station_name"));
-            node.setLocal_port(rs.getInt("local_port"));
-            node.setAcquiring_institution_id(rs.getInt("acquiring_institution_id"));
-            node.setKek(rs.getString("kek"));
-            node.setSend_key_request(rs.getString("send_key_request"));
-            node.setCbn_bank_code(rs.getString("cbn_bank_code"));
-            node.setDate_time(rs.getString("date_time"));
-            node.setKey_check_value(rs.getString("key_check_value"));
-            node.setTransaction_direction(rs.getString("transaction_direction"));
-            node.setRemoteIP(rs.getString("remoteIP"));
-            node.setRemote_port(rs.getInt("remote_port"));
-            node.setDelete_flag(rs.getInt("delete_flag"));
-            node.setEdit_flag(rs.getInt("edit_flag"));
-            node.setCreate_flag(rs.getInt("create_flag"));
-            return node;
+        public RouteModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            RouteModel route = new RouteModel();
+            route.setId(rs.getInt("id"));
+            route.setSource_acq_id(rs.getString("source_acq_id"));
+            route.setDestination_bin(rs.getString("destination_bin"));
+            route.setCard_bin(rs.getString("card_bin"));
+            route.setDate_created(rs.getString("date_created"));
+            route.setDelete_flag(rs.getInt("delete_flag"));
+            route.setEdit_flag(rs.getInt("edit_flag"));
+            route.setCreate_flag(rs.getInt("create_flag"));
+            return route;
         }
     }
 }
