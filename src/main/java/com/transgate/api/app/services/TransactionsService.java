@@ -286,7 +286,7 @@ public class TransactionsService implements TransactionsInterface {
                 + "ON a.srcInstitutioncode = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destInstitutioncode = c.code "
-                + "WHERE a.srcInstitutioncode = ? OR a.destInstitutioncode = ? ";
+                + "WHERE a.srcInstitutioncode = ? OR a.destInstitutioncode = ? ORDER BY a.id DESC";
             transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode}, new FullTransactionMapper());
             
             SQL = "SELECT SUM(a.srcAmount) as totalValue "
@@ -295,7 +295,7 @@ public class TransactionsService implements TransactionsInterface {
                 + "ON a.srcInstitutioncode = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destInstitutioncode = c.code "
-                + "WHERE a.srcInstitutioncode = ? OR a.destInstitutioncode = ? ";
+                + "WHERE a.srcInstitutioncode = ? OR a.destInstitutioncode = ? ORDER BY a.id DESC";
             Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
             totalValue = totalValue != null ? totalValue : 0;
             SQL = "SELECT MIN(transactiondate) from transgate_db.tbl_combinedtransactions";
