@@ -86,7 +86,6 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String terminal_id,
             String merchant_id,
             String location_name_address,
-            String ncs_date_time,
             String approval_code
     ) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -104,7 +103,6 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !terminal_id.equals("")
                     || !merchant_id.equals("")
                     || !location_name_address.equals("")
-                    || !ncs_date_time.equals("")
                     || !approval_code.equals("")
                     || (!min_amount.equals("") && Double.parseDouble(min_amount) > 0)
                     || (!max_amount.equals("") && Double.parseDouble(max_amount) > 0)
@@ -153,10 +151,6 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" location_name_address LIKE '%" + location_name_address+"%'";
             }
-            if (!ncs_date_time.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" ncs_date_time LIKE '%" + ncs_date_time+"%'";
-            }
             if (!approval_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" approval_code LIKE '%" + approval_code+"%'";
@@ -171,11 +165,11 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!start_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" transaction_date >= '" + start_date + "'";
+                whereQuery+=" ncs_date_time >= '" + start_date + "'";
             }
             if (!end_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" transaction_date < '" + end_date + "'";
+                whereQuery+=" ncs_date_time < '" + end_date + "'";
             }
             String SQL;
             List<CardsTransactionModel> transactions;

@@ -29,6 +29,5 @@ public interface CardsTransactionsInterface {
             String terminal_id,
             String merchant_id,
             String location_name_address,
-            String ncs_date_time,
             String approval_code);
 }

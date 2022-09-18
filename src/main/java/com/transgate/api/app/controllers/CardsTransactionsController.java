@@ -55,8 +55,7 @@ public class CardsTransactionsController {
             @RequestParam("pan") String pan, 
             @RequestParam("terminal_id") String terminal_id, 
             @RequestParam("merchant_id") String merchant_id, 
-            @RequestParam("location_name_address") String location_name_address, 
-            @RequestParam("ncs_date_time") String ncs_date_time, 
+            @RequestParam("location_name_address") String location_name_address,  
             @RequestParam("approval_code") String approval_code 
     ) {
         if (!validators.validHeader().equals(header)) {
@@ -77,7 +76,6 @@ public class CardsTransactionsController {
             terminal_id,
             merchant_id,
             location_name_address,
-            ncs_date_time,
             approval_code);
     }
 }
