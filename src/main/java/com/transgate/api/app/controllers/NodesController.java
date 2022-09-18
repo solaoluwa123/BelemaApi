@@ -35,4 +35,13 @@ public class NodesController {
         }
         return NodesInterface.Get();
     }
+    
+    @RequestMapping(value = "/cards/nodes/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return NodesInterface.GetApprovals();
+    }
 }

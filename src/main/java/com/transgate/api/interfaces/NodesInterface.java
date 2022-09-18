@@ -13,4 +13,5 @@ import org.springframework.http.ResponseEntity;
  */
 public interface NodesInterface {
     public ResponseEntity Get();
+    public ResponseEntity GetApprovals();
 }

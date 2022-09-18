@@ -15,7 +15,7 @@ public class CardsTransactionModel{
     String response_code, transaction_date, transaction_time, amount;
     String retrieval_ref_number, acquirer_institution_id, pan, terminal_id;
     String merchant_id, location_name_address, ncs_date_time, destination_acquiring_institution_id;
-    String encrypted_pan, encrypted_expiry_date, approval_code;
+    String encrypted_pan, encrypted_expiry_date, approval_code, status_code_message;
 
     public int getId() {
         return id;
@@ -176,6 +176,13 @@ public class CardsTransactionModel{
     public void setApproval_code(String approval_code) {
         this.approval_code = approval_code;
     }
-    
+
+    public String getStatus_code_message() {
+        return status_code_message;
+    }
+
+    public void setStatus_code_message(String status_code_message) {
+        this.status_code_message = status_code_message;
+    }
     
 }

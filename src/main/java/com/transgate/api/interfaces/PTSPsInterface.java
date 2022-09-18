@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
  *
  * @author Makintola
  */
-public interface RoutesInterface {
+public interface PTSPsInterface {
     public ResponseEntity Get();
     public ResponseEntity GetApprovals();
 }

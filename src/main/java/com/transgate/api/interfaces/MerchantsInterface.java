@@ -11,7 +11,7 @@ import org.springframework.http.ResponseEntity;
  *
  * @author Makintola
  */
-public interface RoutesInterface {
+public interface MerchantsInterface {
     public ResponseEntity Get();
     public ResponseEntity GetApprovals();
 }

@@ -11,7 +11,10 @@ import org.springframework.http.ResponseEntity;
  *
  * @author Makintola
  */
-public interface RoutesInterface {
-    public ResponseEntity Get();
-    public ResponseEntity GetApprovals();
+public interface GenericInterface {
+    public ResponseEntity GetBanks();
+    public ResponseEntity GetSKR();
+    public ResponseEntity GetTransactionDirection();
+    public ResponseEntity GetStates();
+    public ResponseEntity GetResponseCodes();
 }

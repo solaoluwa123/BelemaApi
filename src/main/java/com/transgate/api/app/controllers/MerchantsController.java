@@ -5,7 +5,7 @@
  */
 package com.transgate.api.app.controllers;
 
-import com.transgate.api.interfaces.TerminalsInterface;
+import com.transgate.api.interfaces.MerchantsInterface;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,28 +20,28 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Makintola
  */
 @RestController
-public class TerminalsController {
+public class MerchantsController {
     @Autowired
-    private TerminalsInterface TerminalsInterface;
+    private MerchantsInterface MerchantsInterface;
     
     ResponseManager responseManager = new ResponseManager();
     
     Validators validators = new Validators();
     
-    @RequestMapping(value = "/cards/terminals", method = RequestMethod.GET, headers = "Accept=application/json")
+    @RequestMapping(value = "/cards/merchants", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return TerminalsInterface.Get();
+        return MerchantsInterface.Get();
     }
     
-    @RequestMapping(value = "/cards/terminals/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
+    @RequestMapping(value = "/cards/merchants/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return TerminalsInterface.GetApprovals();
+        return MerchantsInterface.GetApprovals();
     }
 }

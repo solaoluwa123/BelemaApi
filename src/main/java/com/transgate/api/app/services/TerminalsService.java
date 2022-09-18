@@ -35,14 +35,22 @@ public class TerminalsService implements TerminalsInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
-    @Override
-    public ResponseEntity Get() {
+    public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
             List<TerminalModel> terminals;
-            SQL = "SELECT * FROM sparkpay.terminals ORDER BY id DESC";
-            terminals = jdbcTemplate.query(SQL, new RoutesMapper());
+            if (!pending) {
+                SQL = "SELECT * FROM sparkpay.terminals "
+                    + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
+                    + "ORDER BY id DESC";
+            }
+            else {
+                SQL = "SELECT * FROM sparkpay.terminals "
+                    + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
+                    + "ORDER BY id DESC";
+            }
+            terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
             SQL = "SELECT MIN(date_time) from sparkpay.terminals";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(date_time) from sparkpay.terminals";
@@ -62,7 +70,17 @@ public class TerminalsService implements TerminalsInterface {
         }
     }
     
-    class RoutesMapper implements RowMapper<TerminalModel> {
+    @Override
+    public ResponseEntity Get() {
+        return Get(false);
+    }
+    
+    @Override
+    public ResponseEntity GetApprovals() {
+        return Get(true);
+    }
+    
+    class TerminalsMapper implements RowMapper<TerminalModel> {
 
         @Override
         public TerminalModel mapRow(ResultSet rs, int arg1) throws SQLException {

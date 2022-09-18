@@ -13,4 +13,5 @@ import org.springframework.http.ResponseEntity;
  */
 public interface TerminalsInterface {
     public ResponseEntity Get();
+    public ResponseEntity GetApprovals();
 }

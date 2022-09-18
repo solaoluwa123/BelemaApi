@@ -5,9 +5,9 @@
  */
 package com.transgate.api.app.services;
 
-import com.transgate.api.interfaces.RoutesInterface;
+import com.transgate.api.interfaces.PTSPsInterface;
 import com.transgate.api.models.NetworkResponse;
-import com.transgate.api.models.RouteModel;
+import com.transgate.api.models.PTSPModel;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
  * @author Makintola
  */
 @Service
-public class RoutesService implements RoutesInterface {
+public class PTSPsService implements PTSPsInterface {
     @Autowired
     DataSource dataSource;
 
@@ -39,28 +39,27 @@ public class RoutesService implements RoutesInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            List<RouteModel> routes;
+            List<PTSPModel> ptsps;
             if (!pending) {
-                SQL = "SELECT * FROM sparkpay.transaction_route "
+                SQL = "SELECT * FROM sparkpayweb_db.ptsp "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
                     + "ORDER BY id DESC";
             }
             else {
-                SQL = "SELECT * FROM sparkpay.transaction_route "
+                SQL = "SELECT * FROM sparkpayweb_db.ptsp "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY id DESC";
             }
-            routes = jdbcTemplate.query(SQL, new RoutesMapper());
-            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            ptsps = jdbcTemplate.query(SQL, new PTSPsMapper());
+            SQL = "SELECT MIN(ptsp_date) from sparkpayweb_db.ptsp";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            SQL = "SELECT MAX(ptsp_date) from sparkpayweb_db.ptsp";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
-           
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("All Routes");
-            networkResponse.setData((ArrayList) routes);
+            networkResponse.setMessage("All PTSPs");
+            networkResponse.setData((ArrayList) ptsps);
             networkResponse.setMeta(meta);
             
             return responseManager.ResponseOk(networkResponse);
@@ -80,20 +79,19 @@ public class RoutesService implements RoutesInterface {
         return Get(true);
     }
     
-    class RoutesMapper implements RowMapper<RouteModel> {
+    class PTSPsMapper implements RowMapper<PTSPModel> {
 
         @Override
-        public RouteModel mapRow(ResultSet rs, int arg1) throws SQLException {
-            RouteModel route = new RouteModel();
-            route.setId(rs.getInt("id"));
-            route.setSource_acq_id(rs.getString("source_acq_id"));
-            route.setDestination_bin(rs.getString("destination_bin"));
-            route.setCard_bin(rs.getString("card_bin"));
-            route.setDate_created(rs.getString("date_created"));
-            route.setDelete_flag(rs.getInt("delete_flag"));
-            route.setEdit_flag(rs.getInt("edit_flag"));
-            route.setCreate_flag(rs.getInt("create_flag"));
-            return route;
+        public PTSPModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            PTSPModel ptsp = new PTSPModel();
+            ptsp.setId(rs.getInt("id"));
+            ptsp.setPtsp_id(rs.getString("ptsp_id"));
+            ptsp.setPtsp_name(rs.getString("ptsp_name"));
+            ptsp.setPtsp_date(rs.getString("ptsp_date"));
+            ptsp.setDelete_flag(rs.getInt("delete_flag"));
+            ptsp.setEdit_flag(rs.getInt("edit_flag"));
+            ptsp.setCreate_flag(rs.getInt("create_flag"));
+            return ptsp;
         }
     }
 }

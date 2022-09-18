@@ -36,4 +36,13 @@ public class RoutesController {
         return RoutesInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/routes/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return RoutesInterface.GetApprovals();
+    }
+    
 }

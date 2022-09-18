@@ -5,9 +5,9 @@
  */
 package com.transgate.api.app.services;
 
-import com.transgate.api.interfaces.RoutesInterface;
+import com.transgate.api.interfaces.CardsFinancialInstitutionsInterface;
+import com.transgate.api.models.CardsFinancialInstitutionModel;
 import com.transgate.api.models.NetworkResponse;
-import com.transgate.api.models.RouteModel;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -26,7 +26,7 @@ import org.springframework.stereotype.Service;
  * @author Makintola
  */
 @Service
-public class RoutesService implements RoutesInterface {
+public class CardsFinancialInstitutionsService implements CardsFinancialInstitutionsInterface {
     @Autowired
     DataSource dataSource;
 
@@ -39,28 +39,27 @@ public class RoutesService implements RoutesInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            List<RouteModel> routes;
+            List<CardsFinancialInstitutionModel> cardFI;
             if (!pending) {
-                SQL = "SELECT * FROM sparkpay.transaction_route "
+                SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
                     + "ORDER BY id DESC";
             }
             else {
-                SQL = "SELECT * FROM sparkpay.transaction_route "
+                SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY id DESC";
             }
-            routes = jdbcTemplate.query(SQL, new RoutesMapper());
-            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            cardFI = jdbcTemplate.query(SQL, new CardFIMapper());
+            SQL = "SELECT MIN(created) from sparkpayweb_db.tbl_financial_institutions";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            SQL = "SELECT MAX(created) from sparkpayweb_db.tbl_financial_institutions";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
-           
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("All Routes");
-            networkResponse.setData((ArrayList) routes);
+            networkResponse.setMessage("All Financial Institutions");
+            networkResponse.setData((ArrayList) cardFI);
             networkResponse.setMeta(meta);
             
             return responseManager.ResponseOk(networkResponse);
@@ -80,20 +79,21 @@ public class RoutesService implements RoutesInterface {
         return Get(true);
     }
     
-    class RoutesMapper implements RowMapper<RouteModel> {
+    class CardFIMapper implements RowMapper<CardsFinancialInstitutionModel> {
 
         @Override
-        public RouteModel mapRow(ResultSet rs, int arg1) throws SQLException {
-            RouteModel route = new RouteModel();
-            route.setId(rs.getInt("id"));
-            route.setSource_acq_id(rs.getString("source_acq_id"));
-            route.setDestination_bin(rs.getString("destination_bin"));
-            route.setCard_bin(rs.getString("card_bin"));
-            route.setDate_created(rs.getString("date_created"));
-            route.setDelete_flag(rs.getInt("delete_flag"));
-            route.setEdit_flag(rs.getInt("edit_flag"));
-            route.setCreate_flag(rs.getInt("create_flag"));
-            return route;
+        public CardsFinancialInstitutionModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            CardsFinancialInstitutionModel fi = new CardsFinancialInstitutionModel();
+            fi.setId(rs.getInt("id"));
+            fi.setAcquirer_id(rs.getString("acquirer_id"));
+            fi.setInstitution_name(rs.getString("institution_name"));
+            fi.setIssuer_id(rs.getString("issuer_id"));
+            fi.setBank_code(rs.getString("bank_code"));
+            fi.setCreated(rs.getString("created"));
+            fi.setDelete_flag(rs.getInt("delete_flag"));
+            fi.setEdit_flag(rs.getInt("edit_flag"));
+            fi.setCreate_flag(rs.getInt("create_flag"));
+            return fi;
         }
     }
 }

@@ -35,17 +35,25 @@ public class NodesService implements NodesInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
-    @Override
-    public ResponseEntity Get() {
+    public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
             List<NodeModel> transactions;
-            SQL = "SELECT * FROM sparkpay.station_pcis ORDER BY id DESC";
+            if (!pending) {
+                SQL = "SELECT * FROM sparkpay.station_pcis "
+                    + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
+                    + "ORDER BY id DESC";
+            }
+            else {
+                SQL = "SELECT * FROM sparkpay.station_pcis "
+                    + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
+                    + "ORDER BY id DESC";
+            }
             transactions = jdbcTemplate.query(SQL, new NodesMapper());
-            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            SQL = "SELECT MIN(date_time) from sparkpay.station_pcis";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            SQL = "SELECT MAX(date_time) from sparkpay.station_pcis";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setCode(200);
@@ -59,6 +67,16 @@ public class NodesService implements NodesInterface {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
+    }
+    
+    @Override
+    public ResponseEntity Get() {
+        return Get(false);
+    }
+    
+    @Override
+    public ResponseEntity GetApprovals() {
+        return Get(true);
     }
     
     class NodesMapper implements RowMapper<NodeModel> {
