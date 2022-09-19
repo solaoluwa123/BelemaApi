@@ -14,4 +14,8 @@ import org.springframework.http.ResponseEntity;
 public interface TerminalsInterface {
     public ResponseEntity Get();
     public ResponseEntity GetApprovals();
+    public ResponseEntity Create(String terminal_id, String merchant_id, String merchant_name, 
+            String route_mode, String acquiring_institution_id, String acquiring_institution_name,
+            String cbn_bank_code, String terminal_type,
+            String sessiontoken);
 }

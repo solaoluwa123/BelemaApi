@@ -35,6 +35,37 @@ public class TerminalsService implements TerminalsInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    HelperService helperService = new HelperService();
+    
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
+    private boolean CheckNodePendingAction(int id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpay.terminals WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
     public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -78,6 +109,48 @@ public class TerminalsService implements TerminalsInterface {
     @Override
     public ResponseEntity GetApprovals() {
         return Get(true);
+    }
+    
+    @Override
+    public ResponseEntity Create(String terminal_id, String merchant_id, String merchant_name, 
+            String route_mode, String acquiring_institution_id, String acquiring_institution_name,
+            String cbn_bank_code, String terminal_type,
+            String sessiontoken) {
+            NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int retval;
+            int terminalIDExit = helperService.CheckItemExit(terminal_id, "sparkpay.terminals", "terminal_id");
+            if (terminalIDExit == 0) {
+                int userrole = GetUserRole(sessiontoken);
+                int create_flag = 0;
+                if (userrole != 1 && userrole != 2) {
+                    return responseManager.ResponseUnathorized();
+                }
+                if (userrole == 1) 
+                    create_flag = 1;
+
+                SQL = "INSERT into sparkpay.terminals"
+                        + "(terminal_id, merchant_id, merchant_name, route_mode,"
+                        + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, create_flag, date_time) "
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+                retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
+                        acquiring_institution_name, cbn_bank_code, terminal_type, create_flag});
+                if (retval > 0) 
+                    return responseManager.ResponseAccepted();
+                else 
+                    return responseManager.ResponseInternalServerError();
+            }
+            else {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Terminal with ID "+terminal_id+" already exist");
+                return responseManager.ResponseOk(networkResponse);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
     
     class TerminalsMapper implements RowMapper<TerminalModel> {

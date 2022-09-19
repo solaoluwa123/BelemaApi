@@ -17,4 +17,5 @@ public interface GenericInterface {
     public ResponseEntity GetTransactionDirection();
     public ResponseEntity GetStates();
     public ResponseEntity GetResponseCodes();
+    public ResponseEntity DeleteHelper(String sessiontoken, int id, String table, String entity);
 }

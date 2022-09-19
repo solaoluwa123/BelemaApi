@@ -36,6 +36,47 @@ public class GenericService implements GenericInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
+    private boolean CheckPendingAction(int id, String table) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM "+table+" WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    public int CheckItemExit(String id, String table, String column) {
+        int totalRows = 0;
+        try {
+            String SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ?";
+            totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+            return totalRows;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return -1;
+        }
+    }
+    
     @Override
     public ResponseEntity GetBanks() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -130,6 +171,44 @@ public class GenericService implements GenericInterface {
             networkResponse.setMessage("All Response codes");
             networkResponse.setData((ArrayList) states);
             return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity DeleteHelper(String sessiontoken, int id, String table, String entity) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "DELETE FROM "+table+" WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseDeleted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckPendingAction(id, table);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage(entity+" in pending for approval");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "UPDATE "+table+" SET delete_flag = 1 WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();

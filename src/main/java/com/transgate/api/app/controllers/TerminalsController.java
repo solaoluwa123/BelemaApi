@@ -5,11 +5,15 @@
  */
 package com.transgate.api.app.controllers;
 
+import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.interfaces.TerminalsInterface;
+import com.transgate.api.models.TerminalModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -23,6 +27,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class TerminalsController {
     @Autowired
     private TerminalsInterface TerminalsInterface;
+    
+    @Autowired
+    GenericInterface GenericInterface;
     
     ResponseManager responseManager = new ResponseManager();
     
@@ -43,5 +50,27 @@ public class TerminalsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return TerminalsInterface.GetApprovals();
+    }
+    
+    @RequestMapping(value = "/cards/terminals", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Create(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody TerminalModel terminalModel) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalsInterface.Create(
+                terminalModel.getTerminal_id(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
+                terminalModel.getRoute_mode(), terminalModel.getAcquiring_institution_id(), terminalModel.getAcquiring_institution_name(), 
+                terminalModel.getCbn_bank_code(), terminalModel.getTerminal_type(), sessiontoken
+            );
+    }
+    
+    @RequestMapping(value = "/cards/terminals/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
+    public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpay.terminals", "Terminal");
     }
 }

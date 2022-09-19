@@ -35,6 +35,35 @@ public class RoutesService implements RoutesInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
+    private boolean CheckNodePendingAction(int id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpay.transaction_route WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
     public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -80,6 +109,32 @@ public class RoutesService implements RoutesInterface {
         return Get(true);
     }
     
+    @Override
+    public ResponseEntity Create(String source_acq_id, String destination_bin, int card_bin, String sessiontoken) {
+        try {
+            String SQL;
+            int retval;
+            int userrole = GetUserRole(sessiontoken);
+            int create_flag = 0;
+            if (userrole != 1 && userrole != 2) {
+                return responseManager.ResponseUnathorized();
+            }
+            if (userrole == 1) 
+                create_flag = 1;
+            
+            SQL = "INSERT into sparkpay.transaction_route"
+                    + "(source_acq_id, destination_bin, card_bin, date_created, create_flag) VALUES(?, ?, ?, now(), ?)";
+            retval = jdbcTemplate.update(SQL, new Object[]{source_acq_id, destination_bin, card_bin, create_flag});
+            if (retval > 0) 
+                return responseManager.ResponseAccepted();
+            else 
+                return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     class RoutesMapper implements RowMapper<RouteModel> {
 
         @Override
@@ -88,7 +143,7 @@ public class RoutesService implements RoutesInterface {
             route.setId(rs.getInt("id"));
             route.setSource_acq_id(rs.getString("source_acq_id"));
             route.setDestination_bin(rs.getString("destination_bin"));
-            route.setCard_bin(rs.getString("card_bin"));
+            route.setCard_bin(rs.getInt("card_bin"));
             route.setDate_created(rs.getString("date_created"));
             route.setDelete_flag(rs.getInt("delete_flag"));
             route.setEdit_flag(rs.getInt("edit_flag"));

@@ -10,8 +10,8 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class RouteModel {
-    int id, edit_flag, create_flag, delete_flag;
-    String source_acq_id, destination_bin, card_bin, date_created;
+    int id, edit_flag, create_flag, delete_flag, card_bin;
+    String source_acq_id, destination_bin, date_created;
 
     public int getId() {
         return id;
@@ -53,11 +53,11 @@ public class RouteModel {
         this.destination_bin = destination_bin;
     }
 
-    public String getCard_bin() {
+    public int getCard_bin() {
         return card_bin;
     }
 
-    public void setCard_bin(String card_bin) {
+    public void setCard_bin(int card_bin) {
         this.card_bin = card_bin;
     }
 

@@ -14,4 +14,5 @@ import org.springframework.http.ResponseEntity;
 public interface RoutesInterface {
     public ResponseEntity Get();
     public ResponseEntity GetApprovals();
+    public ResponseEntity Create(String source_acq_id, String destination_bin, int card_bin, String sessiontoken);
 }

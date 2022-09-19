@@ -144,7 +144,6 @@ public class NodesService implements NodesInterface {
         try {
             String SQL;
             int userrole = GetUserRole(sessiontoken);
-            System.out.println("userroleuserrole " + userrole);
             int retVal;
             switch (userrole) {
                 case 1:
