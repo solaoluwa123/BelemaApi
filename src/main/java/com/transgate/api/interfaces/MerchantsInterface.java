@@ -14,4 +14,5 @@ import org.springframework.http.ResponseEntity;
 public interface MerchantsInterface {
     public ResponseEntity Get();
     public ResponseEntity GetApprovals();
+    public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken);
 }

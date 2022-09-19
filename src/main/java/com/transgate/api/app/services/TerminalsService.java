@@ -131,7 +131,6 @@ public class TerminalsService implements TerminalsInterface {
             int retval;
             int terminalIDExit = CheckTerminalExit(terminal_id, "sparkpay.terminals", "terminal_id");
             if (terminalIDExit == 0) {
-                System.out.println("sessiontokensessiontoken " + sessiontoken);
                 int userrole = GetUserRole(sessiontoken);
                 int create_flag = 0;
                 if (userrole != 1 && userrole != 2) {

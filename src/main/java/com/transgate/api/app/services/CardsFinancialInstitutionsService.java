@@ -35,6 +35,51 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
 
     ResponseManager responseManager = new ResponseManager();
     
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
+    private boolean CheckNodePendingAction(int id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_financial_institutions WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckBankCodeExist(String code) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_financial_institutions WHERE bank_code = ?";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{code}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
     public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -77,6 +122,39 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
     @Override
     public ResponseEntity GetApprovals() {
         return Get(true);
+    }
+    
+    @Override
+    public ResponseEntity Create(String acquirer_id, String institution_name, String issuer_id, String bank_code, String sessiontoken) {
+        try {
+            String SQL;
+            int retval;
+            if (CheckBankCodeExist(bank_code)) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Bank code already in use");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            int userrole = GetUserRole(sessiontoken);
+            int create_flag = 0;
+            if (userrole != 1 && userrole != 2) {
+                return responseManager.ResponseUnathorized();
+            }
+            if (userrole == 1) 
+                create_flag = 1;
+            
+            SQL = "INSERT into sparkpayweb_db.tbl_financial_institutions"
+                    + "(acquirer_id, institution_name, issuer_id, bank_code, created, create_flag) VALUES(?, ?, ?, ?, now(), ?)";
+            retval = jdbcTemplate.update(SQL, new Object[]{acquirer_id, institution_name, issuer_id, bank_code, create_flag});
+            if (retval > 0) 
+                return responseManager.ResponseAccepted();
+            else 
+                return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
     
     class CardFIMapper implements RowMapper<CardsFinancialInstitutionModel> {

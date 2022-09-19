@@ -35,6 +35,46 @@ public class MerchantsService implements MerchantsInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
+    private boolean CheckNodePendingAction(int id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpay.merchants WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    public int CheckMerchantExit(String id, String table, String column) {
+        int totalRows = 0;
+        try {
+            String SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ?";
+            totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+            return totalRows;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return -1;
+        }
+    }
+    
     public ResponseEntity Get(boolean pending) {
          NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -77,6 +117,44 @@ public class MerchantsService implements MerchantsInterface {
     @Override
     public ResponseEntity GetApprovals() {
         return Get(true);
+    }
+    
+    @Override
+    public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken) {
+            NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int retval;
+            int terminalIDExit = CheckMerchantExit(merchant_id, "sparkpay.merchants", "merchant_id");
+            if (terminalIDExit == 0) {
+                int userrole = GetUserRole(sessiontoken);
+                int create_flag = 0;
+                if (userrole != 1 && userrole != 2) {
+                    return responseManager.ResponseUnathorized();
+                }
+                if (userrole == 1) 
+                    create_flag = 1;
+
+                SQL = "INSERT into sparkpay.merchants"
+                        + "(merchant_id, merchant_name, merchant_state, merchant_country,"
+                        + "merchant_category_code, create_flag, date_created) "
+                        + "VALUES(?, ?, ?, ?, ?, ?,now())";
+                retval = jdbcTemplate.update(SQL, new Object[]{merchant_id, merchant_name, merchant_state, merchant_country, merchant_category_code, create_flag});
+                if (retval > 0) 
+                    return responseManager.ResponseAccepted();
+                else 
+                    return responseManager.ResponseInternalServerError();
+            }
+            else {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Merchant with ID "+merchant_id+" already exist");
+                return responseManager.ResponseOk(networkResponse);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
     
     class MerchantsMapper implements RowMapper<CardsMerchantModel> {

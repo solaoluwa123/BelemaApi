@@ -6,10 +6,14 @@
 package com.transgate.api.app.controllers;
 
 import com.transgate.api.interfaces.CardsFinancialInstitutionsInterface;
+import com.transgate.api.interfaces.GenericInterface;
+import com.transgate.api.models.CardsFinancialInstitutionModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -28,6 +32,9 @@ public class CardsFinancialInstitutionsController {
     
     Validators validators = new Validators();
     
+    @Autowired
+    GenericInterface GenericInterface;
+    
     @RequestMapping(value = "/cards/financial-institutions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {
@@ -44,5 +51,25 @@ public class CardsFinancialInstitutionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return CardsFinancialInstitutionsInterface.GetApprovals();
+    }
+    
+    @RequestMapping(value = "/cards/financial-institutions", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Create(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody CardsFinancialInstitutionModel model) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsFinancialInstitutionsInterface.Create(
+                model.getAcquirer_id(), model.getInstitution_name(), model.getIssuer_id(), model.getBank_code(), sessiontoken
+            );
+    }
+    
+    @RequestMapping(value = "/cards/financial-institutions/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
+    public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "PTSP");
     }
 }
