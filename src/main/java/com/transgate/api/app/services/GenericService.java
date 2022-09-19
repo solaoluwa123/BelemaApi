@@ -8,6 +8,7 @@ package com.transgate.api.app.services;
 import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.models.GenericModel;
 import com.transgate.api.models.NetworkResponse;
+import com.transgate.api.models.TerminalTypeModel;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -54,6 +55,22 @@ public class GenericService implements GenericInterface {
         try {
             String SQL;
             SQL = "SELECT COUNT(*) FROM "+table+" WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckPendingAction(String id, String column, String table) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ? AND edit_flag = 1 OR delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -215,6 +232,64 @@ public class GenericService implements GenericInterface {
         }
     }
     
+    @Override
+    public ResponseEntity DeleteHelper(String sessiontoken, String id, String column, String table, String entity) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "DELETE FROM "+table+" WHERE "+column+" = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseDeleted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckPendingAction(id, column, table);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage(entity+" in pending for approval");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "UPDATE "+table+" SET delete_flag = 1 WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetTerminalTypes() {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<TerminalTypeModel> types;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_terminal_types ORDER BY terminal_type ASC";
+            types = jdbcTemplate.query(SQL, new TerminalTypeMapper());
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Terminal Types");
+            networkResponse.setData((ArrayList) types);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     class GenericMapper implements RowMapper<GenericModel> {
 
         @Override
@@ -225,6 +300,17 @@ public class GenericService implements GenericInterface {
             bank.setCode(rs.getString("code") != null ? rs.getString("code") : "");
             bank.setDate_created(hasColumn(rs, "date_created") ? rs.getString("date_created") : null);
             return bank;
+        }
+    }
+    
+    class TerminalTypeMapper implements RowMapper<TerminalTypeModel> {
+
+        @Override
+        public TerminalTypeModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            TerminalTypeModel type = new TerminalTypeModel();
+            type.setId(rs.getInt("id"));
+            type.setTerminal_type(rs.getString("terminal_type"));
+            return type;
         }
     }
     

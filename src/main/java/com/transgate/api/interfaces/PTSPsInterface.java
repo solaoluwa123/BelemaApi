@@ -14,4 +14,5 @@ import org.springframework.http.ResponseEntity;
 public interface PTSPsInterface {
     public ResponseEntity Get();
     public ResponseEntity GetApprovals();
+    public ResponseEntity Create(String ptsp_id, String ptsp_name, String sessiontoken);
 }

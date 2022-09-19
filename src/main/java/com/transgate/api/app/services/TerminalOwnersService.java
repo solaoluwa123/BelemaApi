@@ -35,6 +35,35 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
+    private boolean CheckNodePendingAction(int id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_terminal_owners WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
     public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -64,6 +93,32 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
             networkResponse.setMeta(meta);
             
             return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Create(String terminal_owner_id, String terminal_owner_name, String sessiontoken) {
+        try {
+            String SQL;
+            int retval;
+            int userrole = GetUserRole(sessiontoken);
+            int create_flag = 0;
+            if (userrole != 1 && userrole != 2) {
+                return responseManager.ResponseUnathorized();
+            }
+            if (userrole == 1) 
+                create_flag = 1;
+            
+            SQL = "INSERT into sparkpayweb_db.tbl_terminal_owners"
+                    + "(terminal_owner_id, terminal_owner_name, terminal_date, create_flag) VALUES(?, ?, now(), ?)";
+            retval = jdbcTemplate.update(SQL, new Object[]{terminal_owner_id, terminal_owner_name, create_flag});
+            if (retval > 0) 
+                return responseManager.ResponseAccepted();
+            else 
+                return responseManager.ResponseInternalServerError();
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();

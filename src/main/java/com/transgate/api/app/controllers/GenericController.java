@@ -68,4 +68,12 @@ public class GenericController {
         return GenericInterface.GetResponseCodes();
     }
     
+    @RequestMapping(value = "/cards/terminal-types", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTerminalTypes(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetTerminalTypes();
+    }
+    
 }

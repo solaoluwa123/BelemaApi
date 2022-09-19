@@ -18,4 +18,6 @@ public interface GenericInterface {
     public ResponseEntity GetStates();
     public ResponseEntity GetResponseCodes();
     public ResponseEntity DeleteHelper(String sessiontoken, int id, String table, String entity);
+    public ResponseEntity DeleteHelper(String sessiontoken, String id, String column, String table, String entity);
+    public ResponseEntity GetTerminalTypes();
 }

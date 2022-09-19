@@ -5,11 +5,15 @@
  */
 package com.transgate.api.app.controllers;
 
+import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.interfaces.TerminalOwnersInterface;
+import com.transgate.api.models.TerminalOwnerModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
@@ -28,6 +32,9 @@ public class TerminalOwnersController {
     
     Validators validators = new Validators();
     
+    @Autowired
+    GenericInterface GenericInterface;
+    
     @RequestMapping(value = "/cards/terminal-owners", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {
         if (!validators.validHeader().equals(header)) {
@@ -43,5 +50,25 @@ public class TerminalOwnersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return TerminalOwnersInterface.GetApprovals();
+    }
+    
+    @RequestMapping(value = "/cards/terminal-owners", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Create(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody TerminalOwnerModel model) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalOwnersInterface.Create(
+                model.getTerminal_owner_id(), model.getTerminal_owner_name(), sessiontoken
+            );
+    }
+    
+    @RequestMapping(value = "/cards/terminal-owners/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
+    public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpayweb_db.tbl_terminal_owners", "PTSP");
     }
 }

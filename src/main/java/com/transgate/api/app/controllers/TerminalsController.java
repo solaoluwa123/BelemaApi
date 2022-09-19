@@ -67,10 +67,10 @@ public class TerminalsController {
     
     @RequestMapping(value = "/cards/terminals/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
-            @PathVariable("id") int id) {
+            @PathVariable("id") String id) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpay.terminals", "Terminal");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "terminal_id", "sparkpay.terminals", "Terminal");
     }
 }

@@ -35,12 +35,9 @@ public class TerminalsService implements TerminalsInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
-    HelperService helperService = new HelperService();
-    
     private int GetUserRole(String session_token) {
         try {
             int role;
-
             String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
             role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
             return role;
@@ -66,6 +63,18 @@ public class TerminalsService implements TerminalsInterface {
         }
     }
     
+    public int CheckTerminalExit(String id, String table, String column) {
+        int totalRows = 0;
+        try {
+            String SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ?";
+            totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+            return totalRows;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return -1;
+        }
+    }
+    
     public ResponseEntity Get(boolean pending) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -74,12 +83,12 @@ public class TerminalsService implements TerminalsInterface {
             if (!pending) {
                 SQL = "SELECT * FROM sparkpay.terminals "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
-                    + "ORDER BY id DESC";
+                    + "ORDER BY date_time DESC";
             }
             else {
                 SQL = "SELECT * FROM sparkpay.terminals "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
-                    + "ORDER BY id DESC";
+                    + "ORDER BY date_time DESC";
             }
             terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
             SQL = "SELECT MIN(date_time) from sparkpay.terminals";
@@ -120,8 +129,9 @@ public class TerminalsService implements TerminalsInterface {
         try {
             String SQL;
             int retval;
-            int terminalIDExit = helperService.CheckItemExit(terminal_id, "sparkpay.terminals", "terminal_id");
+            int terminalIDExit = CheckTerminalExit(terminal_id, "sparkpay.terminals", "terminal_id");
             if (terminalIDExit == 0) {
+                System.out.println("sessiontokensessiontoken " + sessiontoken);
                 int userrole = GetUserRole(sessiontoken);
                 int create_flag = 0;
                 if (userrole != 1 && userrole != 2) {

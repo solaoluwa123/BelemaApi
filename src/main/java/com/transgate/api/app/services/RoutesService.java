@@ -80,9 +80,9 @@ public class RoutesService implements RoutesInterface {
                     + "ORDER BY id DESC";
             }
             routes = jdbcTemplate.query(SQL, new RoutesMapper());
-            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            SQL = "SELECT MIN(date_created) from sparkpay.transaction_route";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            SQL = "SELECT MAX(date_created) from sparkpay.transaction_route";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
            
