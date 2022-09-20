@@ -271,6 +271,62 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
+    public ResponseEntity ApprovalHelper(String sessiontoken, int id, String table, String entity, String approvalType) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                case 3:
+                    SQL = approvalType.equals("delete") ?
+                            "DELETE FROM "+table+" WHERE delete_flag = 1 AND id = ?"
+                            : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE id = ?"
+                            : ""
+                            ;
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity ApprovalHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                case 2:
+                    SQL = approvalType.equals("delete") ?
+                            "DELETE FROM "+table+" WHERE delete_flag = 1 AND "+column+" = ?"
+                            : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE "+column+" = ?"
+                            : ""
+                            ;
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetTerminalTypes() {
         NetworkResponse networkResponse = new NetworkResponse();
         try {

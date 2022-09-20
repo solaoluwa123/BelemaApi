@@ -5,6 +5,7 @@
  */
 package com.transgate.api.app.controllers;
 
+import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.interfaces.NodesInterface;
 import com.transgate.api.models.NodeModel;
 import com.transgate.api.util.ResponseManager;
@@ -30,6 +31,9 @@ public class NodesController {
     ResponseManager responseManager = new ResponseManager();
     
     Validators validators = new Validators();
+    
+    @Autowired
+    GenericInterface GenericInterface;
     
     @RequestMapping(value = "/cards/nodes", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {
@@ -68,5 +72,14 @@ public class NodesController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return NodesInterface.Delete(sessiontoken, id);
+    }
+    
+    @RequestMapping(value = "/cards/nodes/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Approve(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpay.station_pcis", "Node", type);
     }
 }

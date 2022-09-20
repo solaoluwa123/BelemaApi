@@ -70,6 +70,15 @@ public class CardsFinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "PTSP");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "Financial Institution");
+    }
+    
+    @RequestMapping(value = "/cards/financial-institutions/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Approve(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "Financial Institution", type);
     }
 }

@@ -20,4 +20,6 @@ public interface GenericInterface {
     public ResponseEntity DeleteHelper(String sessiontoken, int id, String table, String entity);
     public ResponseEntity DeleteHelper(String sessiontoken, String id, String column, String table, String entity);
     public ResponseEntity GetTerminalTypes();
+    public ResponseEntity ApprovalHelper(String sessiontoken, int id, String table, String entity, String approvalType);
+    public ResponseEntity ApprovalHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType);
 }

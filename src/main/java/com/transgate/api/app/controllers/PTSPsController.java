@@ -71,4 +71,13 @@ public class PTSPsController {
         }
         return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpayweb_db.ptsp", "PTSP");
     }
+    
+    @RequestMapping(value = "/cards/ptsps/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Approve(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpayweb_db.ptsp", "PTSP", type);
+    }
 }
