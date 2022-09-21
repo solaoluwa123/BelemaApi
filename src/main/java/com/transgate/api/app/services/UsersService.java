@@ -16,6 +16,7 @@ import com.transgate.api.models.WalletModel;
 import com.transgate.api.util.Randomizer;
 import static java.lang.Integer.parseInt;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
@@ -209,12 +210,20 @@ public class UsersService implements UsersInterface {
                     response.setTransgateMenu(eM);
                 }
                 
-                SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
-                        + "FROM `tbl_menus` a "
-                        + "LEFT JOIN `tbl_menus` b "
-                        + "ON a.id = b.parent_id "
-                        + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 2 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
-                        + "ORDER BY a.id ASC";
+                if (userRoleid < 4) 
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 2 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
+                            + "ORDER BY a.id ASC";
+                else
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
+                            + "ORDER BY a.id ASC";
                 menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
                 
                 if (menu.size() > 0) {
@@ -381,24 +390,36 @@ public class UsersService implements UsersInterface {
     }
 
     @Override
-    public ResponseEntity GetUsers() {
+    public ResponseEntity GetUsers(boolean systemUsers) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
-                    + "from tbl_user_details a "
-                    + "LEFT JOIN tbl_role b "
-                    + "ON a.role = b.id "
-                    + "LEFT JOIN tbl_financial_institution_contacts c "
-                    + "ON a.email_address = c.email_address "
-                    + "LEFT JOIN tbl_financial_institutions d "
-                    + "ON c.financial_institution_code = d.code "
-                    + "WHERE a.deleted = 0 AND role != 4 "
-                    + "ORDER BY a.id DESC";
+            if (systemUsers)
+                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
+                        + "from tbl_user_details a "
+                        + "LEFT JOIN tbl_role b "
+                        + "ON a.role = b.id "
+                        + "LEFT JOIN tbl_financial_institution_contacts c "
+                        + "ON a.email_address = c.email_address "
+                        + "LEFT JOIN tbl_financial_institutions d "
+                        + "ON c.financial_institution_code = d.code "
+                        + "WHERE a.deleted = 0 AND role < 4 "
+                        + "ORDER BY a.id DESC";
+            else
+                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.last_login, "
+                        + "b.role_name, "
+                        + "c.institution_id as financial_institution_code, c.institution_name as institution_name  "
+                        + "from tbl_user_details a "
+                        + "LEFT JOIN tbl_role b "
+                        + "ON a.role = b.id "
+                        + "LEFT JOIN tbl_map_card_users_institution c "
+                        + "ON a.email_address = c.user_email "
+                        + "WHERE a.deleted = 0 AND role > 4 "
+                        + "ORDER BY a.id DESC";
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("All users");
+            networkResponse.setMessage(systemUsers ? "System USers" : "Other Users");
             networkResponse.setData((ArrayList) users);
             
             return responseManager.ResponseOk(networkResponse);
@@ -471,6 +492,67 @@ public class UsersService implements UsersInterface {
                     retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
                     if (retval > 0) 
                         return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseInternalServerError();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname){
+        try {
+            boolean userExist = CheckExistingUser(email_address);
+            if (userExist) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("success");
+                networkResponse.setMessage("Email address already exit");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            String reference = randomizer.GenerateReference();
+            String SQL;
+            int userrole = GetUserRole(creator, sessiontoken);
+            String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+            switch (userrole) {
+                case 1:
+                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
+                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, reference});
+                    if (retval > 0) {
+                        SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
+                        retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
+                        if (retval > 0){
+                            String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
+                            SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
+                            jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
+                            return responseManager.ResponseAccepted();
+                        }
+                        else
+                            return responseManager.ResponseInternalServerError();
+                    }
+                    else 
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean userPending = CheckUserPending(username, email_address, "create");
+                    if (userPending) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
+                    retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
+                    if (retval > 0) {
+                        String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
+                        SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
+                        jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
+                        return responseManager.ResponseAccepted();
+                    }
                     else
                         return responseManager.ResponseInternalServerError();
                 default:
@@ -641,19 +723,30 @@ public class UsersService implements UsersInterface {
     }
     
     @Override
-    public ResponseEntity GetUsersForActions() {
+    public ResponseEntity GetUsersForActions(boolean systemUsers) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, b.role_name "
-                    + "from tbl_user_details_operations a "
-                    + "LEFT JOIN tbl_role b "
-                    + "ON a.role = b.id "
-                    + "ORDER BY a.id DESC";
+            if (systemUsers)
+                SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, b.role_name "
+                        + "from tbl_user_details_operations a "
+                        + "LEFT JOIN tbl_role b "
+                        + "ON a.role = b.id "
+                        + "ORDER BY a.id DESC";
+            else 
+                SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
+                        + "b.role_name, "
+                        + "c.institution_id as financial_institution_code, c.institution_name as institution_name  "
+                        + "from tbl_user_details_operations a "
+                        + "LEFT JOIN tbl_role b "
+                        + "ON a.role = b.id "
+                        + "LEFT JOIN tbl_map_card_users_institution c "
+                        + "ON a.email_address = c.user_email "
+                        + "ORDER BY a.id DESC";
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper2());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("All users");
+            networkResponse.setMessage(systemUsers ? "Pending System Users" : "Pending Other Users");
             networkResponse.setData((ArrayList) users);
             return responseManager.ResponseOk(networkResponse);
             
@@ -704,6 +797,8 @@ public class UsersService implements UsersInterface {
             response.setNote(rs.getString("note"));
             response.setActionType(rs.getString("actionType"));
             response.setSecurity(rs.getString("password"));
+            response.setInstitution(hasColumn(rs, "financial_institution_code") ? rs.getString("financial_institution_code") : "");
+            response.setInstitutionName(hasColumn(rs, "institution_name") ? rs.getString("institution_name") : "");
             return response;
         }
     }
@@ -736,6 +831,17 @@ public class UsersService implements UsersInterface {
             response.setDate_created(rs.getString("date_created"));
             return response;
         }
+    }
+    
+    public static boolean hasColumn(ResultSet rs, String columnName) throws SQLException {
+        ResultSetMetaData rsmd = rs.getMetaData();
+        int columns = rsmd.getColumnCount();
+        for (int x = 1; x <= columns; x++) {
+            if (columnName.equals(rsmd.getColumnName(x))) {
+                return true;
+            }
+        }
+        return false;
     }
     
 }

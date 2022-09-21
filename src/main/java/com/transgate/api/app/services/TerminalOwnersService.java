@@ -48,11 +48,27 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckItemPendingAction(int id) {
         boolean found;
         try {
             String SQL;
             SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_terminal_owners WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckItemPendingAction(String id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_terminal_owners WHERE terminal_owner_id = ? AND edit_flag = 1 OR delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -100,6 +116,50 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
     }
     
     @Override
+    public ResponseEntity Get(int id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<TerminalOwnerModel> terminalOwners;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_terminal_owners "
+                + "WHERE id = ?";
+            terminalOwners = jdbcTemplate.query(SQL, new Object[]{id}, new TerminalOwnersMapper());
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Terminal Owner by ID: " + id);
+            networkResponse.setData((ArrayList) terminalOwners);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Get(String id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<TerminalOwnerModel> terminalOwners;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_terminal_owners "
+                + "WHERE terminal_owner_id = ?";
+            terminalOwners = jdbcTemplate.query(SQL, new Object[]{id}, new TerminalOwnersMapper());
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Terminal Owner " + id);
+            networkResponse.setData((ArrayList) terminalOwners);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity Create(String terminal_owner_id, String terminal_owner_name, String sessiontoken) {
         try {
             String SQL;
@@ -133,6 +193,51 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
     @Override
     public ResponseEntity GetApprovals() {
         return Get(true);
+    }
+    
+    @Override
+    public ResponseEntity Edit(String terminal_owner_id, String terminal_owner_name, String sessiontoken) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpayweb_db.tbl_terminal_owners SET terminal_owner_name = ? WHERE terminal_owner_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{terminal_owner_name, terminal_owner_id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckItemPendingAction(terminal_owner_id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Terminal Owner already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    ResponseEntity responseEntity = Get(terminal_owner_id);
+                    NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
+                    TerminalOwnerModel model = networkResponse != null ? (TerminalOwnerModel) networkResponse.getData().get(0) : new TerminalOwnerModel();
+                    SQL = "INSERT into sparkpayweb_db.tbl_terminal_owners_bkp"
+                        + "(id, terminal_owner_id, terminal_owner_name, terminal_date) "
+                        + "VALUES(?, ?, ?, now())";
+                    jdbcTemplate.update(SQL, new Object[]{model.getId(), terminal_owner_id, terminal_owner_name});
+                    SQL = "UPDATE sparkpayweb_db.tbl_terminal_owners SET edit_flag = 1 WHERE terminal_owner_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{terminal_owner_id});
+                    if (retVal > 0) 
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
     
     class TerminalOwnersMapper implements RowMapper<TerminalOwnerModel> {

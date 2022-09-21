@@ -82,4 +82,13 @@ public class NodesController {
         }
         return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpay.station_pcis", "Node", type);
     }
+    
+    @RequestMapping(value = "/cards/nodes/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.RejectHelper(sessiontoken, id, "sparkpay.station_pcis", "Node", type);
+    }
 }

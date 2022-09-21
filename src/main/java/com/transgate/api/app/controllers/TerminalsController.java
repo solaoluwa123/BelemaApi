@@ -82,4 +82,13 @@ public class TerminalsController {
         }
         return GenericInterface.ApprovalHelper(sessiontoken, id, "terminal_id", "sparkpay.terminals", "Terminal", type);
     }
+    
+    @RequestMapping(value = "/cards/terminals/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") String id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.RejectHelper(sessiontoken, id, "terminal_id", "sparkpay.terminals", "Terminal", type);
+    }
 }

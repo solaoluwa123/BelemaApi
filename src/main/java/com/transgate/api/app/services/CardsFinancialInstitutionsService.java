@@ -48,11 +48,27 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckItemPendingAction(int id) {
         boolean found;
         try {
             String SQL;
             SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_financial_institutions WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckItemPendingAction(String id, String column) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_financial_institutions WHERE "+column+" = ? AND edit_flag = 1 OR delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -114,6 +130,46 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
         }
     }
     
+    public ResponseEntity Get(String id, String column) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsFinancialInstitutionModel> cardFI;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "
+                + "WHERE "+column+" = ?";
+            cardFI = jdbcTemplate.query(SQL, new Object[]{id}, new CardFIMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Financial Institutions by "+column+": " + id);
+            networkResponse.setData((ArrayList) cardFI);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    public ResponseEntity Get(int id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsFinancialInstitutionModel> cardFI;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "
+                + "WHERE id = ?";
+            cardFI = jdbcTemplate.query(SQL, new Object[]{id}, new CardFIMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Financial Institutions by ID: " + id);
+            networkResponse.setData((ArrayList) cardFI);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     @Override
     public ResponseEntity Get() {
         return Get(false);
@@ -151,6 +207,49 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
                 return responseManager.ResponseAccepted();
             else 
                 return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Edit(int id, String acquirer_id, String institution_name, String issuer_id, String bank_code, String sessiontoken) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpayweb_db.tbl_financial_institutions "
+                            + "SET acquirer_id = ?, institution_name = ?, issuer_id = ?, bank_code = ? WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{acquirer_id, institution_name, issuer_id, bank_code, id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckItemPendingAction(id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Financial Institution already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "INSERT into sparkpayweb_db.tbl_financial_institutions_bkp"
+                        + "(id, acquirer_id, institution_name, issuer_id, bank_code, created) "
+                        + "VALUES(?, ?, ?, ?, ?,now())";
+                    jdbcTemplate.update(SQL, new Object[]{id, acquirer_id, institution_name, issuer_id, bank_code});
+                    SQL = "UPDATE sparkpayweb_db.tbl_financial_institutions SET edit_flag = 1 WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0) 
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();

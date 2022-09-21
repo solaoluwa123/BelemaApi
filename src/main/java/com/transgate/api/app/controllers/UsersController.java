@@ -92,7 +92,15 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.GetUsers();
+        return usersInterface.GetUsers(true);
+    }
+    
+    @RequestMapping(value = "/other-users/get", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetOtherUsers(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetUsers(false);
     }
     
     @RequestMapping(value = "/roles/get", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -110,6 +118,15 @@ public class UsersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return usersInterface.Create(sessiontoken, user.getRole(), user.getUsername(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getRoleid(), user.getSecurity());
+    }
+    
+    @RequestMapping(value = "/other-users/create", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity CreateOther(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.CreateOther(sessiontoken, user.getRole(), user.getUsername(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getRoleid(), user.getSecurity(), user.getInstitution(), user.getInstitutionName());
     }
     
     @RequestMapping(value = "/users/{userid}/{username}", method = RequestMethod.DELETE, headers = "Accept=application/json")
@@ -152,6 +169,14 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.GetUsersForActions();
+        return usersInterface.GetUsersForActions(true);
+    }
+    
+    @RequestMapping(value = "/other-users/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetOtherUsersForActions(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetUsersForActions(false);
     }
 }

@@ -47,12 +47,12 @@ public class MerchantsService implements MerchantsInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckNodePendingAction(String merchant_id) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpay.merchants WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
-            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+            SQL = "SELECT COUNT(*) FROM sparkpay.merchants WHERE merchant_id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{merchant_id}, int.class);
 
             found = totalRows > 0;
             
@@ -110,6 +110,48 @@ public class MerchantsService implements MerchantsInterface {
     }
     
     @Override
+    public ResponseEntity Get(String merchant_id) {
+         NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsMerchantModel> merchants;
+            SQL = "SELECT * FROM sparkpay.merchants "
+                + "WHERE merchant_id = ?";
+            merchants = jdbcTemplate.query(SQL, new Object[]{merchant_id}, new MerchantsMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Get Merchant " + merchant_id);
+            networkResponse.setData((ArrayList) merchants);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Get(int id) {
+         NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsMerchantModel> merchants;
+            SQL = "SELECT * FROM sparkpay.merchants "
+                + "WHERE id = ?";
+            merchants = jdbcTemplate.query(SQL, new Object[]{id}, new MerchantsMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Get Merchant by id " + id);
+            networkResponse.setData((ArrayList) merchants);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity Get() {
         return Get(false);
     }
@@ -150,6 +192,52 @@ public class MerchantsService implements MerchantsInterface {
                 networkResponse.setStatus("failed");
                 networkResponse.setMessage("Merchant with ID "+merchant_id+" already exist");
                 return responseManager.ResponseOk(networkResponse);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Edit(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE merchant_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{merchant_name, merchant_state, merchant_country, merchant_category_code, merchant_id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckNodePendingAction(merchant_id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Merchant already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    ResponseEntity responseEntity = Get(merchant_id);
+                    NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
+                    CardsMerchantModel merchant = networkResponse != null ? (CardsMerchantModel) networkResponse.getData().get(0) : new CardsMerchantModel();
+                    SQL = "INSERT into sparkpayweb_db.merchants_bkp"
+                        + "(id, merchant_id, merchant_name, merchant_state, merchant_country,"
+                        + "merchant_category_code, date_created) "
+                        + "VALUES(?, ?, ?, ?, ?, ?,now())";
+                    jdbcTemplate.update(SQL, new Object[]{merchant.getId(), merchant_id, merchant_name, merchant_state, merchant_country, merchant_category_code});
+                    SQL = "UPDATE sparkpay.merchants SET edit_flag = 1 WHERE merchant_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{merchant_id});
+                    if (retVal > 0) 
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
             }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());

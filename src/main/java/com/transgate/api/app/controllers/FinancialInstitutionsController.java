@@ -118,6 +118,15 @@ public class FinancialInstitutionsController {
         return financialInstitutionsInterface.FinancialInstitutionApprovals(sessiontoken, institution.getId(), institution.getActionType(), institution.getCreated_by());
     }
     
+    @RequestMapping(value = "/financial-institutions/reject", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity FinancialInstitutionReject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody FinancialInstitutionModel institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return financialInstitutionsInterface.FinancialInstitutionReject(sessiontoken, institution.getId(), institution.getActionType(), institution.getCreated_by());
+    }
+    
     @RequestMapping(value = "/financial-institutions/contacts", method = RequestMethod.PUT, headers = "Accept=application/json")
     public ResponseEntity CreateContact(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestBody UserModel user) {

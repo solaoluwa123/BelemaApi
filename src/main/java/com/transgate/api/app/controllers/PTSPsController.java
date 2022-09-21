@@ -63,6 +63,18 @@ public class PTSPsController {
             );
     }
     
+    @RequestMapping(value = "/cards/ptsps/{ptsp_id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody PTSPModel model,
+            @PathVariable("ptsp_id") String ptsp_id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return PTSPsInterface.Edit(
+                ptsp_id, model.getPtsp_name(), sessiontoken
+            );
+    }
+    
     @RequestMapping(value = "/cards/ptsps/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("id") int id) {
@@ -79,5 +91,14 @@ public class PTSPsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpayweb_db.ptsp", "PTSP", type);
+    }
+    
+    @RequestMapping(value = "/cards/ptsps/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.RejectHelper(sessiontoken, id, "sparkpayweb_db.ptsp", "PTSP", type);
     }
 }

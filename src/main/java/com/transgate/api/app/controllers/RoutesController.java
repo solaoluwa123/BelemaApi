@@ -63,6 +63,18 @@ public class RoutesController {
             );
     }
     
+    @RequestMapping(value = "/cards/routes/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody RouteModel routeModel,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return RoutesInterface.Edit(
+                id, routeModel.getSource_acq_id(), routeModel.getDestination_bin(), routeModel.getCard_bin(), sessiontoken
+            );
+    }
+    
     @RequestMapping(value = "/cards/routes/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("id") int id) {
@@ -79,6 +91,15 @@ public class RoutesController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpay.transaction_route", "Route", type);
+    }
+    
+    @RequestMapping(value = "/cards/routes/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.RejectHelper(sessiontoken, id, "sparkpay.transaction_route", "Route", type);
     }
     
 }

@@ -485,6 +485,67 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
+    public ResponseEntity FinancialInstitutionReject(String sessiontoken, int id, String actionType, String username) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(username, sessiontoken);
+            int retVal;
+            int retVal2;
+            if (userrole == 1 || userrole == 3) {
+                List<FinancialInstitutionModel> institutions = GetInstitutionsFromPendings(id, actionType);
+                if (institutions.size() == 1) {
+                    switch (actionType) {
+                        case "deactivate":
+                        case "activate":
+                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = ?";
+//                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = ?";
+                            retVal = jdbcTemplate.update(SQL, new Object[]{id, actionType});
+//                            SQL = "UPDATE tbl_financial_institutions SET status = ? WHERE code = ?";
+//                            int acInt = actionType.equals("deactivate") ? -1 : 1;
+//                            retVal2 = jdbcTemplate.update(SQL, new Object[]{acInt, institutions.get(0).getCode()});
+                            if (retVal > 0)
+                                return responseManager.ResponseAccepted();
+                            else
+                                return responseManager.ResponseInternalServerError();
+                        case "edit":
+                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = 'edit'";
+                            retVal = jdbcTemplate.update(SQL, new Object[]{id});
+//                            SQL = "UPDATE tbl_financial_institutions SET name = ?, businessType = ?, business_address = ? WHERE code = ?";
+//                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address(), institutions.get(0).getCode()});
+                            if (retVal > 0)
+                                return responseManager.ResponseAccepted();
+                            else
+                                return responseManager.ResponseInternalServerError();
+                        case "create":
+                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = 'create'";
+                            retVal = jdbcTemplate.update(SQL, new Object[]{id});
+//                            SQL = "INSERT into tbl_financial_institutions(name, code, businessType, date_created, business_address) VALUES(?, ?, ?, now(), ?)";
+//                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getCode(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address()});
+                            if (retVal > 0)
+                                return responseManager.ResponseAccepted();
+                            else
+                                return responseManager.ResponseInternalServerError();
+                        default:
+                            return responseManager.ResponseBadRequest();
+                    }
+                }
+                else {
+                    NetworkResponse networkResponse = new NetworkResponse();
+                    networkResponse.setCode(200);
+                    networkResponse.setStatus("failed");
+                    networkResponse.setMessage("Not found");
+                    return responseManager.ResponseNotFound(networkResponse);
+                }
+            }
+            else
+                return responseManager.ResponseUnathorized();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetAllContacts(String sessiontoken) {
         return GetAllContacts(sessiontoken, "");
     }

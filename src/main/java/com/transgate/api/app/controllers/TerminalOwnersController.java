@@ -63,6 +63,18 @@ public class TerminalOwnersController {
             );
     }
     
+    @RequestMapping(value = "/cards/terminal-owners/{owner_id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody TerminalOwnerModel model,
+            @PathVariable("owner_id") String owner_id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalOwnersInterface.Edit(
+                owner_id, model.getTerminal_owner_name(), sessiontoken
+            );
+    }
+    
     @RequestMapping(value = "/cards/terminal-owners/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("id") int id) {
@@ -79,5 +91,14 @@ public class TerminalOwnersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpayweb_db.tbl_terminal_owners", "Terminal Owner", type);
+    }
+    
+    @RequestMapping(value = "/cards/terminal-owners/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.RejectHelper(sessiontoken, id, "sparkpayweb_db.tbl_terminal_owners", "Terminal Owner", type);
     }
 }

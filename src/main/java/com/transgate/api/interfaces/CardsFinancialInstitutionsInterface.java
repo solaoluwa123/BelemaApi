@@ -13,6 +13,9 @@ import org.springframework.http.ResponseEntity;
  */
 public interface CardsFinancialInstitutionsInterface {
     public ResponseEntity Get();
+    public ResponseEntity Get(String id, String column);
+    public ResponseEntity Get(int id);
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String acquirer_id, String institution_name, String issuer_id, String bank_code, String sessiontoken);
+    public ResponseEntity Edit(int id, String acquirer_id, String institution_name, String issuer_id, String bank_code, String sessiontoken);
 }

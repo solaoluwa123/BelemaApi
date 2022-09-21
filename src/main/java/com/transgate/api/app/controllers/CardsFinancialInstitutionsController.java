@@ -64,6 +64,18 @@ public class CardsFinancialInstitutionsController {
             );
     }
     
+    @RequestMapping(value = "/cards/financial-institutions/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody CardsFinancialInstitutionModel model,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsFinancialInstitutionsInterface.Edit(
+                id, model.getAcquirer_id(), model.getInstitution_name(), model.getIssuer_id(), model.getBank_code(), sessiontoken
+            );
+    }
+    
     @RequestMapping(value = "/cards/financial-institutions/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("id") int id) {
@@ -80,5 +92,14 @@ public class CardsFinancialInstitutionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "Financial Institution", type);
+    }
+    
+    @RequestMapping(value = "/cards/financial-institutions/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id, @PathVariable("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.RejectHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "Financial Institution", type);
     }
 }

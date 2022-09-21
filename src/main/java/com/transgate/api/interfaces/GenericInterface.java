@@ -22,4 +22,6 @@ public interface GenericInterface {
     public ResponseEntity GetTerminalTypes();
     public ResponseEntity ApprovalHelper(String sessiontoken, int id, String table, String entity, String approvalType);
     public ResponseEntity ApprovalHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType);
+    public ResponseEntity RejectHelper(String sessiontoken, int id, String table, String entity, String approvalType);
+    public ResponseEntity RejectHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType);
 }

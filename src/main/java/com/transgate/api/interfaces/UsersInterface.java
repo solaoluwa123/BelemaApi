@@ -14,7 +14,7 @@ import org.springframework.http.ResponseEntity;
 public interface UsersInterface {
     public ResponseEntity Login(String username, String password);
     
-    public ResponseEntity GetUsers();
+    public ResponseEntity GetUsers(boolean systemUsers);
     
     public ResponseEntity GetUserById(String sessiontoken, int userid);
     
@@ -25,6 +25,8 @@ public interface UsersInterface {
     public ResponseEntity ResetPassword(String code, String password, String token);
     
     public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password);
+    
+    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname);
 
     public ResponseEntity Delete(String sessiontoken, int userid, String username);
     
@@ -32,7 +34,7 @@ public interface UsersInterface {
     
     public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username);
     
-    public ResponseEntity GetUsersForActions();
+    public ResponseEntity GetUsersForActions(boolean systemUsers);
     
     public ResponseEntity ClearUserSession(String sessiontoken, String username);
 }

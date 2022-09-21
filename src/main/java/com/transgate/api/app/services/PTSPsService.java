@@ -48,11 +48,27 @@ public class PTSPsService implements PTSPsInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckItemPendingAction(int id) {
         boolean found;
         try {
             String SQL;
             SQL = "SELECT COUNT(*) FROM sparkpayweb_db.ptsp WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckItemPendingAction(String id) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.ptsp WHERE ptsp_id = ? AND edit_flag = 1 OR delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -99,6 +115,48 @@ public class PTSPsService implements PTSPsInterface {
     }
     
     @Override
+    public ResponseEntity Get(String ptsp_id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<PTSPModel> ptsps;
+            SQL = "SELECT * FROM sparkpayweb_db.ptsp "
+                + "WHERE ptsp_id = ?";
+            ptsps = jdbcTemplate.query(SQL, new Object[]{ptsp_id}, new PTSPsMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("PTSP " + ptsp_id);
+            networkResponse.setData((ArrayList) ptsps);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Get(int id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<PTSPModel> ptsps;
+            SQL = "SELECT * FROM sparkpayweb_db.ptsp "
+                + "WHERE id = ?";
+            ptsps = jdbcTemplate.query(SQL, new Object[]{id}, new PTSPsMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("PTSP by ID: " + id);
+            networkResponse.setData((ArrayList) ptsps);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity Get() {
         return Get(false);
     }
@@ -128,6 +186,51 @@ public class PTSPsService implements PTSPsInterface {
                 return responseManager.ResponseAccepted();
             else 
                 return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Edit(String ptsp_id, String ptsp_name, String sessiontoken) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpayweb_db.ptsp SET ptsp_name = ? WHERE ptsp_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{ptsp_name, ptsp_id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckItemPendingAction(ptsp_id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("PTSP already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    ResponseEntity responseEntity = Get(ptsp_id);
+                    NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
+                    PTSPModel model = networkResponse != null ? (PTSPModel) networkResponse.getData().get(0) : new PTSPModel();
+                    SQL = "INSERT into sparkpayweb_db.ptsp_bkp"
+                        + "(id, ptsp_id, ptsp_name, ptsp_date) "
+                        + "VALUES(?, ?, ?, now())";
+                    jdbcTemplate.update(SQL, new Object[]{model.getId(), ptsp_id, ptsp_name});
+                    SQL = "UPDATE sparkpayweb_db.ptsp SET edit_flag = 1 WHERE ptsp_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{ptsp_id});
+                    if (retVal > 0) 
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();

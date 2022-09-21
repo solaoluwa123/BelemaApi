@@ -48,11 +48,27 @@ public class RoutesService implements RoutesInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckItemPendingAction(int id) {
         boolean found;
         try {
             String SQL;
             SQL = "SELECT COUNT(*) FROM sparkpay.transaction_route WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckItemPendingAction(String id, String column) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpay.transaction_route WHERE "+column+" = ? AND edit_flag = 1 OR delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -99,6 +115,46 @@ public class RoutesService implements RoutesInterface {
         }
     }
     
+    public ResponseEntity Get(String id, String column) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<RouteModel> routes;
+            SQL = "SELECT * FROM sparkpay.transaction_route "
+                + "WHERE "+column+" = ?";
+            routes = jdbcTemplate.query(SQL, new Object[]{id}, new RoutesMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Routes by " + column+": " + id);
+            networkResponse.setData((ArrayList) routes);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    public ResponseEntity Get(int id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<RouteModel> routes;
+            SQL = "SELECT * FROM sparkpay.transaction_route "
+                + "WHERE id = ?";
+            routes = jdbcTemplate.query(SQL, new Object[]{id}, new RoutesMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Routes by ID: " + id);
+            networkResponse.setData((ArrayList) routes);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     @Override
     public ResponseEntity Get() {
         return Get(false);
@@ -129,6 +185,49 @@ public class RoutesService implements RoutesInterface {
                 return responseManager.ResponseAccepted();
             else 
                 return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Edit(int id, String source_acq_id, String destination_bin, int card_bin, String sessiontoken) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpay.transaction_route "
+                            + "SET source_acq_id = ?, destination_bin = ?, card_bin = ? WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{source_acq_id, destination_bin, card_bin, id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckItemPendingAction(id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Route already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "INSERT into sparkpayweb_db.transaction_route_bkp"
+                        + "(id, source_acq_id, destination_bin, card_bin, date_created) "
+                        + "VALUES(?, ?, ?, ?,now())";
+                    jdbcTemplate.update(SQL, new Object[]{id, source_acq_id, destination_bin, card_bin});
+                    SQL = "UPDATE sparkpay.transaction_route SET edit_flag = 1 WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0) 
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();

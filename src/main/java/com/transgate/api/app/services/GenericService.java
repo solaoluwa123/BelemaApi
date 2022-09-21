@@ -15,6 +15,7 @@ import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -279,6 +280,63 @@ public class GenericService implements GenericInterface {
             switch (userrole) {
                 case 1:
                 case 3:
+                    if (approvalType.equals("edit")) {
+                        final List<Map<String, Object>> rows;
+                        switch(entity) {
+                            case "Merchant":
+                                SQL = "SELECT * FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("merchant_name"), row.get("merchant_state"), row.get("merchant_country"), row.get("merchant_category_code"), id});
+                                    SQL = "DELETE FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
+                            case "PTSP":
+                                SQL = "SELECT * FROM sparkpayweb_db.ptsp_bkp WHERE id = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpayweb_db.ptsp SET ptsp_name = ? WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("ptsp_name"), id});
+                                    SQL = "DELETE FROM sparkpayweb_db.ptsp_bkp WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
+                            case "Terminal Owner":
+                                SQL = "SELECT * FROM sparkpayweb_db.tbl_terminal_owners_bkp WHERE id = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpayweb_db.tbl_terminal_owners SET terminal_owner_name = ? WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("terminal_owner_name"), id});
+                                    SQL = "DELETE FROM sparkpayweb_db.tbl_terminal_owners_bkp WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
+                            case "Financial Institution":
+                                SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions_bkp WHERE id = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpayweb_db.tbl_financial_institutions SET acquirer_id = ?, institution_name = ?, issuer_id = ?, bank_code = ? WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("acquirer_id"), row.get("institution_name"), row.get("issuer_id"), row.get("bank_code"), id});
+                                    SQL = "DELETE FROM sparkpayweb_db.tbl_financial_institutions_bkp WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
+                            case "Route":
+                                SQL = "SELECT * FROM sparkpayweb_db.transaction_route_bkp WHERE id = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpay.transaction_route SET source_acq_id = ?, destination_bin = ?, card_bin = ? WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("source_acq_id"), row.get("destination_bin"), row.get("card_bin"), id});
+                                    SQL = "DELETE FROM sparkpayweb_db.transaction_route_bkp WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
                     SQL = approvalType.equals("delete") ?
                             "DELETE FROM "+table+" WHERE delete_flag = 1 AND id = ?"
                             : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE id = ?"
@@ -306,12 +364,98 @@ public class GenericService implements GenericInterface {
             int retVal;
             switch (userrole) {
                 case 1:
-                case 2:
+                case 3:
                     SQL = approvalType.equals("delete") ?
                             "DELETE FROM "+table+" WHERE delete_flag = 1 AND "+column+" = ?"
                             : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE "+column+" = ?"
                             : ""
                             ;
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity RejectHelper(String sessiontoken, int id, String table, String entity, String approvalType) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                case 3:
+                    if (approvalType.equals("edit")) {
+                        switch(entity) {
+                            case "Merchant":
+                                SQL = "DELETE FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
+                            case "PTSP":
+                                SQL = "DELETE FROM sparkpayweb_db.ptsp_bkp WHERE id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
+                            case "Terminal Owner":
+                                SQL = "DELETE FROM sparkpayweb_db.tbl_terminal_owners_bkp WHERE id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
+                            case "Financial Institution":
+                                SQL = "DELETE FROM sparkpayweb_db.tbl_financial_institutions_bkp WHERE id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
+                            case "Route":
+                                SQL = "DELETE FROM sparkpayweb_db.transaction_route_bkp WHERE id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
+                            default:
+                                break;
+                        }
+                    }
+                    SQL = approvalType.equals("delete") ?
+                            "UPDATE "+table+" SET delete_flag = 0 WHERE id = ?"
+                            : approvalType.equals("edit") ?
+                            "UPDATE "+table+" SET edit_flag = 0 WHERE id = ?"
+                            : approvalType.equals("create") ?
+                            "DELETE FROM "+table+" WHERE create_flag = 0 AND id = ?" 
+                            : "";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity RejectHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                case 3:
+                    SQL = approvalType.equals("delete") ?
+                            "UPDATE "+table+" SET delete_flag = 0 WHERE "+column+" = ?"
+                            : approvalType.equals("edit") ?
+                            "UPDATE "+table+" SET edit_flag = 0 WHERE "+column+" = ?"
+                            : approvalType.equals("create") ?
+                            "DELETE FROM "+table+" WHERE create_flag = 0 AND "+column+" = ?" 
+                            : "";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();

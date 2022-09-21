@@ -31,6 +31,8 @@ public interface FinancialInstitutionsInterface {
     
     public ResponseEntity FinancialInstitutionApprovals(String sessiontoken, int id, String actionType, String username);
     
+    public ResponseEntity FinancialInstitutionReject(String sessiontoken, int id, String actionType, String username);
+    
     public ResponseEntity GetFinancialInstitutionsForActions();
     
     public ResponseEntity CreateContact(String sessiontoken, String creator, String institution, String firstname, String surname, String phone_number, String email_address, String security);

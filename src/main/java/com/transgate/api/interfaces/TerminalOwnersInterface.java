@@ -13,6 +13,9 @@ import org.springframework.http.ResponseEntity;
  */
 public interface TerminalOwnersInterface {
     public ResponseEntity Get();
+    public ResponseEntity Get(String terminal_owner_id);
+    public ResponseEntity Get(int id);
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String terminal_owner_id, String terminal_owner_name, String sessiontoken);
+    public ResponseEntity Edit(String terminal_owner_id, String terminal_owner_name, String sessiontoken);
 }
