@@ -6,6 +6,7 @@
 package com.transgate.api.app.controllers;
 
 import com.transgate.api.interfaces.FinancialInstitutionsInterface;
+import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.models.FinancialInstitutionModel;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.util.ResponseManager;
@@ -32,6 +33,9 @@ public class FinancialInstitutionsController {
     ResponseManager responseManager = new ResponseManager();
     
     Validators validators = new Validators();
+    
+    @Autowired
+    GenericInterface GenericInterface;
     
     @RequestMapping(value = "/financial-institutions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {
@@ -116,6 +120,15 @@ public class FinancialInstitutionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return financialInstitutionsInterface.FinancialInstitutionApprovals(sessiontoken, institution.getId(), institution.getActionType(), institution.getCreated_by());
+    }
+    
+    @RequestMapping(value = "/financial-institutions/reject/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.DeleteHelper(sessiontoken, id, "transgatepay_db.tbl_financial_institutions_pendings", "Accounts Institution");
     }
     
     @RequestMapping(value = "/financial-institutions/reject", method = RequestMethod.PUT, headers = "Accept=application/json")

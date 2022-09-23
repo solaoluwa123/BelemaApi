@@ -65,6 +65,20 @@ public class TerminalsController {
             );
     }
     
+    @RequestMapping(value = "/cards/terminals/{terminal_id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody TerminalModel terminalModel,
+            @PathVariable("terminal_id") String terminal_id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalsInterface.Edit(
+                terminal_id, terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
+                terminalModel.getRoute_mode(), terminalModel.getAcquiring_institution_id(), terminalModel.getAcquiring_institution_name(), 
+                terminalModel.getCbn_bank_code(), terminalModel.getTerminal_type(), sessiontoken
+            );
+    }
+    
     @RequestMapping(value = "/cards/terminals/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("id") String id) {

@@ -194,22 +194,26 @@ public class UsersService implements UsersInterface {
                     response.setDate_created((new Date()).toString());
                     response.setDate_updated(null);
                 }
-                SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
-                        + "FROM `tbl_menus` a "
-                        + "LEFT JOIN `tbl_menus` b "
-                        + "ON a.id = b.parent_id "
-                        + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 1 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
-                        + "ORDER BY a.id ASC";
-                List<MenuModel> menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
-                
-                if (menu.size() > 0) {
-                    response.setTransgateMenu(menu);
+                List<MenuModel> menu;
+                if (userRoleid < 4){
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 1 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
+                            + "ORDER BY a.id ASC";
+                    menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
+
+                    if (menu.size() > 0) {
+                        response.setTransgateMenu(menu);
+                    }
+                    else {
+                        List<MenuModel> eM = new ArrayList<>();
+                        response.setTransgateMenu(eM);
+                    }
                 }
-                else {
-                    List<MenuModel> eM = new ArrayList<>();
-                    response.setTransgateMenu(eM);
-                }
-                
+                else
+                    response.setTransgateMenu(new ArrayList<>());
                 if (userRoleid < 4) 
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
@@ -286,6 +290,43 @@ public class UsersService implements UsersInterface {
                 response.setCode(400);
                 response.setStatus("failed");
                 response.setMessage("Unable to handle password reset");
+                return responseManager.ResponseOk(response);
+            }
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseUnathorized();
+        }
+    }
+
+    @Override
+    public ResponseEntity ActivateAccount(String code, String password, String token) {
+        LoginResponse response = new LoginResponse();
+        try {
+            String SQL;
+            SQL = "SELECT a.password from sparkpayweb_db.tbl_users a "
+                    + "WHERE a.reference = ? AND a.enabled = 0";
+            String security = jdbcTemplate.queryForObject(SQL, new Object[]{code}, String.class);
+//            boolean comparePassword = BCrypt.checkpw(token, security);
+            if (security.equals(token)) {
+                String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+                String reference = randomizer.GenerateReference();
+                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, reference = ?, enabled = 1 WHERE reference = ?";
+                jdbcTemplate.update(SQL, new Object[]{hashPassword, reference, code});
+                response.setCode(200);
+                response.setMessage("Account activated");
+                return responseManager.ResponseOk(response);
+            }
+            else {
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Invalid activation link");
+                return responseManager.ResponseOk(response);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println(ex);
+            if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
+                response.setCode(400);
+                response.setStatus("failed");
+                response.setMessage("Unable to handle account activation");
                 return responseManager.ResponseOk(response);
             }
             System.out.println("error>>>>" + ex.getMessage());
@@ -465,15 +506,28 @@ public class UsersService implements UsersInterface {
             String SQL;
             int userrole = GetUserRole(creator, sessiontoken);
             String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+            
+            String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+            String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
             switch (userrole) {
                 case 1:
-                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, reference});
+//                    SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
+//                    jdbcTemplate.update(SQL, new Object[]{ref, code, email});
+                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 0, ?)";
+                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, ref});
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
-                        if (retval > 0)
-                            return responseManager.ResponseAccepted();
+                        if (retval > 0){
+                            LoginResponse response = new LoginResponse();
+                            response.setCode(201);
+                            response.setStatus("success");
+                            response.setMessage("Account created");
+                            response.setFirstname(ref);
+                            response.setSurname(code);
+                            return responseManager.ResponseOk(response);
+                        }
+//                            return responseManager.ResponseAccepted();
                         else
                             return responseManager.ResponseInternalServerError();
                     }
@@ -520,8 +574,10 @@ public class UsersService implements UsersInterface {
             String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
             switch (userrole) {
                 case 1:
-                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, reference});
+                    String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+                    String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
+                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 0, ?)";
+                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, ref});
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
@@ -529,7 +585,14 @@ public class UsersService implements UsersInterface {
                             String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
                             SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
                             jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
-                            return responseManager.ResponseAccepted();
+                            LoginResponse response = new LoginResponse();
+                            response.setCode(201);
+                            response.setStatus("success");
+                            response.setMessage("Account created");
+                            response.setFirstname(ref);
+                            response.setSurname(code);
+                            return responseManager.ResponseOk(response);
+//                            return responseManager.ResponseAccepted();
                         }
                         else
                             return responseManager.ResponseInternalServerError();
@@ -694,12 +757,23 @@ public class UsersService implements UsersInterface {
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             String reference = randomizer.GenerateReference();
-                            SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                            jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address(), users.get(0).getSecurity(), reference});
+                            String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+                            String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
+                            SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 0, ?)";
+                            jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address(), code, ref});
                             SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getUsername(), users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getEmail_address(), users.get(0).getRoleid()});
-                            if (retVal > 0 && retVal2 > 0)
-                                return responseManager.ResponseAccepted();
+                            if (retVal > 0 && retVal2 > 0){
+                                LoginResponse response = new LoginResponse();
+                                response.setCode(201);
+                                response.setStatus("success");
+                                response.setMessage("Account approved");
+                                response.setFirstname(ref);
+                                response.setSurname(code);
+                                response.setUsername(users.get(0).getEmail_address());
+                                return responseManager.ResponseOk(response);
+                            }
+//                                return responseManager.ResponseAccepted();
                             else
                                 return responseManager.ResponseInternalServerError();
                         default:

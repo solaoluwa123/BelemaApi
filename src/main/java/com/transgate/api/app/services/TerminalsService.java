@@ -47,12 +47,12 @@ public class TerminalsService implements TerminalsInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckItemPendingEdit(String terminal_id) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpay.terminals WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
-            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+            SQL = "SELECT COUNT(*) FROM sparkpay.terminals WHERE id = ? AND edit_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{terminal_id}, int.class);
 
             found = totalRows > 0;
             
@@ -110,6 +110,46 @@ public class TerminalsService implements TerminalsInterface {
         }
     }
     
+    public ResponseEntity Get(String id, String column) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<TerminalModel> terminals;
+            SQL = "SELECT * FROM sparkpay.terminals "
+                + "WHERE "+column+" = ?";
+            terminals = jdbcTemplate.query(SQL, new Object[]{id}, new TerminalsMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Terminal by "+column+": "+id);
+            networkResponse.setData((ArrayList) terminals);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    public ResponseEntity Get(String terminal_id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<TerminalModel> terminals;
+            SQL = "SELECT * FROM sparkpay.terminals "
+                + "WHERE terminal_id = ?";
+            terminals = jdbcTemplate.query(SQL, new Object[]{terminal_id}, new TerminalsMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Terminal by Terminal ID: " + terminal_id);
+            networkResponse.setData((ArrayList) terminals);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     @Override
     public ResponseEntity Get() {
         return Get(false);
@@ -155,6 +195,58 @@ public class TerminalsService implements TerminalsInterface {
                 networkResponse.setStatus("failed");
                 networkResponse.setMessage("Terminal with ID "+terminal_id+" already exist");
                 return responseManager.ResponseOk(networkResponse);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Edit(String terminal_id, String merchant_id, String merchant_name, 
+            String route_mode, String acquiring_institution_id, String acquiring_institution_name,
+            String cbn_bank_code, String terminal_type,
+            String sessiontoken) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpay.terminals SET merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
+                            + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE terminal_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{merchant_id, merchant_name, route_mode, acquiring_institution_id,
+                        acquiring_institution_name, cbn_bank_code, terminal_type, terminal_id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckItemPendingEdit(terminal_id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Terminal already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    ResponseEntity responseEntity = Get(terminal_id);
+                    NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
+                    TerminalModel model = networkResponse != null ? (TerminalModel) networkResponse.getData().get(0) : new TerminalModel();
+                    SQL = "INSERT into sparkpayweb_db.terminals_bkp"
+                        + "(id, terminal_id, merchant_id, merchant_name, route_mode,"
+                        + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, date_time) "
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+                    jdbcTemplate.update(SQL, new Object[]{model.getId(), terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
+                        acquiring_institution_name, cbn_bank_code, terminal_type});
+                    SQL = "UPDATE sparkpay.terminals SET edit_flag = 1 WHERE terminal_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{terminal_id});
+                    if (retVal > 0) 
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
             }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());

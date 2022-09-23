@@ -65,13 +65,27 @@ public class NodesController {
             );
     }
     
+    @RequestMapping(value = "/cards/nodes/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Edit(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody NodeModel nodeModel,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return NodesInterface.Edit(
+                id, nodeModel.getStation_name(), nodeModel.getLocal_port(), nodeModel.getAcquiring_institution_id(), 
+                nodeModel.getKek(), nodeModel.getSend_key_request(), nodeModel.getCbn_bank_code(), nodeModel.getKey_check_value(), 
+                nodeModel.getTransaction_direction(), nodeModel.getRemoteIP(), nodeModel.getRemote_port(), sessiontoken
+            );
+    }
+    
     @RequestMapping(value = "/cards/nodes/{id}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity Delete(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("id") int id) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return NodesInterface.Delete(sessiontoken, id);
+        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpay.station_pcis", "Node");
     }
     
     @RequestMapping(value = "/cards/nodes/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")

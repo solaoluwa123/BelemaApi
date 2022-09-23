@@ -48,11 +48,11 @@ public class PTSPsService implements PTSPsInterface {
         }
     }
     
-    private boolean CheckItemPendingAction(int id) {
+    private boolean CheckItemPendingEdit(int id) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.ptsp WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.ptsp WHERE id = ? AND edit_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -64,11 +64,11 @@ public class PTSPsService implements PTSPsInterface {
         }
     }
     
-    private boolean CheckItemPendingAction(String id) {
+    private boolean CheckItemPendingEdit(String id) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.ptsp WHERE ptsp_id = ? AND edit_flag = 1 OR delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.ptsp WHERE ptsp_id = ? AND edit_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -207,7 +207,7 @@ public class PTSPsService implements PTSPsInterface {
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
-                    boolean checkPendingAction = CheckItemPendingAction(ptsp_id);
+                    boolean checkPendingAction = CheckItemPendingEdit(ptsp_id);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);

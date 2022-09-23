@@ -51,11 +51,11 @@ public class GenericService implements GenericInterface {
         }
     }
     
-    private boolean CheckPendingAction(int id, String table) {
+    private boolean CheckPendingDelete(int id, String table) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM "+table+" WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM "+table+" WHERE id = ? AND delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -67,11 +67,11 @@ public class GenericService implements GenericInterface {
         }
     }
     
-    private boolean CheckPendingAction(String id, String column, String table) {
+    private boolean CheckPendingDelete(String id, String column, String table) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ? AND edit_flag = 1 OR delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ? AND delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -210,7 +210,7 @@ public class GenericService implements GenericInterface {
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
-                    boolean checkPendingAction = CheckPendingAction(id, table);
+                    boolean checkPendingAction = CheckPendingDelete(id, table);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
@@ -248,7 +248,7 @@ public class GenericService implements GenericInterface {
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
-                    boolean checkPendingAction = CheckPendingAction(id, column, table);
+                    boolean checkPendingAction = CheckPendingDelete(id, column, table);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
@@ -333,6 +333,22 @@ public class GenericService implements GenericInterface {
                                     jdbcTemplate.update(SQL, new Object[]{id});
                                 }
                                 break;
+                            case "Node":
+                                SQL = "SELECT * FROM sparkpayweb_db.station_pcis_bkp WHERE id = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpay.station_pcis "
+                                            + "SET station_name = ?, local_port = ?, acquiring_institution_id = ?, kek = ?, "
+                                            + "send_key_request = ?, cbn_bank_code = ?, key_check_value = ?, transaction_direction = ?, "
+                                            + "remoteIP = ?, remote_port = ? WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("station_name"), row.get("local_port"), row.get("acquiring_institution_id"), row.get("kek"),
+                                        row.get("send_key_request"), row.get("cbn_bank_code"), row.get("key_check_value"), row.get("transaction_direction"),
+                                        row.get("remoteIP"), row.get("remote_port"),
+                                        id});
+                                    SQL = "DELETE FROM sparkpayweb_db.station_pcis_bkp WHERE id = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
                             default:
                                 break;
                         }
@@ -365,6 +381,25 @@ public class GenericService implements GenericInterface {
             switch (userrole) {
                 case 1:
                 case 3:
+                    if (approvalType.equals("edit")) {
+                        final List<Map<String, Object>> rows;
+                        switch(entity) {
+                            case "Terminal":
+                                SQL = "SELECT * FROM sparkpayweb_db.terminals_bkp WHERE "+column+" = ?";
+                                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                for (final Map<String, Object> row : rows) {
+                                    SQL = "UPDATE sparkpay.terminals SET merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
+                                            + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE "+column+" = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("merchant_id"), row.get("merchant_name"), row.get("route_mode"), row.get("acquiring_institution_id"), 
+                                        row.get("acquiring_institution_name"), row.get("cbn_bank_code"), row.get("terminal_type"), id});
+                                    SQL = "DELETE FROM sparkpayweb_db.terminals_bkp WHERE "+column+" = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{id});
+                                }
+                                break;
+                            default:
+                                break;
+                        }
+                    }
                     SQL = approvalType.equals("delete") ?
                             "DELETE FROM "+table+" WHERE delete_flag = 1 AND "+column+" = ?"
                             : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE "+column+" = ?"
@@ -415,6 +450,10 @@ public class GenericService implements GenericInterface {
                                 SQL = "DELETE FROM sparkpayweb_db.transaction_route_bkp WHERE id = ?";
                                 jdbcTemplate.update(SQL, new Object[]{id});
                                 break;
+                            case "Node":
+                                SQL = "DELETE FROM sparkpayweb_db.station_pcis_bkp WHERE id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
                             default:
                                 break;
                         }
@@ -449,6 +488,16 @@ public class GenericService implements GenericInterface {
             switch (userrole) {
                 case 1:
                 case 3:
+                    if (approvalType.equals("edit")) {
+                        switch(entity) {
+                            case "Terminal":
+                                SQL = "DELETE FROM sparkpayweb_db.terminals_bkp WHERE "+column+" = ?";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                                break;
+                            default:
+                                break;
+                        }
+                    }
                     SQL = approvalType.equals("delete") ?
                             "UPDATE "+table+" SET delete_flag = 0 WHERE "+column+" = ?"
                             : approvalType.equals("edit") ?

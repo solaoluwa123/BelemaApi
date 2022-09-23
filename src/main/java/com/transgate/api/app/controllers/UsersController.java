@@ -5,6 +5,7 @@
  */
 package com.transgate.api.app.controllers;
 
+import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.interfaces.UnlockAccountsInterface;
 import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.models.LoginRequest;
@@ -38,6 +39,9 @@ public class UsersController {
     
     Validators validators = new Validators();
     
+    @Autowired
+    GenericInterface GenericInterface;
+    
     @RequestMapping(value = "/users/crons/unlock", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Unlock() {
         unlockAccountsInterface.Unlock();
@@ -66,6 +70,15 @@ public class UsersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return usersInterface.ResetPassword(login.getUsername(), login.getSurname(), login.getFirstname());
+    }
+    
+    @RequestMapping(value = "/users/activateaccount", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity ActivateAccount(@RequestHeader(value = "Authorization") String header,
+            @RequestBody LoginResponse login) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.ActivateAccount(login.getUsername(), login.getSurname(), login.getFirstname());
     }
     
     @RequestMapping(value = "/users/recoverpassword", method = RequestMethod.POST, headers = "Accept=application/json")
@@ -162,6 +175,15 @@ public class UsersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername());
+    }
+    
+    @RequestMapping(value = "/users/reject/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity Reject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.DeleteHelper(sessiontoken, id, "transgatepay_db.tbl_user_details_operations", "Users");
     }
     
     @RequestMapping(value = "/users/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

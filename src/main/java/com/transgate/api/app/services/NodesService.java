@@ -48,11 +48,27 @@ public class NodesService implements NodesInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(int id) {
+    private boolean CheckNodePendingEdit(int id) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpay.station_pcis WHERE id = ? AND edit_flag = 1 OR delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM sparkpay.station_pcis WHERE id = ? AND edit_flag = 1";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    private boolean CheckNodePendingEdit(String id, String column) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpay.station_pcis WHERE "+column+" = ? AND edit_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
@@ -68,7 +84,7 @@ public class NodesService implements NodesInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            List<NodeModel> transactions;
+            List<NodeModel> nodes;
             if (!pending) {
                 SQL = "SELECT * FROM sparkpay.station_pcis "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
@@ -79,7 +95,7 @@ public class NodesService implements NodesInterface {
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY id DESC";
             }
-            transactions = jdbcTemplate.query(SQL, new NodesMapper());
+            nodes = jdbcTemplate.query(SQL, new NodesMapper());
             SQL = "SELECT MIN(date_time) from sparkpay.station_pcis";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(date_time) from sparkpay.station_pcis";
@@ -88,8 +104,49 @@ public class NodesService implements NodesInterface {
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Nodes");
-            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setData((ArrayList) nodes);
             networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    public ResponseEntity Get(String id, String column) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<NodeModel> nodes;
+            SQL = "SELECT * FROM sparkpay.station_pcis "
+                + "WHERE "+column+" = ?";
+            nodes = jdbcTemplate.query(SQL, new Object[]{id}, new NodesMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Node by " + column+": "+id);
+            networkResponse.setData((ArrayList) nodes);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Get(int id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<NodeModel> nodes;
+            SQL = "SELECT * FROM sparkpay.station_pcis "
+                + "WHERE id = ?";
+            nodes = jdbcTemplate.query(SQL, new Object[]{id}, new NodesMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Node by ID: "+id);
+            networkResponse.setData((ArrayList) nodes);
             
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
@@ -154,7 +211,7 @@ public class NodesService implements NodesInterface {
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
-                    boolean checkPendingAction = CheckNodePendingAction(id);
+                    boolean checkPendingAction = CheckNodePendingEdit(id);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
@@ -165,6 +222,57 @@ public class NodesService implements NodesInterface {
                     SQL = "UPDATE sparkpay.station_pcis SET delete_flag = 1 WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
                     if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else 
+                        return responseManager.ResponseBadRequest();
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Edit(int id, String station_name, int local_port, int acquiring_institution_id, 
+            String kek, String send_key_request, String cbn_bank_code, String key_check_value, 
+            String transaction_direction, String remoteIP, int remote_port, String sessiontoken
+    ) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(sessiontoken);
+            int retVal;
+            switch (userrole) {
+                case 1:
+                    SQL = "UPDATE sparkpay.station_pcis "
+                            + "SET station_name = ?, local_port = ?, acquiring_institution_id = ?, kek = ?, "
+                            + "send_key_request = ?, cbn_bank_code = ?, key_check_value = ?, transaction_direction = ?, "
+                            + "remoteIP = ?, remote_port = ? WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{station_name, local_port, acquiring_institution_id, kek, 
+                        send_key_request, cbn_bank_code, key_check_value, transaction_direction, remoteIP, remote_port, id});
+                    if (retVal > 0)
+                        return responseManager.ResponseAccepted();
+                    else
+                        return responseManager.ResponseBadRequest();
+                case 2:
+                    boolean checkPendingAction = CheckNodePendingEdit(id);
+                    if (checkPendingAction) {
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Node already pending edit");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "INSERT into sparkpayweb_db.station_pcis_bkp"
+                        + "(id, station_name, local_port, acquiring_institution_id, kek, send_key_request, cbn_bank_code, key_check_value, "
+                        + "transaction_direction, remoteIP, remote_port, date_time) "
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+                    jdbcTemplate.update(SQL, new Object[]{id, station_name, local_port, acquiring_institution_id, kek, 
+                        send_key_request, cbn_bank_code, key_check_value, transaction_direction, remoteIP, remote_port});
+                    SQL = "UPDATE sparkpay.station_pcis SET edit_flag = 1 WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    if (retVal > 0) 
                         return responseManager.ResponseAccepted();
                     else 
                         return responseManager.ResponseBadRequest();

@@ -47,11 +47,11 @@ public class MerchantsService implements MerchantsInterface {
         }
     }
     
-    private boolean CheckNodePendingAction(String merchant_id) {
+    private boolean CheckItemPendingEdit(String merchant_id) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpay.merchants WHERE merchant_id = ? AND edit_flag = 1 OR delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM sparkpay.merchants WHERE merchant_id = ? AND edit_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{merchant_id}, int.class);
 
             found = totalRows > 0;
@@ -214,7 +214,7 @@ public class MerchantsService implements MerchantsInterface {
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
-                    boolean checkPendingAction = CheckNodePendingAction(merchant_id);
+                    boolean checkPendingAction = CheckItemPendingEdit(merchant_id);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
