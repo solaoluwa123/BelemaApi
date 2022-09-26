@@ -10,8 +10,8 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class DisputeModel extends FullTransactionModel {
-    String type, loggedBy, status, dateModified, dateCreated;
-    int transactionId;
+    String type, loggedBy, dateModified, dateCreated;
+    int transactionId, status, resolved;
     public String getType() {
         return type;
     }
@@ -28,14 +28,22 @@ public class DisputeModel extends FullTransactionModel {
         this.loggedBy = loggedBy;
     }
 
-    public String getStatus() {
+    public int getStatus() {
         return status;
     }
 
-    public void setStatus(String status) {
+    public void setStatus(int status) {
         this.status = status;
     }
 
+    public int getResolved() {
+        return resolved;
+    }
+
+    public void setResolved(int resolved) {
+        this.resolved = resolved;
+    }
+    
     public String getDateModified() {
         return dateModified;
     }

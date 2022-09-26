@@ -10,7 +10,7 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class TransactionSummaryModel {
-    String volume, value, name, code;
+    String volume, value, name, code, color, shortName;
 
     public String getVolume() {
         return volume;
@@ -43,5 +43,21 @@ public class TransactionSummaryModel {
     public void setCode(String code) {
         this.code = code;
     }
- 
+
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+
+    public String getShortName() {
+        return shortName;
+    }
+
+    public void setShortName(String shortName) {
+        this.shortName = shortName;
+    }
+    
 }

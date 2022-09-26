@@ -11,7 +11,7 @@ package com.transgate.api.models;
  */
 public class FinancialInstitutionModel {
     int id, businessType;
-    String name, code, business_address, date_created, businessTypeName, created_by, actionType, note, status, date_updated;
+    String name, shortName, code, color, business_address, date_created, businessTypeName, created_by, actionType, note, status, date_updated;
 
     public int getId() {
         return id;
@@ -37,6 +37,14 @@ public class FinancialInstitutionModel {
         this.name = name;
     }
 
+    public String getShortName() {
+        return shortName;
+    }
+
+    public void setShortName(String shortName) {
+        this.shortName = shortName;
+    }
+    
     public String getCode() {
         return code;
     }
@@ -45,6 +53,14 @@ public class FinancialInstitutionModel {
         this.code = code;
     }
 
+    public String getColor() {
+        return color;
+    }
+
+    public void setColor(String color) {
+        this.color = color;
+    }
+    
     public String getBusiness_address() {
         return business_address;
     }

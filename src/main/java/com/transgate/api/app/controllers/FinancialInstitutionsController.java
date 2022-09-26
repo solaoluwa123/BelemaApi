@@ -59,7 +59,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.Create(sessiontoken, financialInstitutionModel.getName(), financialInstitutionModel.getCode(), financialInstitutionModel.getBusiness_address(), financialInstitutionModel.getBusinessType(), financialInstitutionModel.getCreated_by());
+        return financialInstitutionsInterface.Create(sessiontoken, financialInstitutionModel.getName(), financialInstitutionModel.getShortName(), financialInstitutionModel.getColor(), financialInstitutionModel.getCode(), financialInstitutionModel.getBusiness_address(), financialInstitutionModel.getBusinessType(), financialInstitutionModel.getCreated_by());
     }
     
     @RequestMapping(value = "/financial-institutions/types", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -102,7 +102,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.Edit(sessiontoken, institution.getCode(), institution.getName(), institution.getBusiness_address(), institution.getBusinessType(), institution.getCreated_by());
+        return financialInstitutionsInterface.Edit(sessiontoken, institution.getCode(), institution.getName(), institution.getShortName(), institution.getColor(), institution.getBusiness_address(), institution.getBusinessType(), institution.getCreated_by());
     }
     
     @RequestMapping(value = "/financial-institutions/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

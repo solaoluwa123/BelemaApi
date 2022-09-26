@@ -41,19 +41,60 @@ public class TransactionsController {
     }
         
     @RequestMapping(value = "/transactions-summary", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetTransactionsVolume(@RequestHeader(value = "Authorization") String header) {
+    public ResponseEntity GetTransactionsVolume(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetTransactionsVolume();
+        return transactionsInterface.GetTransactionsVolume(startDate, endDate);
     }
         
     @RequestMapping(value = "/transactions-summary/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetTransactionsVolumeInstitution(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("institutioncode") String institutioncode) {
+    public ResponseEntity GetTransactionsVolumeInstitution(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetTransactionsVolume(institutioncode);
+        return transactionsInterface.GetTransactionsVolume(institutioncode, startDate, endDate);
+    }
+        
+    @RequestMapping(value = "/transactions-rates", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTransactionsRates(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTransactionsRates(startDate, endDate);
+    }
+        
+    @RequestMapping(value = "/transactions-rates/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTransactionsRates(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTransactionsRates(institutioncode, startDate, endDate);
+    }
+        
+    @RequestMapping(value = "/transactions-trend/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetInsitutionTnxTrend(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,  
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("type") String type) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetInsitutionTnxTrend(institutioncode, type, startDate, endDate);
     }
     
     @RequestMapping(value = "/transactions/{id}", method = RequestMethod.GET, headers = "Accept=application/json")

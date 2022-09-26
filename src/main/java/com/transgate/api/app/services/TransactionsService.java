@@ -15,18 +15,17 @@ import com.transgate.api.models.TransactionModel;
 import com.transgate.api.models.TransactionSummaryModel;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
-import org.springframework.security.crypto.bcrypt.BCrypt;
 import org.springframework.stereotype.Service;
 
 /**
@@ -91,7 +90,7 @@ public class TransactionsService implements TransactionsInterface {
     public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String destination) {
         String SQL = "SELECT a.id, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, "
                     + "a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, b.name as srcInstitutionName, c.name as destInstitutionName "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.srcInstitutioncode = b.code "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -171,7 +170,7 @@ public class TransactionsService implements TransactionsInterface {
             List<FullTransactionModel> transactions;
             SQL = "SELECT a.id, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, "
                 + "a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, b.name as srcInstitutionName, c.name as destInstitutionName "
-                + "FROM transgate_db.tbl_combinedtransactions a "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.srcInstitutioncode = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -180,7 +179,7 @@ public class TransactionsService implements TransactionsInterface {
             transactions = jdbcTemplate.query(SQL, new FullTransactionMapper());
 
             SQL = "SELECT SUM(a.srcAmount) as totalValue "
-                + "FROM transgate_db.tbl_combinedtransactions a "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.srcInstitutioncode = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -188,9 +187,9 @@ public class TransactionsService implements TransactionsInterface {
                 + " ORDER BY a.id DESC";
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
             totalValue = totalValue != null ? totalValue : 0;
-            SQL = "SELECT MIN(transactiondate) from transgate_db.tbl_combinedtransactions";
+            SQL = "SELECT MIN(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(transactiondate) from transgate_db.tbl_combinedtransactions";
+            SQL = "SELECT MAX(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setMeta(meta);
@@ -208,30 +207,32 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
-    public ResponseEntity GetTransactionsVolume() {
+    public ResponseEntity GetTransactionsVolume(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {    
             String SQL;
-            SQL = "SELECT COUNT(a.id) as volume, SUM(a.srcAmount) as value, b.name, b.code "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+            SQL = "SELECT COUNT(a.id) as volume, SUM(a.srcAmount) as value, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.srcInstitutioncode = b.code "
+                    + "WHERE a.srcResponsecode = '00' AND a.transactiondate BETWEEN ? AND ? "
                     + "GROUP BY a.srcInstitutioncode";
             
-            List<TransactionSummaryModel> summary = jdbcTemplate.query(SQL, new TransactionSummaryMapper());
+            List<TransactionSummaryModel> summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionSummaryMapper());
             
-            SQL = "SELECT COUNT(a.id) as volume, SUM(a.destAmount) as value, b.name, b.code "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+            SQL = "SELECT COUNT(a.id) as volume, SUM(a.destAmount) as value, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.destInstitutioncode = b.code "
+                    + "WHERE a.destResponseCode = '00' AND a.transactiondate BETWEEN ? AND ? "
                     + "GROUP BY a.destInstitutioncode";
             
-            List<TransactionSummaryModel> summary_ = jdbcTemplate.query(SQL, new TransactionSummaryMapper());
+            List<TransactionSummaryModel> summary_ = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionSummaryMapper());
             networkResponse.setCode(200);
             networkResponse.setMessage("Transactions summary");
             TNXModel tnxModel = new TNXModel();
-            tnxModel.setInflows((ArrayList) summary);
-            tnxModel.setOutflows((ArrayList) summary_);
+            tnxModel.setInflows((ArrayList) summary_);
+            tnxModel.setOutflows((ArrayList) summary);
             networkResponse.setTnxModel(tnxModel);
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
@@ -241,31 +242,154 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
-    public ResponseEntity GetTransactionsVolume(String institutioncode) {
+    public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {    
             String SQL;
-            SQL = "SELECT COUNT(a.id) as volume, SUM(a.srcAmount) as value, b.name, b.code "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+            SQL = "SELECT COUNT(a.id) as volume, SUM(a.srcAmount) as value, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.srcInstitutioncode = b.code "
-                    + "WHERE a.srcInstitutioncode = ?";
+                    + "WHERE a.srcInstitutioncode = ? AND a.srcResponsecode = '00' AND a.transactiondate BETWEEN ? AND ?";
             
-            List<TransactionSummaryModel> summary = jdbcTemplate.query(SQL, new Object[]{institutioncode}, new TransactionSummaryMapper());
+            List<TransactionSummaryModel> summary = jdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
             
-            SQL = "SELECT COUNT(a.id) as volume, SUM(a.destAmount) as value, b.name, b.code "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+            SQL = "SELECT COUNT(a.id) as volume, SUM(a.destAmount) as value, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.destInstitutioncode = b.code "
-                    + "WHERE a.destInstitutioncode = ?";
+                    + "WHERE a.destInstitutioncode = ? AND a.destResponseCode = '00' AND a.transactiondate BETWEEN ? AND ?";
             
-            List<TransactionSummaryModel> summary_ = jdbcTemplate.query(SQL, new Object[]{institutioncode}, new TransactionSummaryMapper());
+            List<TransactionSummaryModel> summary_ = jdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
             networkResponse.setCode(200);
             networkResponse.setMessage("Transactions summary");
             TNXModel tnxModel = new TNXModel();
-            tnxModel.setInflows((ArrayList) summary);
-            tnxModel.setOutflows((ArrayList) summary_);
+            tnxModel.setInflows((ArrayList) summary_);
+            tnxModel.setOutflows((ArrayList) summary);
             networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetTransactionsRates(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+//            SQL = "SELECT COUNT(a.id) as total FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.srcResponsecode = '00'";
+//            int totalSuccessFul = jdbcTemplate.queryForObject(SQL, int.class);
+            SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgatepay_db.tbl_financial_institutions b "
+                    + "ON a.srcInstitutioncode = b.code "
+                    + "WHERE a.srcResponsecode = '00' AND a.transactiondate BETWEEN ? AND ? "
+                    + "GROUP BY a.srcInstitutioncode "
+                    + "ORDER BY a.srcInstitutioncode";
+            
+            List<TransactionSummaryModel> summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionSummaryMapper());
+            
+//            SQL = "SELECT COUNT(a.id) as total FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.srcResponsecode != '00'";
+//            int totalFailures = jdbcTemplate.queryForObject(SQL, int.class);
+            SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgatepay_db.tbl_financial_institutions b "
+                    + "ON a.srcInstitutioncode = b.code "
+                    + "WHERE a.transactiondate BETWEEN ? AND ? "
+                    + "GROUP BY a.srcInstitutioncode "
+                    + "ORDER BY a.srcInstitutioncode";
+            
+            List<TransactionSummaryModel> summary_ = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionSummaryMapper());
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions summary");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSuccessVolumes((ArrayList) summary);
+            tnxModel.setTotalVolumes((ArrayList) summary_);
+            networkResponse.setTnxModel(tnxModel);
+//            String meta = "{\"totalSuccessFul\": " +totalSuccessFul+ ", \"totalFailures\": " + totalFailures +"}";
+//            networkResponse.setMeta(meta);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetTransactionsRates(String institutioncode, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+//            SQL = "SELECT COUNT(a.id) as total FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.srcResponsecode = '00'";
+//            int totalSuccessFul = jdbcTemplate.queryForObject(SQL, int.class);
+            SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgatepay_db.tbl_financial_institutions b "
+                    + "ON a.srcInstitutioncode = b.code "
+                    + "WHERE a.srcResponsecode = '00' AND a.srcInstitutioncode = ? AND a.transactiondate BETWEEN ? AND ?";
+            
+            List<TransactionSummaryModel> summary = jdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
+            
+//            SQL = "SELECT COUNT(a.id) as total FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.srcResponsecode != '00'";
+//            int totalFailures = jdbcTemplate.queryForObject(SQL, int.class);
+            SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgatepay_db.tbl_financial_institutions b "
+                    + "ON a.srcInstitutioncode = b.code "
+                    + "WHERE a.srcInstitutioncode = ? AND a.transactiondate BETWEEN ? AND ?";
+            
+            List<TransactionSummaryModel> summary_ = jdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions summary");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSuccessVolumes((ArrayList) summary);
+            tnxModel.setTotalVolumes((ArrayList) summary_);
+            networkResponse.setTnxModel(tnxModel);
+//            String meta = "{\"totalSuccessFul\": " +totalSuccessFul+ ", \"totalFailures\": " + totalFailures +"}";
+//            networkResponse.setMeta(meta);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetInsitutionTnxTrend(String institutioncode, String type, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL = "";
+            List<Map<String, Object>> trend;
+            switch(type) {
+                case "month":
+                    SQL = "SELECT a.transactiondate as label, COUNT(a.id) as volume, SUM(a.srcAmount) as value, b.name, b.shortName, b.color, b.code "
+                            + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                            + "LEFT JOIN transgatepay_db.tbl_financial_institutions b "
+                            + "ON a.srcInstitutioncode = b.code "
+                            + "WHERE a.srcResponsecode = '00' AND a.srcInstitutioncode = ? "
+                            + "AND a.transactiondate BETWEEN ? AND ?"
+                            + "GROUP BY MONTH(a.transactiondate)";
+                    break;
+                case "day":
+                default: 
+                    SQL = "SELECT a.transactiondate as label, COUNT(a.id) as volume, SUM(a.srcAmount) as value, b.name, b.shortName, b.color, b.code "
+                            + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                            + "LEFT JOIN transgatepay_db.tbl_financial_institutions b "
+                            + "ON a.srcInstitutioncode = b.code "
+                            + "WHERE a.srcResponsecode = '00' AND a.srcInstitutioncode = ? "
+                            + "AND a.transactiondate BETWEEN ? AND ?"
+                            + "GROUP BY CAST(a.transactiondate as DATE)";
+                    break;
+            }
+
+            trend = jdbcTemplate.queryForList(SQL, new Object[]{institutioncode, startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions Trend");
+            networkResponse.setData((ArrayList) trend);
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
@@ -281,7 +405,7 @@ public class TransactionsService implements TransactionsInterface {
             List<FullTransactionModel> transactions;
             SQL = "SELECT a.id, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, "
                 + "a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, b.name as srcInstitutionName, c.name as destInstitutionName "
-                + "FROM transgate_db.tbl_combinedtransactions a "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.srcInstitutioncode = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -290,7 +414,7 @@ public class TransactionsService implements TransactionsInterface {
             transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode}, new FullTransactionMapper());
             
             SQL = "SELECT SUM(a.srcAmount) as totalValue "
-                + "FROM transgate_db.tbl_combinedtransactions a "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.srcInstitutioncode = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -298,9 +422,9 @@ public class TransactionsService implements TransactionsInterface {
                 + "WHERE a.srcInstitutioncode = ? OR a.destInstitutioncode = ? ORDER BY a.id DESC";
             Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
             totalValue = totalValue != null ? totalValue : 0;
-            SQL = "SELECT MIN(transactiondate) from transgate_db.tbl_combinedtransactions";
+            SQL = "SELECT MIN(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(transactiondate) from transgate_db.tbl_combinedtransactions";
+            SQL = "SELECT MAX(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
            
@@ -326,7 +450,7 @@ public class TransactionsService implements TransactionsInterface {
             if (id > 0) {
                 SQL = "SELECT a.id, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, "
                     + "a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, b.name as srcInstitutionName, c.name as destInstitutionName "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.srcInstitutioncode = b.code "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -337,7 +461,7 @@ public class TransactionsService implements TransactionsInterface {
             else {
                 SQL = "SELECT a.id, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, "
                     + "a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, b.name as srcInstitutionName, c.name as destInstitutionName "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.srcInstitutioncode = b.code "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
@@ -346,16 +470,16 @@ public class TransactionsService implements TransactionsInterface {
                 transactions = jdbcTemplate.query(SQL, new FullTransactionMapper());
                 
                 SQL = "SELECT SUM(a.srcAmount) as totalValue "
-                    + "FROM transgate_db.tbl_combinedtransactions a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.srcInstitutioncode = b.code "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                     + "ON a.destInstitutioncode = c.code ";
                 Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
                 totalValue = totalValue != null ? totalValue : 0;
-                SQL = "SELECT MIN(transactiondate) from transgate_db.tbl_combinedtransactions";
+                SQL = "SELECT MIN(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
                 String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-                SQL = "SELECT MAX(transactiondate) from transgate_db.tbl_combinedtransactions";
+                SQL = "SELECT MAX(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
                 String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
                 networkResponse.setMeta(meta);
@@ -375,26 +499,26 @@ public class TransactionsService implements TransactionsInterface {
     
     @Override
     public ResponseEntity GetDisputes(String institution) {
-        return GetDisputes(0, "0", institution);
+        return GetDisputes(0, 0, institution);
     }
     
     @Override
     public ResponseEntity GetDisputes(int id) {
-        return GetDisputes(id, "0", null);
+        return GetDisputes(id, 0, null);
     }
     
     @Override
     public ResponseEntity GetSettlements(int id) {
-        return GetDisputes(id, "1", null);
+        return GetDisputes(id, 1, null);
     }
     
     @Override
     public ResponseEntity GetSettlements(String institution) {
-        return GetDisputes(0, "1", institution);
+        return GetDisputes(0, 1, institution);
     }
     
     @Override
-    public ResponseEntity GetDisputes(int id, String status, String institutioncode) {
+    public ResponseEntity GetDisputes(int id, int status, String institutioncode) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
 //            String appendQuery = status.equals("0") ? "dispute.status = 0 OR dispute.status = -1" : "dispute.status = 1";
@@ -402,13 +526,13 @@ public class TransactionsService implements TransactionsInterface {
 //            String appendQueryTwo = institutioncode == null ? "" : institutioncode.equals("-1") ? "" : " AND a.srcInstitutioncode = " + institutioncode + " OR a.destInstitutioncode = " + institutioncode;
             String SQL;
             List<DisputeModel> transactions;
-            Double totalValue = 0.00;
+            Double totalValue;
             if (id > 0) {
-                SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.date_modified, dispute.date_created, "
+                SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, "
                         + "a.id as transactionid, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, "
                         + "b.name as srcInstitutionName, c.name as destInstitutionName "
                         + "FROM tbl_disputes dispute "
-                        + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                        + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                         + "ON dispute.transactionSessionid = a.srcSessionid "
                         + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                         + "ON a.srcInstitutioncode = b.code "
@@ -419,7 +543,7 @@ public class TransactionsService implements TransactionsInterface {
                 
                 SQL = "SELECT SUM(a.srcAmount) as totalValue "
                         + "FROM tbl_disputes dispute "
-                        + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                        + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                         + "ON dispute.transactionSessionid = a.srcSessionid "
                         + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                         + "ON a.srcInstitutioncode = b.code "
@@ -433,12 +557,12 @@ public class TransactionsService implements TransactionsInterface {
                 switch (code) {
                     case "":
                     case "-1":
-                        if (status.equals("0")){
-                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.date_modified, dispute.date_created, "
+                        if (status == 0){
+                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, "
                                 + "a.id as transactionid, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, "
                                 + "b.name as srcInstitutionName, c.name as destInstitutionName "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -448,7 +572,7 @@ public class TransactionsService implements TransactionsInterface {
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -457,11 +581,11 @@ public class TransactionsService implements TransactionsInterface {
                             totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         else {
-                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.date_modified, dispute.date_created, "
+                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, "
                                 + "a.id as transactionid, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, "
                                 + "b.name as srcInstitutionName, c.name as destInstitutionName "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -471,7 +595,7 @@ public class TransactionsService implements TransactionsInterface {
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -481,12 +605,12 @@ public class TransactionsService implements TransactionsInterface {
                         }
                         break;
                     default:
-                        if (status.equals("0")){
-                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.date_modified, dispute.date_created, "
+                        if (status == 0){
+                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, "
                                 + "a.id as transactionid, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, "
                                 + "b.name as srcInstitutionName, c.name as destInstitutionName "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -496,7 +620,7 @@ public class TransactionsService implements TransactionsInterface {
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -505,11 +629,11 @@ public class TransactionsService implements TransactionsInterface {
                             totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         else {
-                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.date_modified, dispute.date_created, "
+                            SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, "
                                 + "a.id as transactionid, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, "
                                 + "b.name as srcInstitutionName, c.name as destInstitutionName "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -519,7 +643,7 @@ public class TransactionsService implements TransactionsInterface {
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
-                                + "LEFT JOIN transgate_db.tbl_combinedtransactions a "
+                                + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
@@ -532,17 +656,17 @@ public class TransactionsService implements TransactionsInterface {
                 transactions = jdbcTemplate.query(SQL, new DisputeTransactionMapper());
             }
             totalValue = totalValue != null ? totalValue : 0;
-            SQL = "SELECT MIN(transactiondate) from transgate_db.tbl_combinedtransactions";
+            SQL = "SELECT MIN(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(transactiondate) from transgate_db.tbl_combinedtransactions";
+            SQL = "SELECT MAX(transactiondate) from ajiswitch_db.tbl_creditfundtransfers";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            if (status.equals("0"))
+            if (status == 0)
                 networkResponse.setMessage(id > 0 ? "Dispute" : "All disputes");
-            else if (status.equals("1"))
+            else if (status == 1)
                 networkResponse.setMessage(id > 0 ? "Settlement" : "All settlements");
             networkResponse.setData((ArrayList) transactions);
             networkResponse.setMeta(meta);
@@ -591,7 +715,7 @@ public class TransactionsService implements TransactionsInterface {
             if (getTransaction.size() > 0) {
                 String SQL;
                 int userrole = GetUserRole(username, sessiontoken);
-                SQL = "INSERT into tbl_disputes(transactionSessionid, loggedBy, ownerInstitution, type, date_created) VALUES(?, ?, ?, NULL, now())";
+                SQL = "INSERT into tbl_disputes(transactionSessionid, loggedBy, ownerInstitution, type, status, date_created) VALUES(?, ?, ?, '-1', NULL, now())";
                 int retval = jdbcTemplate.update(SQL, new Object[]{sessionId, username, getTransaction.get(0).getSrcInstitutioncode()});
                 if (retval > 0) 
                     return responseManager.ResponseAccepted();
@@ -636,7 +760,8 @@ public class TransactionsService implements TransactionsInterface {
             response.setTransactionId(rs.getInt("transactionid"));
             response.setType(rs.getString("type"));
             response.setLoggedBy(rs.getString("loggedBy"));
-            response.setStatus(rs.getString("status"));
+            response.setStatus(rs.getInt("status"));
+            response.setResolved(rs.getInt("resolved"));
             response.setDateModified(rs.getString("date_modified"));
             response.setDateCreated(rs.getString("date_created"));
             response.setSrcSessionid(rs.getString("srcSessionid"));
@@ -668,10 +793,14 @@ public class TransactionsService implements TransactionsInterface {
         @Override
         public TransactionSummaryModel mapRow(ResultSet rs, int arg1) throws SQLException {
             TransactionSummaryModel response = new TransactionSummaryModel();
-            response.setValue(rs.getString("value"));
-            response.setVolume(rs.getString("volume"));
+//            response.setValue(rs.getString("value"));
+//            response.setVolume(rs.getString("volume"));
             response.setCode(rs.getString("code"));
             response.setName(rs.getString("name"));
+            response.setShortName(rs.getString("shortName"));
+            response.setColor(rs.getString("color"));
+            response.setVolume(ColumnExistinRS(rs, "volume") ? rs.getString("volume") : "");
+            response.setValue(ColumnExistinRS(rs, "value") ? rs.getString("value") : "0");
             return response;
         }
     }
@@ -707,17 +836,17 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, String status) {
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status) {
         try {
             String SQL;
             int userrole = GetUserRole(username, sessiontoken);
             int retVal;
-            int statusUpdate = status.equals("approve") ? 1 : -1;
 //            switch (userrole) {
 //                case 1:
 //                case 3:
-                    SQL = "UPDATE tbl_disputes SET status = ?, date_modified = now() WHERE id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{statusUpdate, id});
+                    int resolved = status == 0 ? 0 : 1;
+                    SQL = "UPDATE tbl_disputes SET status = ?, resolved = ?, date_modified = now() WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{status, resolved, id});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
                     else
@@ -768,5 +897,16 @@ public class TransactionsService implements TransactionsInterface {
             response.setValue(rs.getString("value"));
             return response;
         }
+    }
+    
+    public static boolean ColumnExistinRS(ResultSet rs, String columnName) throws SQLException {
+        ResultSetMetaData rsmd = rs.getMetaData();
+        int columns = rsmd.getColumnCount();
+        for (int x = 1; x <= columns; x++) {
+            if (columnName.equals(rsmd.getColumnName(x))) {
+                return true;
+            }
+        }
+        return false;
     }
 }
