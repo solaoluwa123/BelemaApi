@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -104,5 +105,27 @@ public class NodesController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.RejectHelper(sessiontoken, id, "sparkpay.station_pcis", "Node", type);
+    }
+    
+    @RequestMapping(value = "/cards/nodes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchNodes(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("start_date") String start_date, 
+            @RequestParam("end_date") String end_date,
+            @RequestParam("station_name") String station_name, 
+            @RequestParam("local_port") String local_port, 
+            @RequestParam("acquiring_institution_id") String acquiring_institution_id,
+            @RequestParam("cbn_bank_code") String cbn_bank_code
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return NodesInterface.SearchNodes(
+            start_date,
+            end_date,station_name,
+            local_port,
+            acquiring_institution_id,
+            cbn_bank_code); 
     }
 }

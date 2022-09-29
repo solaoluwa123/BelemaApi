@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -100,5 +101,24 @@ public class PTSPsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.RejectHelper(sessiontoken, id, "sparkpayweb_db.ptsp", "PTSP", type);
+    }
+    
+    @RequestMapping(value = "/cards/ptsps/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchPTSPs(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("start_date") String start_date, 
+            @RequestParam("end_date") String end_date,
+            @RequestParam("ptsp_id") String ptsp_id, 
+            @RequestParam("ptsp_name") String ptsp_name
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return PTSPsInterface.SearchPTSPs(
+            start_date,
+            end_date,
+            ptsp_id,
+            ptsp_name); 
     }
 }

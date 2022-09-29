@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -102,4 +103,22 @@ public class RoutesController {
         return GenericInterface.RejectHelper(sessiontoken, id, "sparkpay.transaction_route", "Route", type);
     }
     
+    @RequestMapping(value = "/cards/routes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchRoutes(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("start_date") String start_date, 
+            @RequestParam("end_date") String end_date,
+            @RequestParam("source_acq_id") String source_acq_id, 
+            @RequestParam("destination_bin") String destination_bin
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return RoutesInterface.SearchRoutes(
+            start_date,
+            end_date,
+            source_acq_id,
+            destination_bin); 
+    }
 }

@@ -254,6 +254,72 @@ public class TerminalsService implements TerminalsInterface {
         }
     }
     
+    @Override
+    public ResponseEntity SearchTerminals(
+           String start_date,
+           String end_date,
+           String terminal_id,
+           String merchant_id,
+           String merchant_name){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !terminal_id.equals("")
+                    || !merchant_id.equals("")
+                    || !merchant_name.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!terminal_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" terminal_id LIKE '%" + terminal_id+"%'";
+            }
+            if (!merchant_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" merchant_id LIKE '%" + merchant_id+"%'";
+            }
+            if (!merchant_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" merchant_name LIKE '%" + merchant_name+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_time >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_time < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<TerminalModel> terminals;
+            SQL = "SELECT * FROM sparkpay.terminals "
+                +whereQuery + allowedRows 
+                + " ORDER BY date_time DESC";
+            terminals = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new TerminalsMapper());
+
+            SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_time) from sparkpay.terminals";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched terminals");
+            networkResponse.setData((ArrayList) terminals);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     class TerminalsMapper implements RowMapper<TerminalModel> {
 
         @Override

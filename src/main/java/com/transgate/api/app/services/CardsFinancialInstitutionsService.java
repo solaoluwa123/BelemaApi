@@ -256,6 +256,72 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
         }
     }
     
+    @Override
+    public ResponseEntity SearchCardsFinancialInstitutions(
+           String start_date,
+           String end_date,
+           String acquirer_id,
+           String institution_name,
+           String issuer_id){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !acquirer_id.equals("")
+                    || !institution_name.equals("")
+                    || !issuer_id.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!acquirer_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" acquirer_id LIKE '%" + acquirer_id+"%'";
+            }
+            if (!institution_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" institution_name LIKE '%" + institution_name+"%'";
+            }
+            if (!issuer_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" issuer_id LIKE '%" + issuer_id+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" created >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" created < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<CardsFinancialInstitutionModel> FIs;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "
+                +whereQuery + allowedRows 
+                + " ORDER BY created DESC";
+            FIs = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new CardFIMapper());
+
+            SQL = "SELECT MIN(created) from sparkpayweb_db.tbl_financial_institutions";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(created) from sparkpayweb_db.tbl_financial_institutions";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched Financial Institutions");
+            networkResponse.setData((ArrayList) FIs);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+     }
+    
     class CardFIMapper implements RowMapper<CardsFinancialInstitutionModel> {
 
         @Override

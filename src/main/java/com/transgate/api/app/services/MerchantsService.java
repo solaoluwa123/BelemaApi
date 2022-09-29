@@ -245,6 +245,72 @@ public class MerchantsService implements MerchantsInterface {
         }
     }
     
+    @Override
+    public ResponseEntity SearchMerchants(
+            String start_date,
+            String end_date,
+            String merchant_name,
+            String merchant_id,
+            String merchant_category_code){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !merchant_name.equals("")
+                    || !merchant_id.equals("")
+                    || !merchant_category_code.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!merchant_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" merchant_name LIKE '%" + merchant_name+"%'";
+            }
+            if (!merchant_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" merchant_id LIKE '%" + merchant_id+"%'";
+            }
+            if (!merchant_category_code.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" merchant_category_code LIKE '%" + merchant_category_code+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_created >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_created < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<CardsMerchantModel> merchants;
+            SQL = "SELECT * FROM sparkpay.merchants "
+                +whereQuery + allowedRows 
+                + " ORDER BY date_created DESC";
+            merchants = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new MerchantsMapper());
+
+            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched merchants");
+            networkResponse.setData((ArrayList) merchants);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     class MerchantsMapper implements RowMapper<CardsMerchantModel> {
 
         @Override

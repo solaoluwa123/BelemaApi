@@ -18,4 +18,9 @@ public interface TerminalOwnersInterface {
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String terminal_owner_id, String terminal_owner_name, String sessiontoken);
     public ResponseEntity Edit(String terminal_owner_id, String terminal_owner_name, String sessiontoken);
+    public ResponseEntity SearchTerminalOwners(
+           String start_date,
+           String end_date,
+           String terminal_owner_id,
+           String terminal_owner_name);
 }

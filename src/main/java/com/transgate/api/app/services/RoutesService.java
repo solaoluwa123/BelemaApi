@@ -234,6 +234,68 @@ public class RoutesService implements RoutesInterface {
         }
     }
     
+    @Override
+    public ResponseEntity SearchRoutes(
+           String start_date,
+           String end_date,
+           String source_acq_id,
+           String destination_bin){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !source_acq_id.equals("")
+                    || !destination_bin.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!source_acq_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" source_acq_id LIKE '%" + source_acq_id+"%'";
+            }
+            if (!destination_bin.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" destination_bin LIKE '%" + destination_bin+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_created >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_created < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<RouteModel> routes;
+            SQL = "SELECT * FROM sparkpay.transaction_route "
+                +whereQuery + allowedRows 
+                + " ORDER BY date_created DESC";
+            routes = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new RoutesMapper());
+
+            SQL = "SELECT MIN(date_created) from sparkpay.transaction_route";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_created) from sparkpay.transaction_route";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched routes");
+            networkResponse.setData((ArrayList) routes);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+
+
+    }
+    
     class RoutesMapper implements RowMapper<RouteModel> {
 
         @Override

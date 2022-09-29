@@ -18,4 +18,9 @@ public interface PTSPsInterface {
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String ptsp_id, String ptsp_name, String sessiontoken);
     public ResponseEntity Edit(String ptsp_id, String ptsp_name, String sessiontoken);
+    public ResponseEntity SearchPTSPs(
+           String start_date,
+           String end_date,
+           String ptsp_id,
+           String ptsp_name);
 }

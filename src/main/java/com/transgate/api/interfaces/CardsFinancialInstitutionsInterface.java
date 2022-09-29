@@ -18,4 +18,10 @@ public interface CardsFinancialInstitutionsInterface {
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String acquirer_id, String institution_name, String issuer_id, String bank_code, String sessiontoken);
     public ResponseEntity Edit(int id, String acquirer_id, String institution_name, String issuer_id, String bank_code, String sessiontoken);
+    public ResponseEntity SearchCardsFinancialInstitutions(
+           String start_date,
+           String end_date,
+           String acquirer_id,
+           String institution_name,
+           String issuer_id); 
 }

@@ -285,6 +285,79 @@ public class NodesService implements NodesInterface {
         }
     }
     
+    @Override
+    public ResponseEntity SearchNodes(
+           String start_date,
+           String end_date, String station_name,
+           String local_port,
+           String acquiring_institution_id,
+           String cbn_bank_code){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !station_name.equals("")
+                    || !local_port.equals("")
+                    || !acquiring_institution_id.equals("")
+                    || !cbn_bank_code.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!station_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" station_name LIKE '%" + station_name+"%'";
+            }
+
+            if (!local_port.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" local_port LIKE '%" + local_port+"%'";
+            }
+
+            if (!acquiring_institution_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" acquiring_institution_id LIKE '%" + acquiring_institution_id+"%'";
+            }
+            if (!cbn_bank_code.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" cbn_bank_code LIKE '%" + cbn_bank_code+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_time >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" date_time < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<NodeModel> nodes;
+            SQL = "SELECT * FROM sparkpay.station_pcis "
+                +whereQuery + allowedRows 
+                + " ORDER BY date_time DESC";
+            nodes = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new NodesMapper());
+
+            SQL = "SELECT MIN(date_time) from sparkpay.station_pcis";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_time) from sparkpay.station_pcis";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched nodes");
+            networkResponse.setData((ArrayList) nodes);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     class NodesMapper implements RowMapper<NodeModel> {
 
         @Override

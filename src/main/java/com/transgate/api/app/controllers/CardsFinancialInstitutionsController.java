@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -101,5 +102,26 @@ public class CardsFinancialInstitutionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.RejectHelper(sessiontoken, id, "sparkpayweb_db.tbl_financial_institutions", "Financial Institution", type);
+    }
+    
+    @RequestMapping(value = "/cards/financial-institutions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchFinancialInstitutions(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("start_date") String start_date, 
+            @RequestParam("end_date") String end_date,
+            @RequestParam("acquirer_id") String acquirer_id, 
+            @RequestParam("institution_name") String institution_name,
+            @RequestParam("issuer_id") String issuer_id
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsFinancialInstitutionsInterface.SearchCardsFinancialInstitutions(
+            start_date,
+            end_date,
+            acquirer_id,
+            institution_name,
+            issuer_id); 
     }
 }

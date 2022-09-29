@@ -278,6 +278,10 @@ public class TransactionsService implements TransactionsInterface {
     public ResponseEntity GetTransactionsRates(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {    
+            if (startDate.contains("T"))
+                startDate = startDate.replace("T", " ");
+            if (endDate.contains("T"))
+                endDate = endDate.replace("T", " ");
             String SQL;
 //            SQL = "SELECT COUNT(a.id) as total FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.srcResponsecode = '00'";
 //            int totalSuccessFul = jdbcTemplate.queryForObject(SQL, int.class);

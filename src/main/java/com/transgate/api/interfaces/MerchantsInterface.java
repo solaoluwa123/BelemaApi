@@ -18,4 +18,10 @@ public interface MerchantsInterface {
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken);
     public ResponseEntity Edit(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken);
+    public ResponseEntity SearchMerchants(
+            String start_date,
+            String end_date,
+            String merchant_name,
+            String merchant_id,
+            String merchant_category_code);
 }

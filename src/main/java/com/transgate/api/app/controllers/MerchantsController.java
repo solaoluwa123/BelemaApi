@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -102,5 +103,26 @@ public class MerchantsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.RejectHelper(sessiontoken, id, "sparkpay.merchants", "Merchant", type);
+    }
+    
+    @RequestMapping(value = "/cards/merchants/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchMerchants(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("start_date") String start_date, 
+            @RequestParam("end_date") String end_date,
+            @RequestParam("merchant_name") String merchant_name, 
+            @RequestParam("merchant_id") String merchant_id, 
+            @RequestParam("merchant_category_code") String merchant_category_code
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return MerchantsInterface.SearchMerchants(
+            start_date,
+            end_date,
+            merchant_name,
+            merchant_id,
+            merchant_category_code); 
     }
 }

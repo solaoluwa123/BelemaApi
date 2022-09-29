@@ -237,6 +237,68 @@ public class PTSPsService implements PTSPsInterface {
         }
     }
     
+    @Override
+    public ResponseEntity SearchPTSPs(
+           String start_date,
+           String end_date,
+           String ptsp_id,
+           String ptsp_name){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !ptsp_id.equals("")
+                    || !ptsp_name.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!ptsp_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" ptsp_id LIKE '%" + ptsp_id+"%'";
+            }
+
+            if (!ptsp_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" ptsp_name LIKE '%" + ptsp_name+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" ptsp_date >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery + "";
+                whereQuery+=" ptsp_date < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<PTSPModel> ptsps;
+            SQL = "SELECT * FROM sparkpayweb_db.ptsp "
+                +whereQuery + allowedRows 
+                + " ORDER BY ptsp_date DESC";
+            ptsps = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new PTSPsMapper());
+
+            SQL = "SELECT MIN(ptsp_date) from sparkpayweb_db.ptsp";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(ptsp_date) from sparkpayweb_db.ptsp";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched PTSPs");
+            networkResponse.setData((ArrayList) ptsps);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+
+    }
+    
     class PTSPsMapper implements RowMapper<PTSPModel> {
 
         @Override

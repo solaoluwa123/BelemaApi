@@ -24,4 +24,10 @@ public interface TerminalsInterface {
             String route_mode, String acquiring_institution_id, String acquiring_institution_name,
             String cbn_bank_code, String terminal_type,
             String sessiontoken);
+    public ResponseEntity SearchTerminals(
+           String start_date,
+           String end_date,
+           String terminal_id,
+           String merchant_id,
+           String merchant_name); 
 }

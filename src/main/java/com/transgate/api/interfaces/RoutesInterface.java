@@ -18,4 +18,9 @@ public interface RoutesInterface {
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String source_acq_id, String destination_bin, int card_bin, String sessiontoken);
     public ResponseEntity Edit(int id, String source_acq_id, String destination_bin, int card_bin, String sessiontoken);
+    public ResponseEntity SearchRoutes(
+           String start_date,
+           String end_date,
+           String source_acq_id,
+           String destination_bin);
 }

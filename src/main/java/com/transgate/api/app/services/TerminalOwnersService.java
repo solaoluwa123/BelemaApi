@@ -240,6 +240,69 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
         }
     }
     
+    @Override
+    public ResponseEntity SearchTerminalOwners(
+           String start_date,
+           String end_date,
+           String terminal_owner_id,
+           String terminal_owner_name){
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery =  !start_date.equals("")
+                    || !end_date.equals("")
+                    || !terminal_owner_id.equals("")
+                    || !terminal_owner_name.equals("")
+                    ? "WHERE" : "";
+
+
+            if (!terminal_owner_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" terminal_owner_id LIKE '%" + terminal_owner_id+"%'";
+            }
+
+            if (!terminal_owner_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" terminal_owner_name LIKE '%" + terminal_owner_name+"%'";
+            }
+
+            if (!start_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" terminal_date >= '" + start_date + "'";
+            }
+            if (!end_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery + "";
+                whereQuery+=" terminal_date < '" + end_date + "'";
+            }
+            String SQL;
+            String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
+            List<TerminalOwnerModel> terminalOwners;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_terminal_owners "
+                +whereQuery + allowedRows 
+                + " ORDER BY terminal_date DESC";
+            terminalOwners = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new TerminalOwnersMapper());
+
+            SQL = "SELECT MIN(terminal_date) from sparkpayweb_db.tbl_terminal_owners";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(terminal_date) from sparkpayweb_db.tbl_terminal_owners";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched Terminal Owners");
+            networkResponse.setData((ArrayList) terminalOwners);
+
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+
+
+    }
+    
     class TerminalOwnersMapper implements RowMapper<TerminalOwnerModel> {
 
         @Override

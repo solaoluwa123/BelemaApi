@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -100,5 +101,24 @@ public class TerminalOwnersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.RejectHelper(sessiontoken, id, "sparkpayweb_db.tbl_terminal_owners", "Terminal Owner", type);
+    }
+    
+    @RequestMapping(value = "/cards/terminal-owners/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchTerminalOwners(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("start_date") String start_date, 
+            @RequestParam("end_date") String end_date,
+            @RequestParam("terminal_owner_id") String terminal_owner_id, 
+            @RequestParam("terminal_owner_name") String terminal_owner_name
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalOwnersInterface.SearchTerminalOwners(
+            start_date,
+            end_date,
+            terminal_owner_id,
+            terminal_owner_name); 
     }
 }
