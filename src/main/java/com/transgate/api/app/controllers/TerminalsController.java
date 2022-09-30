@@ -44,6 +44,24 @@ public class TerminalsController {
         return TerminalsInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/terminals/merchant/{merchantid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("merchantid") String merchantid) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalsInterface.Get(merchantid, "merchant_id");
+    }
+    
+    @RequestMapping(value = "/cards/terminals/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByFI(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalsInterface.Get(institution, "acquiring_institution_id");
+    }
+    
     @RequestMapping(value = "/cards/terminals/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {

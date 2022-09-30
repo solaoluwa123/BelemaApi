@@ -110,18 +110,42 @@ public class TerminalsService implements TerminalsInterface {
         }
     }
     
+    @Override
     public ResponseEntity Get(String id, String column) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<TerminalModel> terminals;
-            SQL = "SELECT * FROM sparkpay.terminals "
-                + "WHERE "+column+" = ?";
-            terminals = jdbcTemplate.query(SQL, new Object[]{id}, new TerminalsMapper());
+            String SQL, minDate, maxDate;
+            List<TerminalModel> terminals = new ArrayList<>();
+            if (column.equals("acquiring_institution_id")) {
+                SQL = "SELECT bank_code FROM sparkpayweb_db.tbl_financial_institutions WHERE acquirer_id = ?";
+                String bank_code = jdbcTemplate.queryForObject(SQL, new Object[]{id}, String.class);
+                SQL = "SELECT * FROM sparkpay.terminals "
+                + "WHERE cbn_bank_code = ?";
+                terminals = jdbcTemplate.query(SQL, new Object[]{bank_code}, new TerminalsMapper());
+                SQL = "SELECT MIN(date_time) from sparkpay.terminals "
+                    + "WHERE cbn_bank_code = ?";
+                minDate = jdbcTemplate.queryForObject(SQL, new Object[]{bank_code}, String.class);
+                SQL = "SELECT MAX(date_time) from sparkpay.terminals "
+                    + "WHERE cbn_bank_code = ?";
+                maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{bank_code}, String.class);
+            }
+            else {
+                SQL = "SELECT * FROM sparkpay.terminals "
+                    + "WHERE "+column+" = ?";
+                terminals = jdbcTemplate.query(SQL, new Object[]{id}, new TerminalsMapper());
+                SQL = "SELECT MIN(date_time) from sparkpay.terminals "
+                    + "WHERE "+column+" = ?";
+                minDate = jdbcTemplate.queryForObject(SQL, new Object[]{id}, String.class);
+                SQL = "SELECT MAX(date_time) from sparkpay.terminals "
+                    + "WHERE "+column+" = ?";
+                maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{id}, String.class);
+            }
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("Terminal by "+column+": "+id);
             networkResponse.setData((ArrayList) terminals);
+            networkResponse.setMeta(meta);
             
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {

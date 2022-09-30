@@ -21,6 +21,7 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -194,6 +195,33 @@ public class UsersService implements UsersInterface {
                     response.setDate_created((new Date()).toString());
                     response.setDate_updated(null);
                 }
+                
+                if (userRoleid == 5) {
+                    SQL = "SELECT a.id, a.institution_id, b.acquirer_id, b.institution_name "
+                            + "FROM tbl_map_card_users_institution a "
+                            + "LEFT JOIN sparkpayweb_db.tbl_financial_institutions b "
+                            + "ON a.institution_id = b.bank_code "
+                            + "WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
+                    if (rows.size() > 0) {
+                        response.setFinancial_institution_code((String) rows.get(0).get("acquirer_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
+                    }
+                }
+                
+                if (userRoleid == 6) {
+                    SQL = "SELECT a.id, a.institution_id, b.merchant_id, b.merchant_name "
+                            + "FROM tbl_map_card_users_institution a "
+                            + "LEFT JOIN sparkpay.merchants b "
+                            + "ON a.institution_id = b.merchant_id "
+                            + "WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
+                    if (rows.size() > 0) {
+                        response.setFinancial_institution_code((String) rows.get(0).get("merchant_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("merchant_name"));
+                    }
+                }
+                
                 List<MenuModel> menu;
                 if (userRoleid < 4){
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "

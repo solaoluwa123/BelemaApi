@@ -13,6 +13,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -122,6 +124,37 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
             networkResponse.setMessage("All Financial Institutions");
             networkResponse.setData((ArrayList) cardFI);
             networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByMerchantUser(String merchant) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT cbn_bank_code FROM sparkpay.terminals WHERE merchant_id = ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{merchant});
+            StringBuilder inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append(row.get("cbn_bank_code"));
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            inString = inString.append(")");
+            List<CardsFinancialInstitutionModel> cardFI;
+            SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "
+                + "WHERE bank_code IN " + inString.toString();
+            cardFI = jdbcTemplate.query(SQL, new CardFIMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Financial Institutions by merchant: " + merchant);
+            networkResponse.setData((ArrayList) cardFI);
             
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {

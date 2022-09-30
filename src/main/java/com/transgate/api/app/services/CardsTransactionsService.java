@@ -6,6 +6,7 @@
 package com.transgate.api.app.services;
 
 import com.transgate.api.interfaces.CardsTransactionsInterface;
+import com.transgate.api.models.CardsDisputeModel;
 import com.transgate.api.models.CardsTransactionModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.util.ResponseManager;
@@ -60,6 +61,131 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Transactions");
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Get(int id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsTransactionModel> transactions;
+            SQL = "SELECT * FROM sparkpay.transactions WHERE id = ? ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new Object[]{id}, new CardsTransactionsMapper());
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Transaction by id: " + id);
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    public List<CardsTransactionModel> GetTransaction(String terminalid, String rrn, String stan) {
+        String SQL;
+        List<CardsTransactionModel> transactions;
+        SQL = "SELECT * FROM sparkpay.transactions WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ? ORDER BY id DESC";
+        transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapper());
+        return transactions;
+    }
+    
+    @Override
+    public ResponseEntity GetByTerminal(String terminalid) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsTransactionModel> transactions;
+            SQL = "SELECT * FROM sparkpay.transactions WHERE terminal_id = ? ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new Object[]{terminalid}, new CardsTransactionsMapper());
+            
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM sparkpay.transactions a WHERE a.terminal_id = ?";
+            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid}, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE terminal_id = ?";
+            String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid}, String.class);
+            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE terminal_id = ?";
+            String maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid}, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Transactions by Terminal: " + terminalid);
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByMerchant(String merchantid) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsTransactionModel> transactions;
+            SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id = ? ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new Object[]{merchantid}, new CardsTransactionsMapper());
+            
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM sparkpay.transactions a WHERE a.merchant_id = ?";
+            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE merchant_id = ?";
+            String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, String.class);
+            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE merchant_id = ?";
+            String maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Transactions by Merchant: " + merchantid);
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByFI(String institution) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsTransactionModel> transactions;
+            SQL = "SELECT * FROM sparkpay.transactions WHERE acquirer_institution_id = ? OR destination_acquiring_institution_id = ? ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new Object[]{institution, institution}, new CardsTransactionsMapper());
+            
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM sparkpay.transactions a WHERE a.acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
+            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institution, institution}, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
+            String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{institution, institution}, String.class);
+            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
+            String maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{institution, institution}, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Transactions by Institution: " + institution);
             networkResponse.setData((ArrayList) transactions);
             networkResponse.setMeta(meta);
             
@@ -198,6 +324,175 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    private boolean CheckDisputeExist(String terminalid, String rrn, String stan) {
+        boolean found;
+        try {
+            String SQL;
+            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_disputes WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid, rrn, stan}, int.class);
+
+            found = totalRows > 0;
+            
+            return found;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return false;
+        }
+    }
+    
+    @Override
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String username){
+        try {
+            
+            boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
+            if (sessionIdExist) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Cannot log dispute with same details twice");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            
+            List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan);
+            if (getTransaction.size() > 0) {
+                String SQL;
+                SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, terminal_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, status, date_created) VALUES(?, ?, ?, ?, ?, ?, '-1', now())";
+                int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), terminalid, stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id()});
+                if (retval > 0) 
+                    return responseManager.ResponseAccepted();
+                else 
+                    return responseManager.ResponseInternalServerError();
+            } else {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(404);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Transaction not found");
+                return responseManager.ResponseOk(networkResponse);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetDisputes(String institutioncode) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            Double totalValue;
+            List<CardsDisputeModel> transactions;
+            switch(institutioncode) {
+                case "":
+                case "-1":
+                    SQL = "SELECT a.id, a.logged_by, a.status, a.resolved, a.date_modified, a.date_created, "
+                            + "b.id as transactionid, b.message_type, b.pan, b.amount, b.system_trace_number, b.retrieval_ref_number, b.destination_acquiring_institution_id, "
+                            + "b.terminal_id, b.bin, b.ncs_date_time, b.response_code "
+                            + "FROM sparkpayweb_db.tbl_disputes a "
+                            + "LEFT JOIN sparkpay.transactions b "
+                            + "ON a.id = b.id "
+                            + "WHERE a.resolved = 0 ORDER BY a.id DESC";
+                    transactions = jdbcTemplate.query(SQL, new CardsTransactionsDisputesMapper());
+
+                    SQL = "SELECT "
+                            + "SUM(b.amount) as totalValue "
+                            + "FROM sparkpayweb_db.tbl_disputes a "
+                            + "LEFT JOIN sparkpay.transactions b "
+                            + "ON a.id = b.id "
+                            + "WHERE a.resolved = 0";
+                    totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
+                    break;
+                default:
+                    SQL = "SELECT a.id, a.logged_by, a.status, a.resolved, a.date_modified, a.date_created, "
+                            + "b.id as transactionid, b.message_type, b.pan, b.amount, b.system_trace_number, b.retrieval_ref_number, b.destination_acquiring_institution_id, "
+                            + "b.terminal_id, b.bin, b.ncs_date_time, b.response_code "
+                            + "FROM sparkpayweb_db.tbl_disputes a "
+                            + "LEFT JOIN sparkpay.transactions b "
+                            + "ON a.id = b.id "
+                            + "WHERE a.resolved = 0 AND (b.acquirer_institution_id = ? OR b.destination_acquiring_institution_id = ?) ORDER BY a.id DESC";
+                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode}, new CardsTransactionsDisputesMapper());
+
+                    SQL = "SELECT "
+                            + "SUM(b.amount) as totalValue "
+                            + "FROM sparkpayweb_db.tbl_disputes a "
+                            + "LEFT JOIN sparkpay.transactions b "
+                            + "ON a.id = b.id "
+                            + "WHERE a.resolved = 0 AND (b.acquirer_institution_id = ? OR b.destination_acquiring_institution_id = ?)";
+                    totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
+                    break;
+            }
+            
+            totalValue = totalValue != null ? totalValue : 0;
+            SQL = "SELECT "
+                    + "MIN(b.ncs_date_time) "
+                    + "FROM sparkpayweb_db.tbl_disputes a "
+                    + "LEFT JOIN sparkpay.transactions b "
+                    + "ON a.id = b.id "
+                    + "WHERE a.owner_institution = ?";
+            String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode}, String.class);
+            SQL = "SELECT MAX(b.ncs_date_time) "
+                    + "FROM sparkpayweb_db.tbl_disputes a "
+                    + "LEFT JOIN sparkpay.transactions b "
+                    + "ON a.id = b.id "
+                    + "WHERE a.owner_institution = ?";
+            String maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode}, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Disputes by Institution: " + institutioncode);
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status) {
+        try {
+            String SQL;
+            int retVal;
+            int resolved = status == 0 ? 0 : 1;
+            SQL = "UPDATE sparkpayweb_db.tbl_disputes SET status = ?, resolved = ?, date_modified = now() WHERE id = ?";
+            retVal = jdbcTemplate.update(SQL, new Object[]{status, resolved, id});
+            if (retVal > 0)
+                return responseManager.ResponseAccepted();
+            else
+                return responseManager.ResponseBadRequest();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    class CardsTransactionsDisputesMapper implements RowMapper<CardsDisputeModel> {
+        @Override
+        public CardsDisputeModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            CardsDisputeModel tnx = new CardsDisputeModel();
+            tnx.setId(rs.getInt("id"));
+            tnx.setTransaction_id(rs.getInt("transactionid"));
+            tnx.setStatus(rs.getInt("status"));
+            tnx.setResolved(rs.getInt("resolved"));
+            tnx.setDate_modified(rs.getString("date_modified"));
+            tnx.setDate_created(rs.getString("date_created"));
+            tnx.setMessage_type(rs.getString("message_type"));
+            tnx.setPan(rs.getString("pan"));
+            tnx.setAmount(rs.getString("amount"));
+            tnx.setSystem_trace_number(rs.getString("system_trace_number"));
+            tnx.setRetrieval_ref_number(rs.getString("retrieval_ref_number"));
+            tnx.setDestination_acquiring_institution_id(rs.getString("destination_acquiring_institution_id"));
+            tnx.setTerminal_id(rs.getString("terminal_id"));
+            tnx.setBin(rs.getString("bin"));
+            tnx.setNcs_date_time(rs.getString("ncs_date_time"));
+            tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
+            return tnx;
         }
     }
     

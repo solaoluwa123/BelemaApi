@@ -530,7 +530,7 @@ public class TransactionsService implements TransactionsInterface {
 //            String appendQueryTwo = institutioncode == null ? "" : institutioncode.equals("-1") ? "" : " AND a.srcInstitutioncode = " + institutioncode + " OR a.destInstitutioncode = " + institutioncode;
             String SQL;
             List<DisputeModel> transactions;
-            Double totalValue;
+            Double totalValue = 0.00;
             if (id > 0) {
                 SQL = "SELECT dispute.id, dispute.loggedBy, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, "
                         + "a.id as transactionid, a.srcSessionid, a.srcAccountNumber, a.srcAccountName, a.srcKycLevel, a.srcBvn, a.srcAmount, a.srcInstitutioncode, a.destSessionId, a.srcResponsecode, a.destAccountNumber, a.destAccountName, a.destKycLevel, a.destBvn, a.destAmount, a.destInstitutioncode, a.destResponseCode, a.narration, a.transactiondate, a.username, "
@@ -544,18 +544,6 @@ public class TransactionsService implements TransactionsInterface {
                         + "ON a.destInstitutioncode = c.code "
                     + "WHERE dispute.id = ?";
                 transactions = jdbcTemplate.query(SQL, new Object[]{id}, new DisputeTransactionMapper());
-                
-                SQL = "SELECT SUM(a.srcAmount) as totalValue "
-                        + "FROM tbl_disputes dispute "
-                        + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
-                        + "ON dispute.transactionSessionid = a.srcSessionid "
-                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                        + "ON a.srcInstitutioncode = b.code "
-                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                        + "ON a.destInstitutioncode = c.code "
-                    + "WHERE dispute.id = ?";
-                
-                totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{id}, Double.class);
             }
             else {
                 switch (code) {
@@ -571,17 +559,14 @@ public class TransactionsService implements TransactionsInterface {
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE dispute.status = 0 OR dispute.status = -1"
+                                + "ON a.destInstitutioncode = c.code WHERE dispute.resolved = 0"
                                 + " ORDER BY a.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
                                 + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                                + "ON a.srcInstitutioncode = b.code "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE dispute.status = 0 OR dispute.status = -1";
+                                + "WHERE dispute.resolved = 0";
                             totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         else {
@@ -594,17 +579,14 @@ public class TransactionsService implements TransactionsInterface {
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE dispute.status = 1"
+                                + "ON a.destInstitutioncode = c.code WHERE dispute.resolved = 1"
                                 + " ORDER BY a.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
                                 + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                                + "ON a.srcInstitutioncode = b.code "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE dispute.status = 1";
+                                + "WHERE dispute.resolved = 1";
                             totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         break;
@@ -619,17 +601,14 @@ public class TransactionsService implements TransactionsInterface {
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE (dispute.status = 0 OR dispute.status = -1) AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code+")"
+                                + "ON a.destInstitutioncode = c.code WHERE dispute.resolved = 0 AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code+")"
                                 + " ORDER BY a.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
                                 + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                                + "ON a.srcInstitutioncode = b.code "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE (dispute.status = 0 OR dispute.status = -1) AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code+")";
+                                + "WHERE dispute.resolved = 0 AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code+")";
                             totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         else {
@@ -642,17 +621,14 @@ public class TransactionsService implements TransactionsInterface {
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                                 + "ON a.srcInstitutioncode = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE dispute.status = 1 AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code + ")"
+                                + "ON a.destInstitutioncode = c.code WHERE dispute.resolved = 1 AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code + ")"
                                 + " ORDER BY a.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.srcAmount) as totalValue "
                                 + "FROM tbl_disputes dispute "
                                 + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
                                 + "ON dispute.transactionSessionid = a.srcSessionid "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                                + "ON a.srcInstitutioncode = b.code "
-                                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                                + "ON a.destInstitutioncode = c.code WHERE dispute.status = 1 AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code + ")";
+                                + "WHERE dispute.resolved = 1 AND (a.srcInstitutioncode = " + code + " OR a.destInstitutioncode = " + code + ")";
                             totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         break;
@@ -854,7 +830,7 @@ public class TransactionsService implements TransactionsInterface {
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
                     else
-                        return responseManager.ResponseInternalServerError();
+                        return responseManager.ResponseBadRequest();
 //                default:
 //                    return responseManager.ResponseUnathorized();
 //            }

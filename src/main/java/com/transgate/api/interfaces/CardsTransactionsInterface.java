@@ -13,7 +13,10 @@ import org.springframework.http.ResponseEntity;
  */
 public interface CardsTransactionsInterface {
     public ResponseEntity Get();
-    
+    public ResponseEntity Get(int id);
+    public ResponseEntity GetByTerminal(String terminalid);
+    public ResponseEntity GetByMerchant(String merchantid);
+    public ResponseEntity GetByFI(String institution);
     public ResponseEntity SearchTransactions(String message_type,
             String bin,
             String processing_code,
@@ -30,4 +33,10 @@ public interface CardsTransactionsInterface {
             String merchant_id,
             String location_name_address,
             String approval_code);
+    
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String username);
+    
+    public ResponseEntity GetDisputes(String institutioncode);
+    
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status);
 }

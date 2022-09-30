@@ -45,6 +45,16 @@ public class CardsFinancialInstitutionsController {
         return CardsFinancialInstitutionsInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/financial-institutions/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("merchant") String merchant) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsFinancialInstitutionsInterface.GetByMerchantUser(merchant);
+    }
+    
     @RequestMapping(value = "/cards/financial-institutions/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {
