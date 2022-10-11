@@ -5,6 +5,8 @@
  */
 package com.transgate.api.models;
 
+import java.util.ArrayList;
+
 /**
  *
  * @author Makintola
@@ -12,7 +14,9 @@ package com.transgate.api.models;
 public class CardsMerchantModel {
     private String merchant_id, merchant_name, merchant_category_code, date_created, merchant_country, merchant_state;
     private int id, delete_flag, edit_flag, create_flag;
-
+    private ArrayList ptsps;
+    private String ptsps_as_string;
+    
     public String getMerchant_id() {
         return merchant_id;
     }
@@ -91,6 +95,22 @@ public class CardsMerchantModel {
 
     public void setMerchant_state(String merchant_state) {
         this.merchant_state = merchant_state;
+    }
+
+    public ArrayList getPtsps() {
+        return ptsps;
+    }
+
+    public void setPtsps(ArrayList ptsps) {
+        this.ptsps = ptsps;
+    }
+
+    public String getPtsps_as_string() {
+        return ptsps_as_string;
+    }
+
+    public void setPtsps_as_string(String ptsps_as_string) {
+        this.ptsps_as_string = ptsps_as_string;
     }
     
 }

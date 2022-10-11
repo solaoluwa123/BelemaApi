@@ -18,9 +18,9 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate);
     
-    public ResponseEntity GetTransactionsRates(String startDate, String endDate);
+    public ResponseEntity GetTransactionsRates(String startDate, String endDate, boolean inward);
     
-    public ResponseEntity GetTransactionsRates(String institutioncode, String startDate, String endDate);
+    public ResponseEntity GetTransactionsRates(String institutioncode, String startDate, String endDate, boolean inward);
     
     public ResponseEntity GetInsitutionTnxTrend(String institutioncode, String type, String startDate, String endDate);
     

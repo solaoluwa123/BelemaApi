@@ -131,6 +131,101 @@ public class MerchantsService implements MerchantsInterface {
     }
     
     @Override
+    public ResponseEntity GetByPTSP(String ptsp) {
+         NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsMerchantModel> merchants;
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.date_created, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM sparkpay.merchants a "
+                    + "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b "
+                    + "ON a.merchant_id = b.merchant_id "
+                + "WHERE b.ptsp_id = ?";
+            merchants = jdbcTemplate.query(SQL, new Object[]{ptsp}, new MerchantsMapper());
+            
+            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Get Merchant by ptsp: " + ptsp);
+            networkResponse.setData((ArrayList) merchants);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByTerminalOwner(String owner) {
+         NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsMerchantModel> merchants;
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.date_created, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM sparkpay.merchants a "
+                    + "LEFT JOIN sparkpay.terminals b "
+                    + "ON a.merchant_id = b.merchant_id "
+                + "WHERE b.owner_id = ?";
+            merchants = jdbcTemplate.query(SQL, new Object[]{owner}, new MerchantsMapper());
+            
+            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Get Merchant by Terminal Owner: " + owner);
+            networkResponse.setData((ArrayList) merchants);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByInstitution(String institution) {
+         NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<CardsMerchantModel> merchants;
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.date_created, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM sparkpay.merchants a "
+                    + "LEFT JOIN sparkpay.terminals b "
+                    + "ON a.merchant_id = b.merchant_id "
+                    + "LEFT JOIN sparkpayweb_db.tbl_financial_institutions c "
+                    + "ON b.cbn_bank_code = c.bank_code "
+                + "WHERE c.acquirer_id = ?";
+            merchants = jdbcTemplate.query(SQL, new Object[]{institution}, new MerchantsMapper());
+            
+            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Get Merchant by institution: " + institution);
+            networkResponse.setData((ArrayList) merchants);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity Get(int id) {
          NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -162,7 +257,7 @@ public class MerchantsService implements MerchantsInterface {
     }
     
     @Override
-    public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken) {
+    public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, ArrayList ptsps, String sessiontoken) {
             NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
@@ -177,6 +272,12 @@ public class MerchantsService implements MerchantsInterface {
                 if (userrole == 1) 
                     create_flag = 1;
 
+                for (int i = 0; i < ptsps.size(); i++) {
+                    SQL = "INSERT INTO sparkpayweb_db.tbl_map_merchants_ptsps "
+                            + "(merchant_id, ptsp_id, date_created) "
+                            + "VALUES(?, ?, now())";
+                    jdbcTemplate.update(SQL, new Object[]{merchant_id, ptsps.get(i)});
+                }
                 SQL = "INSERT into sparkpay.merchants"
                         + "(merchant_id, merchant_name, merchant_state, merchant_country,"
                         + "merchant_category_code, create_flag, date_created) "
@@ -200,13 +301,21 @@ public class MerchantsService implements MerchantsInterface {
     }
     
     @Override
-    public ResponseEntity Edit(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, String sessiontoken) {
+    public ResponseEntity Edit(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, ArrayList ptsps, String sessiontoken) {
         try {
             String SQL;
             int userrole = GetUserRole(sessiontoken);
             int retVal;
             switch (userrole) {
                 case 1:
+                    SQL = "DELETE FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
+                    jdbcTemplate.update(SQL, new Object[]{merchant_id});
+                    for (int i = 0; i < ptsps.size(); i++) {
+                        SQL = "INSERT INTO sparkpayweb_db.tbl_map_merchants_ptsps "
+                                + "(merchant_id, ptsp_id, date_created) "
+                                + "VALUES(?, ?, now())";
+                        jdbcTemplate.update(SQL, new Object[]{merchant_id, ptsps.get(i)});
+                    }
                     SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE merchant_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{merchant_name, merchant_state, merchant_country, merchant_category_code, merchant_id});
                     if (retVal > 0)
@@ -225,6 +334,12 @@ public class MerchantsService implements MerchantsInterface {
                     ResponseEntity responseEntity = Get(merchant_id);
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     CardsMerchantModel merchant = networkResponse != null ? (CardsMerchantModel) networkResponse.getData().get(0) : new CardsMerchantModel();
+                    for (int i = 0; i < ptsps.size(); i++) {
+                        SQL = "INSERT INTO sparkpayweb_db.tbl_map_merchants_ptsps_bkp "
+                                + "(merchant_id, ptsp_id, date_created) "
+                                + "VALUES(?, ?, now())";
+                        jdbcTemplate.update(SQL, new Object[]{merchant.getId(), ptsps.get(i)});
+                    }
                     SQL = "INSERT into sparkpayweb_db.merchants_bkp"
                         + "(id, merchant_id, merchant_name, merchant_state, merchant_country,"
                         + "merchant_category_code, date_created) "

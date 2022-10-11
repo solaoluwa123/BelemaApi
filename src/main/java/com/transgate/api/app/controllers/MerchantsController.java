@@ -10,6 +10,9 @@ import com.transgate.api.interfaces.MerchantsInterface;
 import com.transgate.api.models.CardsMerchantModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -44,6 +47,33 @@ public class MerchantsController {
         return MerchantsInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/merchants/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByInstitution(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return MerchantsInterface.GetByInstitution(institution);
+    }
+    
+    @RequestMapping(value = "/cards/merchants/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByPTSP(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("ptsp") String ptsp) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return MerchantsInterface.GetByPTSP(ptsp);
+    }
+    
+    @RequestMapping(value = "/cards/merchants/terminal-owner/{owner}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("owner") String owner) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return MerchantsInterface.GetByTerminalOwner(owner);
+    }
+    
     @RequestMapping(value = "/cards/merchants/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {
@@ -59,9 +89,9 @@ public class MerchantsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return MerchantsInterface.Create(
-                model.getMerchant_id(), model.getMerchant_name(),
-                model.getMerchant_state(), model.getMerchant_country(), model.getMerchant_category_code(), sessiontoken
+        List<String> ptspsArray = new ArrayList<>(Arrays.asList(model.getPtsps_as_string().split(",")));
+        return MerchantsInterface.Create(model.getMerchant_id(), model.getMerchant_name(),
+                model.getMerchant_state(), model.getMerchant_country(), model.getMerchant_category_code(), (ArrayList) ptspsArray, sessiontoken
             );
     }
     
@@ -72,9 +102,9 @@ public class MerchantsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return MerchantsInterface.Edit(
-                merchant_id, model.getMerchant_name(),
-                model.getMerchant_state(), model.getMerchant_country(), model.getMerchant_category_code(), sessiontoken
+        List<String> ptspsArray = new ArrayList<>(Arrays.asList(model.getPtsps_as_string().split(",")));
+        return MerchantsInterface.Edit(merchant_id, model.getMerchant_name(),
+                model.getMerchant_state(), model.getMerchant_country(), model.getMerchant_category_code(), (ArrayList) ptspsArray, sessiontoken
             );
     }
     

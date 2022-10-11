@@ -128,7 +128,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "transgatepay_db.tbl_financial_institutions_pendings", "Accounts Institution");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "transgateweb_db.tbl_financial_institutions_pendings", "Accounts Institution");
     }
     
     @RequestMapping(value = "/financial-institutions/reject", method = RequestMethod.PUT, headers = "Accept=application/json")

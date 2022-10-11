@@ -10,7 +10,7 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class TerminalModel {
-    String terminal_id, merchant_id, merchant_name, route_mode;
+    String terminal_id, merchant_id, merchant_name, route_mode, owner_id, owner_name;
     String acquiring_institution_id, acquiring_institution_name, cbn_bank_code;
     String terminal_type, date_time;
     int id, edit_flag, delete_flag, create_flag;
@@ -117,6 +117,22 @@ public class TerminalModel {
 
     public void setCreate_flag(int create_flag) {
         this.create_flag = create_flag;
+    }
+
+    public String getOwner_id() {
+        return owner_id;
+    }
+
+    public void setOwner_id(String owner_id) {
+        this.owner_id = owner_id;
+    }
+
+    public String getOwner_name() {
+        return owner_name;
+    }
+
+    public void setOwner_name(String owner_name) {
+        this.owner_name = owner_name;
     }
     
 }

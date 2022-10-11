@@ -15,6 +15,8 @@ public interface PTSPsInterface {
     public ResponseEntity Get();
     public ResponseEntity Get(String ptsp_id);
     public ResponseEntity Get(int id);
+    public ResponseEntity GetByMerchant(String merchant_id);
+    public ResponseEntity GetByInstitution(String institution);
     public ResponseEntity GetApprovals();
     public ResponseEntity Create(String ptsp_id, String ptsp_name, String sessiontoken);
     public ResponseEntity Edit(String ptsp_id, String ptsp_name, String sessiontoken);

@@ -69,7 +69,17 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetTransactionsRates(startDate, endDate);
+        return transactionsInterface.GetTransactionsRates(startDate, endDate, false);
+    }
+        
+    @RequestMapping(value = "/transactions-rates/inward", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTransactionsRatesInward(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTransactionsRates(startDate, endDate, true);
     }
         
     @RequestMapping(value = "/transactions-rates/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -81,7 +91,19 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetTransactionsRates(institutioncode, startDate, endDate);
+        return transactionsInterface.GetTransactionsRates(institutioncode, startDate, endDate, false);
+    }
+        
+    @RequestMapping(value = "/transactions-rates/inward/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTransactionsRatesInward(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTransactionsRates(institutioncode, startDate, endDate, true);
     }
         
     @RequestMapping(value = "/transactions-trend/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")

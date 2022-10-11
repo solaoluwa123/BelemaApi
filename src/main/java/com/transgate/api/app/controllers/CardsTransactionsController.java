@@ -68,6 +68,24 @@ public class CardsTransactionsController {
         return CardsTransactionsInterface.GetByTerminal(terminal);
     }
     
+    @RequestMapping(value = "/cards/transactions/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByPTSP(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("ptsp") String ptsp) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetByPTSP(ptsp);
+    }
+    
+    @RequestMapping(value = "/cards/transactions/terminal-owner/{owner}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("owner") String owner) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetByTerminalOwner(owner);
+    }
+    
     @RequestMapping(value = "/cards/transactions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity SearchTransactions(
             @RequestHeader(value = "Authorization") String header, 

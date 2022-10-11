@@ -183,7 +183,7 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "transgatepay_db.tbl_user_details_operations", "Users");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "transgateweb_db.tbl_user_details_operations", "Users");
     }
     
     @RequestMapping(value = "/users/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

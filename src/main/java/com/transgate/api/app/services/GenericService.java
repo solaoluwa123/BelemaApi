@@ -286,12 +286,25 @@ public class GenericService implements GenericInterface {
                             case "Merchant":
                                 SQL = "SELECT * FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
                                 rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                                String merchant_id = rows.size() > 0 ? (String) rows.get(0).get("merchant_id") : "";
                                 for (final Map<String, Object> row : rows) {
                                     SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE id = ?";
                                     jdbcTemplate.update(SQL, new Object[]{row.get("merchant_name"), row.get("merchant_state"), row.get("merchant_country"), row.get("merchant_category_code"), id});
                                     SQL = "DELETE FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
                                     jdbcTemplate.update(SQL, new Object[]{id});
                                 }
+                                SQL = "DELETE FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{merchant_id});
+                                SQL = "SELECT * FROM sparkpayweb_db.tbl_map_merchants_ptsps_bkp WHERE merchant_id = ?";
+                                final List<Map<String, Object>> rowsptsps = jdbcTemplate.queryForList(SQL, new Object[]{merchant_id});
+                                for (final Map<String, Object> row : rowsptsps) {
+                                    SQL = "INSERT INTO sparkpayweb_db.tbl_map_merchants_ptsps "
+                                            + "(merchant_id, ptsp_id, date_created) "
+                                            + "VALUES(?, ?, now())";
+                                    jdbcTemplate.update(SQL, new Object[]{merchant_id, row.get("ptsp_id")});
+                                }
+                                SQL = "DELETE FROM sparkpayweb_db.tbl_map_merchants_ptsps_bkp WHERE merchant_id = ?";
+                                jdbcTemplate.update(SQL, new Object[]{merchant_id});
                                 break;
                             case "PTSP":
                                 SQL = "SELECT * FROM sparkpayweb_db.ptsp_bkp WHERE id = ?";

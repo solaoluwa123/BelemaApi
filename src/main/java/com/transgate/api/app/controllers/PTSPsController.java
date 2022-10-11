@@ -44,6 +44,24 @@ public class PTSPsController {
         return PTSPsInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/ptsps/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("merchant") String merchant) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return PTSPsInterface.GetByMerchant(merchant);
+    }
+    
+    @RequestMapping(value = "/cards/ptsps/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByInstitution(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return PTSPsInterface.GetByInstitution(institution);
+    }
+    
     @RequestMapping(value = "/cards/ptsps/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {

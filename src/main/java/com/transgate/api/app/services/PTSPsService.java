@@ -115,6 +115,70 @@ public class PTSPsService implements PTSPsInterface {
     }
     
     @Override
+    public ResponseEntity GetByInstitution(String institution) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<PTSPModel> ptsps;
+            SQL = "SELECT a.id, a.ptsp_id, a.ptsp_name, a.ptsp_date, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM sparkpayweb_db.ptsp a "
+                    + "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b "
+                    + "ON a.ptsp_id = b.ptsp_id "
+                    + "LEFT JOIN sparkpay.terminals c "
+                    + "ON b.merchant_id = c.merchant_id "
+                    + "LEFT JOIN sparkpayweb_db.tbl_financial_institutions d "
+                    + "ON c.cbn_bank_code = d.bank_code "
+                + "WHERE d.acquirer_id = ?";
+            ptsps = jdbcTemplate.query(SQL, new Object[]{institution}, new PTSPsMapper());
+            SQL = "SELECT MIN(ptsp_date) from sparkpayweb_db.ptsp";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(ptsp_date) from sparkpayweb_db.ptsp";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("PTSP by institution: " + institution);
+            networkResponse.setData((ArrayList) ptsps);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByMerchant(String merchant_id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<PTSPModel> ptsps;
+            SQL = "SELECT a.id, a.ptsp_id, a.ptsp_name, a.ptsp_date, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM sparkpayweb_db.ptsp a "
+                    + "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b "
+                    + "ON a.ptsp_id = b.ptsp_id "
+                + "WHERE b.merchant_id = ?";
+            ptsps = jdbcTemplate.query(SQL, new Object[]{merchant_id}, new PTSPsMapper());
+            SQL = "SELECT MIN(ptsp_date) from sparkpayweb_db.ptsp";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(ptsp_date) from sparkpayweb_db.ptsp";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("PTSP by merchant: " + merchant_id);
+            networkResponse.setData((ArrayList) ptsps);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity Get(String ptsp_id) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {

@@ -62,6 +62,24 @@ public class TerminalsController {
         return TerminalsInterface.Get(institution, "acquiring_institution_id");
     }
     
+    @RequestMapping(value = "/cards/terminals/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByPTSP(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("ptsp") String ptsp) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalsInterface.Get(ptsp, "ptsp_id");
+    }
+    
+    @RequestMapping(value = "/cards/terminals/terminal-owner/{owner_id}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
+            @PathVariable("owner_id") String owner_id) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return TerminalsInterface.Get(owner_id, "owner_id");
+    }
+    
     @RequestMapping(value = "/cards/terminals/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetApprovals(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken) {
@@ -78,7 +96,7 @@ public class TerminalsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return TerminalsInterface.Create(
-                terminalModel.getTerminal_id(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
+                terminalModel.getTerminal_id(), terminalModel.getOwner_id(), terminalModel.getOwner_name(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
                 terminalModel.getRoute_mode(), terminalModel.getAcquiring_institution_id(), terminalModel.getAcquiring_institution_name(), 
                 terminalModel.getCbn_bank_code(), terminalModel.getTerminal_type(), sessiontoken
             );
@@ -92,7 +110,7 @@ public class TerminalsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return TerminalsInterface.Edit(
-                terminal_id, terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
+                terminal_id, terminalModel.getOwner_id(), terminalModel.getOwner_name(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
                 terminalModel.getRoute_mode(), terminalModel.getAcquiring_institution_id(), terminalModel.getAcquiring_institution_name(), 
                 terminalModel.getCbn_bank_code(), terminalModel.getTerminal_type(), sessiontoken
             );

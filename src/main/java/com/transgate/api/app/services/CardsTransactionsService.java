@@ -15,6 +15,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -98,6 +99,92 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         SQL = "SELECT * FROM sparkpay.transactions WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ? ORDER BY id DESC";
         transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapper());
         return transactions;
+    }
+    
+    @Override
+    public ResponseEntity GetByTerminalOwner(String owner) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT terminal_id FROM sparkpay.terminals WHERE owner_id = ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{owner});
+            StringBuilder inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("terminal_id")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            List<CardsTransactionModel> transactions;
+            SQL = "SELECT * FROM sparkpay.transactions WHERE terminal_id IN "+inString.toString()+" ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new CardsTransactionsMapper());
+            
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM sparkpay.transactions a WHERE a.terminal_id IN "+inString.toString();
+            Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Transactions by Terminal Owner: " + owner);
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetByPTSP(String ptsp) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT merchant_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE ptsp_id = ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{ptsp});
+            StringBuilder inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("merchant_id")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            inString = inString.append(")");
+            List<CardsTransactionModel> transactions;
+            SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id IN "+inString.toString()+" ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new CardsTransactionsMapper());
+            
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM sparkpay.transactions a WHERE a.merchant_id IN "+inString.toString();
+            Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Transactions by PTSP: " + ptsp);
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
     
     @Override

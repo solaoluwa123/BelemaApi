@@ -17,6 +17,8 @@ public interface CardsTransactionsInterface {
     public ResponseEntity GetByTerminal(String terminalid);
     public ResponseEntity GetByMerchant(String merchantid);
     public ResponseEntity GetByFI(String institution);
+    public ResponseEntity GetByPTSP(String ptsp);
+    public ResponseEntity GetByTerminalOwner(String owner);
     public ResponseEntity SearchTransactions(String message_type,
             String bin,
             String processing_code,

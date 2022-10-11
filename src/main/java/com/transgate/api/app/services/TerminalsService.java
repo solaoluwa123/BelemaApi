@@ -13,6 +13,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -129,6 +130,25 @@ public class TerminalsService implements TerminalsInterface {
                     + "WHERE cbn_bank_code = ?";
                 maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{bank_code}, String.class);
             }
+            else if (column.equals("ptsp_id")) {
+                List<Map<String, Object>> rows;
+                SQL = "SELECT merchant_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE ptsp_id = ?";
+                rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
+                StringBuilder inString = new StringBuilder("(");
+                for (final Map<String, Object> row : rows) {
+                    inString.append("'").append(row.get("merchant_id")).append("'");
+                    inString.append(",");
+                }
+                inString = inString.deleteCharAt(inString.length() - 1);
+                inString = inString.append(")");
+                SQL = "SELECT * FROM sparkpay.terminals "
+                + "WHERE merchant_id IN " +  inString.toString();
+                terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
+                SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+                minDate = jdbcTemplate.queryForObject(SQL, String.class);
+                SQL = "SELECT MAX(date_time) from sparkpay.terminals ";
+                maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            }
             else {
                 SQL = "SELECT * FROM sparkpay.terminals "
                     + "WHERE "+column+" = ?";
@@ -185,7 +205,7 @@ public class TerminalsService implements TerminalsInterface {
     }
     
     @Override
-    public ResponseEntity Create(String terminal_id, String merchant_id, String merchant_name, 
+    public ResponseEntity Create(String terminal_id, String owner_id, String owner_name, String merchant_id, String merchant_name, 
             String route_mode, String acquiring_institution_id, String acquiring_institution_name,
             String cbn_bank_code, String terminal_type,
             String sessiontoken) {
@@ -204,10 +224,10 @@ public class TerminalsService implements TerminalsInterface {
                     create_flag = 1;
 
                 SQL = "INSERT into sparkpay.terminals"
-                        + "(terminal_id, merchant_id, merchant_name, route_mode,"
+                        + "(terminal_id, owner_id, owner_name, merchant_id, merchant_name, route_mode,"
                         + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, create_flag, date_time) "
-                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
-                retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+                retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, owner_id, owner_name, merchant_id, merchant_name, route_mode, acquiring_institution_id,
                         acquiring_institution_name, cbn_bank_code, terminal_type, create_flag});
                 if (retval > 0) 
                     return responseManager.ResponseAccepted();
@@ -227,7 +247,7 @@ public class TerminalsService implements TerminalsInterface {
     }
     
     @Override
-    public ResponseEntity Edit(String terminal_id, String merchant_id, String merchant_name, 
+    public ResponseEntity Edit(String terminal_id, String owner_id, String owner_name, String merchant_id, String merchant_name, 
             String route_mode, String acquiring_institution_id, String acquiring_institution_name,
             String cbn_bank_code, String terminal_type,
             String sessiontoken) {
@@ -237,9 +257,9 @@ public class TerminalsService implements TerminalsInterface {
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE sparkpay.terminals SET merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
+                    SQL = "UPDATE sparkpay.terminals SET owner_id = ?, owner_name = ?, merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
                             + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE terminal_id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{merchant_id, merchant_name, route_mode, acquiring_institution_id,
+                    retVal = jdbcTemplate.update(SQL, new Object[]{owner_id, owner_name, merchant_id, merchant_name, route_mode, acquiring_institution_id,
                         acquiring_institution_name, cbn_bank_code, terminal_type, terminal_id});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
@@ -258,10 +278,10 @@ public class TerminalsService implements TerminalsInterface {
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     TerminalModel model = networkResponse != null ? (TerminalModel) networkResponse.getData().get(0) : new TerminalModel();
                     SQL = "INSERT into sparkpayweb_db.terminals_bkp"
-                        + "(id, terminal_id, merchant_id, merchant_name, route_mode,"
+                        + "(id, owner_id, owner_name, terminal_id, merchant_id, merchant_name, route_mode,"
                         + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, date_time) "
-                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
-                    jdbcTemplate.update(SQL, new Object[]{model.getId(), terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+                    jdbcTemplate.update(SQL, new Object[]{model.getId(), model.getOwner_id(), model.getOwner_name(), terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
                         acquiring_institution_name, cbn_bank_code, terminal_type});
                     SQL = "UPDATE sparkpay.terminals SET edit_flag = 1 WHERE terminal_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{terminal_id});
@@ -352,6 +372,8 @@ public class TerminalsService implements TerminalsInterface {
             terminal.setId(rs.getInt("id"));
             terminal.setTerminal_id(rs.getString("terminal_id"));
             terminal.setMerchant_id(rs.getString("merchant_id"));
+            terminal.setOwner_id(rs.getString("owner_id"));
+            terminal.setOwner_name(rs.getString("owner_name"));
             terminal.setMerchant_name(rs.getString("merchant_name"));
             terminal.setRoute_mode(rs.getString("route_mode"));
             terminal.setAcquiring_institution_id(rs.getString("acquiring_institution_id"));
