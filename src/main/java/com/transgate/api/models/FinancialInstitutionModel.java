@@ -10,9 +10,9 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class FinancialInstitutionModel {
-    int id, businessType;
+    int id, businessType, port_number;
     String name, shortName, code, color, business_address, date_created, businessTypeName, created_by, actionType, note, status, date_updated;
-
+    String publickeylocation, cbn_bank_account, switch_code;
     public int getId() {
         return id;
     }
@@ -123,6 +123,38 @@ public class FinancialInstitutionModel {
 
     public void setDate_updated(String date_updated) {
         this.date_updated = date_updated;
+    }
+
+    public String getPublickeylocation() {
+        return publickeylocation;
+    }
+
+    public void setPublickeylocation(String publickeylocation) {
+        this.publickeylocation = publickeylocation;
+    }
+
+    public int getPort_number() {
+        return port_number;
+    }
+
+    public void setPort_number(int port_number) {
+        this.port_number = port_number;
+    }
+
+    public String getCbn_bank_account() {
+        return cbn_bank_account;
+    }
+
+    public void setCbn_bank_account(String cbn_bank_account) {
+        this.cbn_bank_account = cbn_bank_account;
+    }
+
+    public String getSwitch_code() {
+        return switch_code;
+    }
+
+    public void setSwitch_code(String switch_code) {
+        this.switch_code = switch_code;
     }
     
 }

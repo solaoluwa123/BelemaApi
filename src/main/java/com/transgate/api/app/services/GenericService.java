@@ -14,6 +14,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -180,14 +181,150 @@ public class GenericService implements GenericInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            List<GenericModel> states;
+            List<GenericModel> codes;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_response_codes ORDER BY id ASC";
-            states = jdbcTemplate.query(SQL, new GenericMapper());
+            codes = jdbcTemplate.query(SQL, new GenericMapper());
             
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Response codes");
-            networkResponse.setData((ArrayList) states);
+            networkResponse.setData((ArrayList) codes);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetSettlements(String institution, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
+                    + "FROM ajiswitch_db.tbl_settlement_details a "
+                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "ON a.institution_code = b.code "
+                    + "WHERE a.institution_code = ? AND a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetSettlements(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
+                    + "FROM ajiswitch_db.tbl_settlement_details a "
+                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "ON a.institution_code = b.code "
+                    + "WHERE a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetCardsSettlementsByPTSP(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
+                    + "FROM sparkpay.tbl_settlement_details a "
+                    + "WHERE a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetCardsSettlements(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
+                    + "FROM sparkpay.tbl_settlement_details a "
+                    + "WHERE a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetCardsSettlementsByAcquirer(String acquirer, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
+                    + "FROM sparkpay.tbl_settlement_details a "
+                    + "WHERE a.acquirer_id = ? AND a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{acquirer, startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements by ACQ: " + acquirer);
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetCardsSettlementsByIssuer(String issuer, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
+                    + "FROM sparkpay.tbl_settlement_details a "
+                    + "WHERE a.issuer_id = ? AND a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{issuer, startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements by ISS: " + issuer);
+            networkResponse.setData((ArrayList) rows);
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());

@@ -80,12 +80,14 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     private List<FinancialInstitutionModel> GetInstitutionsFromPendings(int id, String actionType) {
         try {
             String SQL;
-            SQL = "SELECT a.id, a.name, a.shortName, c.color, a.code, a.businessType, a.actionType, a.note, a.business_address, a.date_created, b.name as businessTypeName "
-                    + "FROM tbl_financial_institutions_pendings a "
+            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
+                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, b.name as businessTypeName "
+                    + "FROM tbl_nodes_pendings n "
+                    + "LEFT JOIN tbl_financial_institutions_pendings a "
+                    + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
                     + "ON a.businessType = b.id "
-                    + "WHERE a.id = ? AND a.actionType = ?"
-                    + "ORDER BY a.id DESC";
+                    + "WHERE n.id = ? AND a.actionType = ?";
             List<FinancialInstitutionModel> institution = jdbcTemplate.query(SQL, new Object[]{id, actionType}, new FinancialInstitutionMapper2());
             return institution;
             
@@ -141,11 +143,14 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.name, a.shortName, a.color, a.code, a.businessType, a.actionType, a.note, a.business_address, a.date_created, b.name as businessTypeName "
-                    + "FROM tbl_financial_institutions_pendings a "
+            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
+                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, b.name as businessTypeName "
+                    + "FROM tbl_nodes_pendings n "
+                    + "LEFT JOIN tbl_financial_institutions_pendings a "
+                    + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
                     + "ON a.businessType = b.id "
-                    + "ORDER BY a.id DESC";
+                    + "ORDER BY n.id DESC";
             List<FinancialInstitutionModel> financialInstitutionModel = jdbcTemplate.query(SQL, new FinancialInstitutionMapper2());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -164,11 +169,15 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.name, a.shortName, a.color, a.code, a.businessType, a.business_address, a.date_created, a.status, a.date_updated, b.name as businessTypeName "
-                    + "FROM tbl_financial_institutions a "
+            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, "
+                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName "
+                    + "FROM ajiswitch_db.tbl_nodes n "
+                    + "LEFT JOIN tbl_financial_institutions a "
+                    + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
                     + "ON a.businessType = b.id "
-                    + "WHERE a.code = ?";
+                    + "WHERE n.institution_code = ?";
+            
             List<FinancialInstitutionModel> financialInstitutionModel = jdbcTemplate.query(SQL, new Object[]{code}, new FinancialInstitutionMapper());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -187,11 +196,14 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.name, a.shortName, a.color, a.code, a.businessType, a.business_address, a.date_created, a.status, a.date_updated, b.name as businessTypeName "
-                    + "FROM tbl_financial_institutions a "
+            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, "
+                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName "
+                    + "FROM ajiswitch_db.tbl_nodes n "
+                    + "LEFT JOIN tbl_financial_institutions a "
+                    + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
                     + "ON a.businessType = b.id "
-                    + "ORDER BY a.id DESC";
+                    + "ORDER BY n.id DESC";
             List<FinancialInstitutionModel> financialInstitutionModel = jdbcTemplate.query(SQL, new FinancialInstitutionMapper());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -206,7 +218,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Create(String sessiontoken, String name, String shortName, String color, String code, String business_address, int businessType, String creator) {
+    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String color, String code, String business_address, int businessType, String creator) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
@@ -216,8 +228,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                 int userrole = GetUserRole(creator, sessiontoken);
                 switch (userrole) {
                     case 1:
-                        SQL = "INSERT into tbl_financial_institutions(name, shortName, color, code, businessType, date_created, business_address) VALUES(?, ?, ?, ?, ?, now(), ?)";
-                        retval = jdbcTemplate.update(SQL, new Object[]{name, shortName, color, code, businessType, business_address});
+                        SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
+                        jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, switch_code) VALUES(?, 1, ?, ?, now(), ?, '')";
+                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name});
                         if (retval > 0) 
                             return responseManager.ResponseAccepted();
                         else 
@@ -231,8 +245,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             networkResponse.setMessage("Institution already pending create");
                             return responseManager.ResponseOk(networkResponse);
                         }
-                        SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, date_created, business_address) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', now(), ?)";
-                        retval = jdbcTemplate.update(SQL, new Object[]{name, shortName, color, code, businessType, business_address});
+                        SQL = "INSERT INTO tbl_financial_institutions_pendings(code, name, shortName, color, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', ?)";
+                        jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
+                        SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, switch_code) VALUES(?, 1, ?, ?, now(), ?, '')";
+                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name});
                         if (retval > 0) 
                             return responseManager.ResponseAccepted();
                         else 
@@ -303,7 +319,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE tbl_financial_institutions SET status = -1 WHERE code = ?";
+                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET is_active = -1 WHERE institution_code = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{code});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
@@ -344,7 +360,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE tbl_financial_institutions SET status = 1 WHERE code = ?";
+                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET is_active = 1 WHERE institution_code = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{code});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
@@ -378,7 +394,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, String color, String business_address, int businessType, String editor) {
+    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor) {
         try {
             String SQL;
             int userrole = GetUserRole(editor, sessiontoken);
@@ -386,7 +402,9 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             switch (userrole) {
                 case 1:
                     SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
+                    jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
+                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET port_number = ?, publickeylocation = ?, institution_name = ? WHERE institution_code = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, name, code});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
                     else
@@ -406,13 +424,15 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     responseEntity = GetFinancialInstitutionsTypeById(sessiontoken, businessType);
                     networkResponse = (NetworkResponse) responseEntity.getBody();
                     InstitutionTypesModel typeModel = networkResponse != null ? (InstitutionTypesModel) networkResponse.getData().get(0) : new InstitutionTypesModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, date_created, business_address) VALUES(?, ?, ?, ?, ?, 'edit', ?, now(), ?)";
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'edit', ?, ?)";
                     String note = institution.getName().equals(name) ? "" : "Change institution name from " + institution.getName() + " to " + name;
                     note = institution.getColor().equals(color) ? note : !note.equals("") ? note + ", change color from " + institution.getColor() + " to " + color : "Change color from " + institution.getColor() + " to " + color;
                     note = institution.getShortName().equals(shortName) ? note : !note.equals("") ? note + ", change short name from " + institution.getShortName() + " to " + shortName : "Change short name from " + institution.getShortName() + " to " + shortName;
                     note = institution.getBusiness_address().equals(business_address) ? note : !note.equals("") ? note + ", change address from " + institution.getBusiness_address() + " to " + business_address : "Change address from " + institution.getBusiness_address() + " to " + business_address;
                     note = institution.getBusinessType() == businessType ? note : !note.equals("") ? note + ", change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName() : "Change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName();
-                    retVal = jdbcTemplate.update(SQL, new Object[]{name, shortName, color, institution.getCode(), businessType, note, business_address});
+                    jdbcTemplate.update(SQL, new Object[]{name, shortName, color, institution.getCode(), businessType, note, business_address});
+                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, switch_code) VALUES(?, ?, ?, ?, now(), ?, '')";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{port, institution.getStatus(), publickeylocation, code, name});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
                     else 
@@ -439,9 +459,9 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     switch (actionType) {
                         case "deactivate":
                         case "activate":
-                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = ?";
+                            SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = ?";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id, actionType});
-                            SQL = "UPDATE tbl_financial_institutions SET status = ? WHERE code = ?";
+                            SQL = "UPDATE ajiswitch_db.tbl_nodes SET is_active = ? WHERE institution_code = ?";
                             int acInt = actionType.equals("deactivate") ? -1 : 1;
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{acInt, institutions.get(0).getCode()});
                             if (retVal > 0 && retVal2 > 0)
@@ -449,19 +469,23 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             else
                                 return responseManager.ResponseInternalServerError();
                         case "edit":
-                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = 'edit'";
+                            SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getShortName(), institutions.get(0).getColor(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address(), institutions.get(0).getCode()});
+                            jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getShortName(), institutions.get(0).getColor(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address(), institutions.get(0).getCode()});
+                            SQL = "UPDATE ajiswitch_db.tbl_nodes SET port_number = ?, publickeylocation = ?, institution_name = ? WHERE institution_code = ?";
+                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getPort_number(), institutions.get(0).getPublickeylocation(), institutions.get(0).getName(), institutions.get(0).getCode()});
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseAccepted();
                             else
                                 return responseManager.ResponseInternalServerError();
                         case "create":
-                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = 'create'";
+                            SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            SQL = "INSERT into tbl_financial_institutions(name, shortName, color, code, businessType, date_created, business_address) VALUES(?, ?, ?, ?, ?, now(), ?)";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getShortName(), institutions.get(0).getColor(), institutions.get(0).getCode(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address()});
+                            SQL = "INSERT into tbl_financial_institutions(name, shortName, color, code, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
+                            jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getShortName(), institutions.get(0).getColor(), institutions.get(0).getCode(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address()});
+                            SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, 1, ?, ?, ?, now())";
+                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getPort_number(), institutions.get(0).getPublickeylocation(), institutions.get(0).getCode(), institutions.get(0).getName()});
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseAccepted();
                             else
@@ -499,7 +523,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     switch (actionType) {
                         case "deactivate":
                         case "activate":
-                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = ?";
+                            SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = ?";
 //                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = ?";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id, actionType});
 //                            SQL = "UPDATE tbl_financial_institutions SET status = ? WHERE code = ?";
@@ -510,7 +534,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             else
                                 return responseManager.ResponseInternalServerError();
                         case "edit":
-                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = 'edit'";
+                            SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
 //                            SQL = "UPDATE tbl_financial_institutions SET name = ?, businessType = ?, business_address = ? WHERE code = ?";
 //                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address(), institutions.get(0).getCode()});
@@ -519,7 +543,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             else
                                 return responseManager.ResponseInternalServerError();
                         case "create":
-                            SQL = "DELETE FROM tbl_financial_institutions_pendings WHERE id = ? AND actionType = 'create'";
+                            SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
 //                            SQL = "INSERT into tbl_financial_institutions(name, code, businessType, date_created, business_address) VALUES(?, ?, ?, now(), ?)";
 //                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getCode(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address()});
@@ -866,6 +890,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             
             response.setId(rs.getInt("id"));
             response.setName(rs.getString("name"));
+            response.setPort_number(rs.getInt("port_number"));
+            response.setPublickeylocation(rs.getString("publickeylocation"));
             response.setShortName(rs.getString("shortName"));
             response.setCode(rs.getString("code"));
             response.setColor(rs.getString("color"));
@@ -886,6 +912,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             
             response.setId(rs.getInt("id"));
             response.setName(rs.getString("name"));
+            response.setPort_number(rs.getInt("port_number"));
+            response.setPublickeylocation(rs.getString("publickeylocation"));
             response.setShortName(rs.getString("shortName"));
             response.setCode(rs.getString("code"));
             response.setColor(rs.getString("color"));

@@ -14,6 +14,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import com.transgate.api.interfaces.GenericInterface;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  *
@@ -74,6 +76,51 @@ public class GenericController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.GetTerminalTypes();
+    }
+    
+    @RequestMapping(value = "/settlements", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetSettlements(start, end);
+    }
+    
+    @RequestMapping(value = "/settlements/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetSettlements(institution, start, end);
+    }
+    
+    @RequestMapping(value = "/cards/settlements", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardsSettlements(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardsSettlements(start, end);
+    }
+    
+    @RequestMapping(value = "/cards/settlements/acq/{acq}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardsSettlementsByAcquirer(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("acq") String acq) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardsSettlementsByAcquirer(acq, start, end);
+    }
+    
+    @RequestMapping(value = "/cards/settlements/iss/{iss}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardsSettlements(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("iss") String iss) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardsSettlementsByIssuer(iss, start, end);
     }
     
 }
