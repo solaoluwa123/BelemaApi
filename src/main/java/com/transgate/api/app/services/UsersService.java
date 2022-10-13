@@ -222,28 +222,24 @@ public class UsersService implements UsersInterface {
                 }
                 
                 if (userRoleid == 7) {
-                    SQL = "SELECT a.id, a.institution_id, b.terminal_owner_id, b.terminal_owner_name "
+                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
-                            + "LEFT JOIN sparkpayweb_db.tbl_terminal_owners b "
-                            + "ON a.institution_id = b.terminal_owner_id "
                             + "WHERE a.user_email = ?";
                     List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
                     if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("terminal_owner_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("terminal_owner_name"));
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
                 
                 if (userRoleid == 8) {
-                    SQL = "SELECT a.id, a.institution_id, b.ptsp_id, b.ptsp_name "
+                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
-                            + "LEFT JOIN sparkpayweb_db.ptsp b "
-                            + "ON a.institution_id = b.ptsp_id "
                             + "WHERE a.user_email = ?";
                     List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
                     if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("ptsp_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("ptsp_name"));
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
                 

@@ -160,6 +160,7 @@ public class PTSPsService implements PTSPsInterface {
                 inString.append(",");
             }
             inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
             if (inString.toString().equals(""))
                 inString = inString.append("(-1");
             inString = inString.append(")");

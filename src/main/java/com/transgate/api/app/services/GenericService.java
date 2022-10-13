@@ -14,6 +14,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
@@ -245,14 +246,116 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
-    public ResponseEntity GetCardsSettlementsByPTSP(String startDate, String endDate) {
+    public ResponseEntity GetSettlementsByMerchant(String merchant, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            List<String> merchantIds = new ArrayList<>(Arrays.asList(merchant.split(",")));
+            StringBuilder inString = new StringBuilder("(");
+            for (int i = 0; i < merchantIds.size(); i++) {
+                inString.append("'").append(merchantIds.get(i)).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.cbn_bank_code FROM sparkpay.terminals a WHERE a.merchant_id IN " + inString.toString() + " GROUP BY a.cbn_bank_code";
+            rows = jdbcTemplate.queryForList(SQL);
+            inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("cbn_bank_code")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            
+            SQL = "SELECT a.acquirer_id FROM sparkpayweb_db.tbl_financial_institutions a "
+                    + "WHERE a.bank_code IN " + inString.toString();
+            rows = jdbcTemplate.queryForList(SQL);
+            inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("acquirer_id")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            
+            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
+                    + "FROM sparkpay.tbl_settlement_details a "
+                    + ""
+                    + "WHERE a.acquirer_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetCardsSettlementsByPTSP(String ptsp, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
             List<Map<String, Object>> rows;
+            SQL = "SELECT a.merchant_id FROM sparkpayweb_db.tbl_map_merchants_ptsps a WHERE a.ptsp_id = ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{ptsp});
+            StringBuilder inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("merchant_id")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            
+            SQL = "SELECT a.cbn_bank_code FROM sparkpay.terminals a WHERE a.merchant_id IN " + inString.toString() + " GROUP BY a.cbn_bank_code";
+            rows = jdbcTemplate.queryForList(SQL);
+            inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("cbn_bank_code")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            
+            SQL = "SELECT a.acquirer_id FROM sparkpayweb_db.tbl_financial_institutions a "
+                    + "WHERE a.bank_code IN " + inString.toString();
+            rows = jdbcTemplate.queryForList(SQL);
+            inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("acquirer_id")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            
             SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
                     + "FROM sparkpay.tbl_settlement_details a "
-                    + "WHERE a.settlement_date BETWEEN ? AND ?";
+                    + ""
+                    + "WHERE a.acquirer_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             
             networkResponse.setCode(200);

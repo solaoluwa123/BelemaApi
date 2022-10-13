@@ -18,8 +18,9 @@ public interface GenericInterface {
     public ResponseEntity GetStates();
     public ResponseEntity GetResponseCodes();
     public ResponseEntity GetSettlements(String startDate, String endDate);
-    public ResponseEntity GetCardsSettlementsByPTSP(String startDate, String endDate);
+    public ResponseEntity GetCardsSettlementsByPTSP(String ptsp, String startDate, String endDate);
     public ResponseEntity GetSettlements(String institution, String startDate, String endDate);
+    public ResponseEntity GetSettlementsByMerchant(String merchant, String startDate, String endDate);
     public ResponseEntity GetCardsSettlements(String startDate, String endDate);
     public ResponseEntity GetCardsSettlementsByAcquirer(String acquirer, String startDate, String endDate);
     public ResponseEntity GetCardsSettlementsByIssuer(String issuer, String startDate, String endDate);

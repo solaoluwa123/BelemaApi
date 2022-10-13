@@ -141,6 +141,9 @@ public class TerminalsService implements TerminalsInterface {
                     inString.append(",");
                 }
                 inString = inString.deleteCharAt(inString.length() - 1);
+                if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+                if (inString.toString().equals(""))
+                    inString = inString.append("(-1");
                 inString = inString.append(")");
                 SQL = "SELECT * FROM sparkpay.terminals "
                 + "WHERE merchant_id IN " +  inString.toString();
@@ -158,6 +161,7 @@ public class TerminalsService implements TerminalsInterface {
                     inString.append(",");
                 }
                 inString = inString.deleteCharAt(inString.length() - 1);
+                if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
                 if (inString.toString().equals(""))
                     inString = inString.append("(-1");
                 inString = inString.append(")");

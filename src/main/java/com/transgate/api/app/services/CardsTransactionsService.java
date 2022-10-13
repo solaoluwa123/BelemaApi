@@ -116,6 +116,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 inString.append(",");
             }
             inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
             if (inString.toString().equals(""))
                 inString = inString.append("(-1");
             inString = inString.append(")");
@@ -159,7 +160,9 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 inString.append("'").append(row.get("merchant_id")).append("'");
                 inString.append(",");
             }
-            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
             inString = inString.append(")");
             List<CardsTransactionModel> transactions;
             SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id IN "+inString.toString()+" ORDER BY id DESC";
@@ -233,6 +236,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 inString.append(",");
             }
             inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
             if (inString.toString().equals(""))
                 inString = inString.append("(-1");
             inString = inString.append(")");

@@ -123,4 +123,22 @@ public class GenericController {
         return GenericInterface.GetCardsSettlementsByIssuer(iss, start, end);
     }
     
+    @RequestMapping(value = "/cards/settlements/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSettlementsByMerchant(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("merchant") String merchant) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetSettlementsByMerchant(merchant, start, end);
+    }
+    
+    @RequestMapping(value = "/cards/settlements/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardsSettlementsByPTSP(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("ptsp") String ptsp) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardsSettlementsByPTSP(ptsp, start, end);
+    }
+    
 }
