@@ -12,6 +12,7 @@ import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -140,6 +141,25 @@ public class TerminalsService implements TerminalsInterface {
                     inString.append(",");
                 }
                 inString = inString.deleteCharAt(inString.length() - 1);
+                inString = inString.append(")");
+                SQL = "SELECT * FROM sparkpay.terminals "
+                + "WHERE merchant_id IN " +  inString.toString();
+                terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
+                SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+                minDate = jdbcTemplate.queryForObject(SQL, String.class);
+                SQL = "SELECT MAX(date_time) from sparkpay.terminals ";
+                maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            }
+            else if (column.equals("merchant_id")) {
+                List<String> merchantIds = new ArrayList<>(Arrays.asList(id.split(",")));
+                StringBuilder inString = new StringBuilder("(");
+                for (int i = 0; i < merchantIds.size(); i++) {
+                    inString.append("'").append(merchantIds.get(i)).append("'");
+                    inString.append(",");
+                }
+                inString = inString.deleteCharAt(inString.length() - 1);
+                if (inString.toString().equals(""))
+                    inString = inString.append("(-1");
                 inString = inString.append(")");
                 SQL = "SELECT * FROM sparkpay.terminals "
                 + "WHERE merchant_id IN " +  inString.toString();

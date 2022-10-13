@@ -12,6 +12,7 @@ import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -136,16 +137,28 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
     public ResponseEntity GetByMerchantUser(String merchant) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
+            List<String> merchantIds = new ArrayList<>(Arrays.asList(merchant.split(",")));
+            StringBuilder inString = new StringBuilder("(");
+            for (int i = 0; i < merchantIds.size(); i++) {
+                inString.append("'").append(merchantIds.get(i)).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
             String SQL;
             List<Map<String, Object>> rows;
-            SQL = "SELECT cbn_bank_code FROM sparkpay.terminals WHERE merchant_id = ?";
-            rows = jdbcTemplate.queryForList(SQL, new Object[]{merchant});
-            StringBuilder inString = new StringBuilder("(");
+            SQL = "SELECT cbn_bank_code FROM sparkpay.terminals WHERE merchant_id IN "+inString.toString();
+            rows = jdbcTemplate.queryForList(SQL);
+            inString = new StringBuilder("(");
             for (final Map<String, Object> row : rows) {
                 inString.append(row.get("cbn_bank_code"));
                 inString.append(",");
             }
             inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
             inString = inString.append(")");
             List<CardsFinancialInstitutionModel> cardFI;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_financial_institutions "

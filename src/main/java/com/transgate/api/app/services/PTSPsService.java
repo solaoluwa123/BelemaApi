@@ -12,6 +12,7 @@ import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -152,14 +153,24 @@ public class PTSPsService implements PTSPsInterface {
     public ResponseEntity GetByMerchant(String merchant_id) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
+            List<String> merchantIds = new ArrayList<>(Arrays.asList(merchant_id.split(",")));
+            StringBuilder inString = new StringBuilder("(");
+            for (int i = 0; i < merchantIds.size(); i++) {
+                inString.append("'").append(merchantIds.get(i)).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
             String SQL;
             List<PTSPModel> ptsps;
             SQL = "SELECT a.id, a.ptsp_id, a.ptsp_name, a.ptsp_date, a.delete_flag, a.edit_flag, a.create_flag "
                     + "FROM sparkpayweb_db.ptsp a "
                     + "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b "
                     + "ON a.ptsp_id = b.ptsp_id "
-                + "WHERE b.merchant_id = ?";
-            ptsps = jdbcTemplate.query(SQL, new Object[]{merchant_id}, new PTSPsMapper());
+                + "WHERE b.merchant_id IN " + inString.toString();
+            ptsps = jdbcTemplate.query(SQL, new PTSPsMapper());
             SQL = "SELECT MIN(ptsp_date) from sparkpayweb_db.ptsp";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(ptsp_date) from sparkpayweb_db.ptsp";

@@ -139,7 +139,7 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.CreateOther(sessiontoken, user.getRole(), user.getUsername(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getRoleid(), user.getSecurity(), user.getInstitution(), user.getInstitutionName());
+        return usersInterface.CreateOther(sessiontoken, user.getRole(), user.getUsername(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getRoleid(), user.getSecurity(), user.getInstitutionid_as_string(), user.getInstitutionName());
     }
     
     @RequestMapping(value = "/users/{userid}/{username}", method = RequestMethod.DELETE, headers = "Accept=application/json")

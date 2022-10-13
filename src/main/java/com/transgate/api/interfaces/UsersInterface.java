@@ -28,7 +28,7 @@ public interface UsersInterface {
     
     public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password);
     
-    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname);
+    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid_as_string, String institutionname);
 
     public ResponseEntity Delete(String sessiontoken, int userid, String username);
     

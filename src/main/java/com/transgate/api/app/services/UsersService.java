@@ -19,6 +19,7 @@ import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
@@ -210,15 +211,13 @@ public class UsersService implements UsersInterface {
                 }
                 
                 if (userRoleid == 6) {
-                    SQL = "SELECT a.id, a.institution_id, b.merchant_id, b.merchant_name "
+                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
-                            + "LEFT JOIN sparkpay.merchants b "
-                            + "ON a.institution_id = b.merchant_id "
                             + "WHERE a.user_email = ?";
                     List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
                     if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("merchant_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("merchant_name"));
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
                 
@@ -611,6 +610,15 @@ public class UsersService implements UsersInterface {
         }
     }
     
+    public void MapUserToMerchants(String username, List<String> merchants) {
+        for (int i = 0; i < merchants.size(); i++) {
+            String SQL = "INSERT INTO sparkpayweb_db.tbl_map_user_to_merchants "
+                    + "(username, merchant_id) "
+                    + "VALUES(?, ?)";
+            jdbcTemplate.update(SQL, new Object[]{username, merchants.get(i)});
+        }
+    }
+    
     @Override
     public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname){
         try {
@@ -636,6 +644,10 @@ public class UsersService implements UsersInterface {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
                         if (retval > 0){
+                            if (roleid == 6) {
+                                List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
+                                MapUserToMerchants(email_address, merchantIds);    
+                            }
                             String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
                             SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
                             jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
@@ -665,6 +677,10 @@ public class UsersService implements UsersInterface {
                     SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
                     retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
                     if (retval > 0) {
+                        if (roleid == 6) {
+                            List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
+                            MapUserToMerchants(email_address, merchantIds);    
+                        }
                         String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
                         SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
                         jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});

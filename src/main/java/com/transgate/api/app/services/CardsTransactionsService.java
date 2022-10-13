@@ -14,6 +14,7 @@ import com.transgate.api.util.TransactionsCodeInterpreter;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -225,17 +226,27 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         try {
             String SQL;
             List<CardsTransactionModel> transactions;
-            SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id = ? ORDER BY id DESC";
-            transactions = jdbcTemplate.query(SQL, new Object[]{merchantid}, new CardsTransactionsMapper());
+            List<String> merchantIds = new ArrayList<>(Arrays.asList(merchantid.split(",")));
+            StringBuilder inString = new StringBuilder("(");
+            for (int i = 0; i < merchantIds.size(); i++) {
+                inString.append("'").append(merchantIds.get(i)).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+            SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id IN "+inString.toString()+" ORDER BY id DESC";
+            transactions = jdbcTemplate.query(SQL, new CardsTransactionsMapper());
             
             SQL = "SELECT SUM(a.amount) as totalValue "
-                + "FROM sparkpay.transactions a WHERE a.merchant_id = ?";
-            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, Double.class);
+                + "FROM sparkpay.transactions a WHERE a.merchant_id IN "+inString.toString();
+            Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
             totalValue = totalValue != null ? totalValue : 0;
-            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE merchant_id = ?";
-            String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, String.class);
-            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE merchant_id = ?";
-            String maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, String.class);
+            SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE merchant_id IN "+inString.toString();
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE merchant_id IN "+inString.toString();
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
            
             networkResponse.setCode(200);
