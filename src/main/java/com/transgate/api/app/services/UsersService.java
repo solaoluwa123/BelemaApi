@@ -244,7 +244,7 @@ public class UsersService implements UsersInterface {
                 }
                 
                 List<MenuModel> menu;
-                if (userRoleid < 4){
+                if (userRoleid < 5){
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
