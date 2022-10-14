@@ -9,6 +9,7 @@ import com.transgate.api.interfaces.FinancialInstitutionsInterface;
 import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.models.FinancialInstitutionModel;
 import com.transgate.api.models.InstitutionTypesModel;
+import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.util.Randomizer;
@@ -712,9 +713,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             String SQL;
             int userrole = GetUserRole(creator, sessiontoken);
             ResponseEntity CreateLoginForContact = usersInterface.Create(sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
-            System.out.println("CreateLoginForContact.getBody()CreateLoginForContact.getBody()CreateLoginForContact.getBody()" + CreateLoginForContact.getBody());
-            NetworkResponse networkResponse = (NetworkResponse) CreateLoginForContact.getBody();
-            if (networkResponse.getCode() == 200) {
+            LoginResponse loginResponse = (LoginResponse) CreateLoginForContact.getBody();
+            if (loginResponse.getCode() == 201) {
                 switch (userrole) {
                     case 1:
                     case 2:
@@ -727,7 +727,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     case 3:
                         boolean userPending = CheckContactPending(email_address, "create");
                         if (userPending) {
-                            networkResponse = new NetworkResponse();
+                            NetworkResponse networkResponse = new NetworkResponse();
                             networkResponse.setCode(200);
                             networkResponse.setStatus("failed");
                             networkResponse.setMessage("Contact with email - " + email_address + " is already pending for creation");
@@ -744,7 +744,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                 }
             }
             else {
-                return responseManager.ResponseBadRequest();
+                return responseManager.ResponseInternalServerError();
             }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());

@@ -28,7 +28,7 @@ public interface TransactionsInterface {
     
     public ResponseEntity Get(String institutioncode);
     
-    public ResponseEntity LogDispute(String sessiontoken, String sessionId, String amount, String wallet, String destinationInstitution, String type, String username);
+    public ResponseEntity LogDispute(String sessiontoken, String sessionId, String amount, String wallet, String sourceInstitution, String type, String username);
     
     public ResponseEntity GetDisputes(String institutioncode);
     

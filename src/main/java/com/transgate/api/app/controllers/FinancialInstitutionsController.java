@@ -189,7 +189,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.GetAllContacts(code);
+        return financialInstitutionsInterface.GetAllContacts(sessiontoken, code);
     }
     
     @RequestMapping(value = "/financial-institutions/contacts/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

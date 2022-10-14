@@ -130,7 +130,7 @@ public class UsersService implements UsersInterface {
             SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
             int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
             if (attemptsLeft == 0) {
-                SQL = "UPDATE tbl_user_details SET unlock_account_in = 30 WHERE email_address = ?";
+                SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
                 jdbcTemplate.update(SQL, new Object[]{username});
                 response.setCode(404);
                 response.setStatus("failed");
@@ -556,14 +556,15 @@ public class UsersService implements UsersInterface {
             int userrole = GetUserRole(creator, sessiontoken);
             String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
             
-            String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+            String code = roleid == 4 ? hashPassword : randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
+            int enabled = roleid == 4 ? 1 : 0;
             switch (userrole) {
                 case 1:
 //                    SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
 //                    jdbcTemplate.update(SQL, new Object[]{ref, code, email});
-                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 0, ?)";
-                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, ref});
+                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), ?, ?)";
+                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, enabled, ref});
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});

@@ -141,7 +141,7 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.LogDispute(sessiontoken, dispute.getSrcSessionid(), dispute.getSrcAmount(), dispute.getSrcAccountNumber(), dispute.getDestInstitutioncode(), dispute.getType(), dispute.getUsername());
+        return transactionsInterface.LogDispute(sessiontoken, dispute.getSrcSessionid(), dispute.getSrcAmount(), dispute.getSrcAccountNumber(), dispute.getSrcInstitutioncode(), dispute.getType(), dispute.getUsername());
     }
     
     @RequestMapping(value = "/transactions/disputes/approve", method = RequestMethod.POST, headers = "Accept=application/json")
