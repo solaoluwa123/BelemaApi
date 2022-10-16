@@ -9,11 +9,11 @@
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.switch</groupId>
-    <artifactId>transgatepayapi</artifactId>
+    <artifactId>sparkpayapi</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>transgatepayapi</name>
+    <name>sparkpayapi</name>
     <description>Demo project for Spring Boot</description>
-    <packaging>war</packaging>
+    <!--<packaging>war</packaging>-->
     <properties>
         <java.version>1.8</java.version>
     </properties>

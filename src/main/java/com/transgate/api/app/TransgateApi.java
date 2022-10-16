@@ -13,7 +13,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 
 class TaskHelper extends TimerTask {
-    private static final String BASEURI = "http://localhost:82/transgatepayapi";
+    private static final String BASEURI = "http://localhost:82/sparkpayapi";
     
     public void executeGet(String targetURL) {
         HttpURLConnection connection = null;
