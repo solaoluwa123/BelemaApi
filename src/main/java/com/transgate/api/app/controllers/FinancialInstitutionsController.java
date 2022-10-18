@@ -149,13 +149,13 @@ public class FinancialInstitutionsController {
         return financialInstitutionsInterface.CreateContact(sessiontoken, user.getRole(), user.getInstitution(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getSecurity());
     }
     
-    @RequestMapping(value = "/financial-institutions/contacts/{id}/{username}", method = RequestMethod.DELETE, headers = "Accept=application/json")
+    @RequestMapping(value = "/financial-institutions/contacts/{email}/{username}", method = RequestMethod.DELETE, headers = "Accept=application/json")
     public ResponseEntity DeleteContact(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
-            @PathVariable("id") int id, @PathVariable("username") String username) {
+            @PathVariable("email") String email, @PathVariable("username") String username) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.DeleteContact(sessiontoken, id, username);
+        return financialInstitutionsInterface.DeleteContact(sessiontoken, email, username);
     }
     
     @RequestMapping(value = "/financial-institutions/contacts/{id}", method = RequestMethod.GET, headers = "Accept=application/json")

@@ -37,7 +37,7 @@ public interface FinancialInstitutionsInterface {
     
     public ResponseEntity CreateContact(String sessiontoken, String creator, String institution, String firstname, String surname, String phone_number, String email_address, String security);
     
-    public ResponseEntity DeleteContact(String sessiontoken, int id, String username);
+    public ResponseEntity DeleteContact(String sessiontoken, String email, String username);
     
     public ResponseEntity GetContactById(String sessiontoken, int id);
     

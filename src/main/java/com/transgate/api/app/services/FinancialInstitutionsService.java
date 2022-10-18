@@ -231,7 +231,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     case 1:
                         SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
                         jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, switch_code) VALUES(?, 1, ?, ?, now(), ?, '')";
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, 1, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name});
                         if (retval > 0) 
                             return responseManager.ResponseAccepted();
@@ -248,7 +248,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                         }
                         SQL = "INSERT INTO tbl_financial_institutions_pendings(code, name, shortName, color, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', ?)";
                         jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                        SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, switch_code) VALUES(?, 1, ?, ?, now(), ?, '')";
+                        SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, 1, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name});
                         if (retval > 0) 
                             return responseManager.ResponseAccepted();
@@ -432,7 +432,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     note = institution.getBusiness_address().equals(business_address) ? note : !note.equals("") ? note + ", change address from " + institution.getBusiness_address() + " to " + business_address : "Change address from " + institution.getBusiness_address() + " to " + business_address;
                     note = institution.getBusinessType() == businessType ? note : !note.equals("") ? note + ", change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName() : "Change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName();
                     jdbcTemplate.update(SQL, new Object[]{name, shortName, color, institution.getCode(), businessType, note, business_address});
-                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, switch_code) VALUES(?, ?, ?, ?, now(), ?, '')";
+                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
                     retVal = jdbcTemplate.update(SQL, new Object[]{port, institution.getStatus(), publickeylocation, code, name});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
@@ -654,6 +654,50 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         }
     }
     
+    public ResponseEntity GetContactByEmail(String sessiontoken, String email) {
+        UserModel response = new UserModel();
+        try {
+            String SQL;
+            SQL = "SELECT a.id, a.financial_institution_code, a.firstname, a.surname, a.phone_number, a.email_address, a.date_created, "
+                    + "b.name as institutionname "
+                    + "FROM tbl_financial_institution_contacts a "
+                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "ON a.financial_institution_code = b.code "
+                    + "WHERE a.email_address = ?";
+            List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{email}, new ContactMapper());
+            if (details.size() > 0) {
+                response.setCode(200);
+                response.setStatus("success");
+                response.setMessage("Contact detail");
+                response.setId(details.get(0).getId());
+                response.setInstitution(details.get(0).getInstitution());
+                response.setFirstname(details.get(0).getFirstname());
+                response.setSurname(details.get(0).getSurname());
+                response.setPhone_number(details.get(0).getPhone_number());
+                response.setEmail_address(details.get(0).getEmail_address());
+                response.setDate_created(details.get(0).getDate_created());
+                response.setInstitutionName(details.get(0).getInstitutionName());
+                return responseManager.ResponseOk(response);
+            }
+            else {
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Contact not found");
+                return responseManager.ResponseNotFound(response);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println(ex);
+            if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
+                response.setCode(400);
+                response.setStatus("failed");
+                response.setMessage("Invalid id");
+                return responseManager.ResponseOk(response);
+            }
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
     @Override
     public ResponseEntity GetContactById(String sessiontoken, int id) {
         UserModel response = new UserModel();
@@ -753,43 +797,47 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity DeleteContact(String sessiontoken, int id, String username) {
+    public ResponseEntity DeleteContact(String sessiontoken, String email, String username) {
         try {
             String SQL;
-            ResponseEntity responseEntity = GetContactById(sessiontoken, id);
             int userrole = GetUserRole(username, sessiontoken);
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "DELETE FROM tbl_financial_institution_contacts WHERE id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                    SQL = "DELETE FROM sparkpayweb_db.tbl_users WHERE username = ?";
+                    jdbcTemplate.update(SQL, new Object[]{email});
+                    SQL = "DELETE FROM tbl_user_details WHERE username = ? || email_address = ?";
+                    jdbcTemplate.update(SQL, new Object[]{email, email});
+                    SQL = "DELETE FROM tbl_financial_institution_contacts WHERE email_address = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{email});
                     if (retVal > 0)
                         return responseManager.ResponseDeleted();
                     else
                         return responseManager.ResponseInternalServerError();
-                case 2:
-                    UserModel contact = responseEntity != null ? (UserModel) responseEntity.getBody() : new UserModel();
-                    if (contact.getCode() == 404) {
-                        NetworkResponse networkResponse = new NetworkResponse();
-                        networkResponse.setCode(contact.getCode());
-                        networkResponse.setStatus(contact.getStatus());
-                        networkResponse.setMessage(contact.getMessage());
-                        return responseManager.ResponseNotFound(networkResponse);
-                    }
-                    boolean userPending = CheckContactPending(contact.getEmail_address(), "delete");
-                    if (userPending) {
-                        NetworkResponse networkResponse = new NetworkResponse();
-                        networkResponse.setCode(200);
-                        networkResponse.setStatus("failed");
-                        networkResponse.setMessage("Contact already pending for delete");
-                        return responseManager.ResponseOk(networkResponse);
-                    }
-                    SQL = "INSERT INTO tbl_financial_institution_contacts_operations(financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'delete', 'Delete contact', now())";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{contact.getInstitution(), contact.getFirstname(), contact.getSurname(), contact.getPhone_number(), contact.getEmail_address()});
-                    if (retVal > 0) 
-                        return responseManager.ResponseDeleted();
-                    else
-                        return responseManager.ResponseInternalServerError();
+//                case 2:
+//                    ResponseEntity responseEntity = GetContactByEmail(sessiontoken, email);
+//                    UserModel contact = responseEntity != null ? (UserModel) responseEntity.getBody() : new UserModel();
+//                    if (contact.getCode() == 404) {
+//                        NetworkResponse networkResponse = new NetworkResponse();
+//                        networkResponse.setCode(contact.getCode());
+//                        networkResponse.setStatus(contact.getStatus());
+//                        networkResponse.setMessage(contact.getMessage());
+//                        return responseManager.ResponseNotFound(networkResponse);
+//                    }
+//                    boolean userPending = CheckContactPending(contact.getEmail_address(), "delete");
+//                    if (userPending) {
+//                        NetworkResponse networkResponse = new NetworkResponse();
+//                        networkResponse.setCode(200);
+//                        networkResponse.setStatus("failed");
+//                        networkResponse.setMessage("Contact already pending for delete");
+//                        return responseManager.ResponseOk(networkResponse);
+//                    }
+//                    SQL = "INSERT INTO tbl_financial_institution_contacts_operations(financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'delete', 'Delete contact', now())";
+//                    retVal = jdbcTemplate.update(SQL, new Object[]{contact.getInstitution(), contact.getFirstname(), contact.getSurname(), contact.getPhone_number(), contact.getEmail_address()});
+//                    if (retVal > 0) 
+//                        return responseManager.ResponseDeleted();
+//                    else
+//                        return responseManager.ResponseInternalServerError();
                 default:
                     return responseManager.ResponseUnathorized();
             }

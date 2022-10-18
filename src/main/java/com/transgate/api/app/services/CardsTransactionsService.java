@@ -53,7 +53,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a";
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
@@ -127,7 +127,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a WHERE a.terminal_id IN "+inString.toString();
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
@@ -160,6 +160,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 inString.append("'").append(row.get("merchant_id")).append("'");
                 inString.append(",");
             }
+            inString.deleteCharAt(inString.length() - 1);
             if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
             if (inString.toString().equals(""))
                 inString = inString.append("(-1");
@@ -171,7 +172,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a WHERE a.merchant_id IN "+inString.toString();
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
@@ -203,7 +204,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a WHERE a.terminal_id = ?";
             Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid}, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE terminal_id = ?";
             String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid}, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE terminal_id = ?";
@@ -246,7 +247,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a WHERE a.merchant_id IN "+inString.toString();
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE merchant_id IN "+inString.toString();
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE merchant_id IN "+inString.toString();
@@ -278,7 +279,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a WHERE a.acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
             Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institution, institution}, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions WHERE acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
             String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{institution, institution}, String.class);
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions WHERE acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
@@ -409,7 +410,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT SUM(a.amount) as totalValue "
                 + "FROM sparkpay.transactions a " + whereQuery;
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
@@ -527,7 +528,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     break;
             }
             
-            totalValue = totalValue != null ? totalValue : 0;
+            totalValue = totalValue != null ? totalValue / 100 : 0;
             SQL = "SELECT "
                     + "MIN(b.ncs_date_time) "
                     + "FROM sparkpayweb_db.tbl_disputes a "
@@ -586,7 +587,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setDate_created(rs.getString("date_created"));
             tnx.setMessage_type(rs.getString("message_type"));
             tnx.setPan(rs.getString("pan"));
-            tnx.setAmount(rs.getString("amount"));
+            Double amount = rs.getString("amount") != null && rs.getString("amount") != "" ? Double.parseDouble(rs.getString("amount")) / 100 : 0.00;
+            tnx.setAmount(amount.toString());
             tnx.setSystem_trace_number(rs.getString("system_trace_number"));
             tnx.setRetrieval_ref_number(rs.getString("retrieval_ref_number"));
             tnx.setDestination_acquiring_institution_id(rs.getString("destination_acquiring_institution_id"));
@@ -611,7 +613,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setResponse_code(rs.getString("response_code"));
             tnx.setTransaction_date(rs.getString("transaction_date"));
             tnx.setTransaction_time(rs.getString("transaction_time"));
-            tnx.setAmount(rs.getString("amount"));
+            Double amount = rs.getString("amount") != null && rs.getString("amount") != "" ? Double.parseDouble(rs.getString("amount")) / 100 : 0.00;
+            tnx.setAmount(amount.toString());
             tnx.setRetrieval_ref_number(rs.getString("retrieval_ref_number"));
             tnx.setAcquirer_institution_id(rs.getString("acquirer_institution_id"));
             tnx.setPan(rs.getString("pan"));
