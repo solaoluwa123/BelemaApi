@@ -101,6 +101,20 @@ public class TransactionsService implements TransactionsInterface {
         return transactions;
     }
     
+    public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String source, String responsecode) {
+        String SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code "
+                    + "WHERE a.session_id = ? AND a.source_institution_code = ? AND a.response_code = ?";
+        
+        List<FullTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{sessionId, source, responsecode}, new FullTransactionMapper());
+        return transactions;
+    }
+    
     @Override
     public ResponseEntity Get() {
         return Get(0);
@@ -591,7 +605,7 @@ public class TransactionsService implements TransactionsInterface {
                         + "ON a.source_institution_code = b.code "
                         + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                         + "ON a.destination_institution_code = c.code "
-                    + "WHERE dispute.id = ?";
+                    + "WHERE dispute.id = ? ORDER BY dispute.id DESC";
                 transactions = jdbcTemplate.query(SQL, new Object[]{id}, new DisputeTransactionMapper());
             }
             else {
@@ -609,7 +623,7 @@ public class TransactionsService implements TransactionsInterface {
                                 + "ON a.source_institution_code = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                                 + "ON a.destination_institution_code = c.code"
-                                + " ORDER BY a.id DESC ";
+                                + " ORDER BY dispute.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.amount) as totalValue "
                                 + "FROM tbl_disputes dispute "
@@ -628,7 +642,7 @@ public class TransactionsService implements TransactionsInterface {
                                 + "ON a.source_institution_code = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                                 + "ON a.destination_institution_code = c.code WHERE dispute.resolved = 1"
-                                + " ORDER BY a.id DESC ";
+                                + " ORDER BY dispute.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.amount) as totalValue "
                                 + "FROM tbl_disputes dispute "
@@ -650,7 +664,7 @@ public class TransactionsService implements TransactionsInterface {
                                 + "ON a.source_institution_code = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                                 + "ON a.destination_institution_code = c.code WHERE a.source_institution_code = " + code + " OR a.destination_institution_code = " + code+" "
-                                + "ORDER BY a.id DESC ";
+                                + "ORDER BY dispute.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.amount) as totalValue "
                                 + "FROM tbl_disputes dispute "
@@ -670,7 +684,7 @@ public class TransactionsService implements TransactionsInterface {
                                 + "ON a.source_institution_code = b.code "
                                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                                 + "ON a.destination_institution_code = c.code WHERE dispute.resolved = 1 AND (a.source_institution_code = " + code + " OR a.destination_institution_code = " + code + ")"
-                                + " ORDER BY a.id DESC ";
+                                + " ORDER BY dispute.id DESC ";
                             
                             String SQL2 = "SELECT SUM(a.amount) as totalValue "
                                 + "FROM tbl_disputes dispute "
@@ -739,8 +753,16 @@ public class TransactionsService implements TransactionsInterface {
                 return responseManager.ResponseOk(networkResponse);
             }
             
+//            List<FullTransactionModel> getTransaction = GetTransaction(sessionId, amount, sourceInstitution);
             List<FullTransactionModel> getTransaction = GetTransaction(sessionId, amount, sourceInstitution);
             if (getTransaction.size() > 0) {
+                if (!getTransaction.get(0).getSrcResponsecode().equals("00")) {
+                    NetworkResponse networkResponse = new NetworkResponse();
+                    networkResponse.setCode(404);
+                    networkResponse.setStatus("failed");
+                    networkResponse.setMessage("Declined Transaction cannot be logged for dispute");
+                    return responseManager.ResponseOk(networkResponse);
+                }
                 String SQL;
                 int userrole = GetUserRole(username, sessiontoken);
                 SQL = "INSERT into tbl_disputes(transactionSessionid, loggedBy, ownerInstitution, status, date_created) VALUES(?, ?, ?, '-1', now())";

@@ -556,9 +556,10 @@ public class UsersService implements UsersInterface {
             int userrole = GetUserRole(creator, sessiontoken);
             String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
             
-            String code = roleid == 4 ? hashPassword : randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+//            String code = roleid == 4 ? hashPassword : randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+            String code = hashPassword;
             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-            int enabled = roleid == 4 ? 1 : 0;
+            int enabled = 1;
             switch (userrole) {
                 case 1:
 //                    SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
@@ -635,8 +636,8 @@ public class UsersService implements UsersInterface {
                 case 1:
                     String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                     String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 0, ?)";
-                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, ref});
+                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
+                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, ref});
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
@@ -826,8 +827,8 @@ public class UsersService implements UsersInterface {
                             String reference = randomizer.GenerateReference();
                             String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-                            SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 0, ?)";
-                            jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address(), code, ref});
+                            SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
+                            jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address(), users.get(0).getSecurity(), ref});
                             SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getUsername(), users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getEmail_address(), users.get(0).getRoleid()});
                             if (retVal > 0 && retVal2 > 0){
@@ -873,6 +874,7 @@ public class UsersService implements UsersInterface {
                         + "from tbl_user_details_operations a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
+                        + "WHERE a.role < 4 "
                         + "ORDER BY a.id DESC";
             else 
                 SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
@@ -883,6 +885,7 @@ public class UsersService implements UsersInterface {
                         + "ON a.role = b.id "
                         + "LEFT JOIN tbl_map_card_users_institution c "
                         + "ON a.email_address = c.user_email "
+                        + "WHERE a.role > 4 "
                         + "ORDER BY a.id DESC";
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper2());
             networkResponse.setCode(200);

@@ -595,7 +595,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setTerminal_id(rs.getString("terminal_id"));
             tnx.setBin(rs.getString("bin"));
             tnx.setNcs_date_time(rs.getString("ncs_date_time"));
-            tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
+            tnx.setStatus_code_message(rs.getString("response_code") != null && rs.getString("response_code").toLowerCase() != "null" && rs.getString("response_code") != "" ? transactionsCodeInterpreter.GetResponse(rs.getString("response_code")) : "");
             return tnx;
         }
     }
