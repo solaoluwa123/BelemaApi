@@ -119,12 +119,12 @@ public class TransactionsController {
         return transactionsInterface.GetInsitutionTnxTrend(institutioncode, type, startDate, endDate);
     }
     
-    @RequestMapping(value = "/transactions/{id}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetOne(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("id") int id) {
+    @RequestMapping(value = "/transactions/{sessionid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetOne(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("sessionid") String sessionid) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(id);
+        return transactionsInterface.GetBySessionId(sessionid);
     }
     
     @RequestMapping(value = "/transactions/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")

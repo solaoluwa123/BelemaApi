@@ -528,7 +528,7 @@ public class GenericService implements GenericInterface {
                                 rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
                                 String merchant_id = rows.size() > 0 ? (String) rows.get(0).get("merchant_id") : "";
                                 for (final Map<String, Object> row : rows) {
-                                    SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE id = ?";
+                                    SQL = "UPDATE postxnprocessor.tbl_merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE id = ?";
                                     jdbcTemplate.update(SQL, new Object[]{row.get("merchant_name"), row.get("merchant_state"), row.get("merchant_country"), row.get("merchant_category_code"), id});
                                     SQL = "DELETE FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
                                     jdbcTemplate.update(SQL, new Object[]{id});

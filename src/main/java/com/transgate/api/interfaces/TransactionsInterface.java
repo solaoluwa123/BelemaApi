@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 public interface TransactionsInterface {
     public ResponseEntity Get();
     
+    public ResponseEntity GetBySessionId(String sessionid);
+    
     public ResponseEntity GetTransactionsVolume(String startDate, String endDate);
     
     public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate);

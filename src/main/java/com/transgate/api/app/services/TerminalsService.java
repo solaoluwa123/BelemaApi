@@ -53,7 +53,7 @@ public class TerminalsService implements TerminalsInterface {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpay.terminals WHERE id = ? AND edit_flag = 1";
+            SQL = "SELECT COUNT(*) FROM postxnprocessor.terminals WHERE id = ? AND edit_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{terminal_id}, int.class);
 
             found = totalRows > 0;
@@ -83,19 +83,19 @@ public class TerminalsService implements TerminalsInterface {
             String SQL;
             List<TerminalModel> terminals;
             if (!pending) {
-                SQL = "SELECT * FROM sparkpay.terminals "
+                SQL = "SELECT * FROM postxnprocessor.terminals "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
                     + "ORDER BY date_time DESC";
             }
             else {
-                SQL = "SELECT * FROM sparkpay.terminals "
+                SQL = "SELECT * FROM postxnprocessor.terminals "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY date_time DESC";
             }
             terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
-            SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+            SQL = "SELECT MIN(date_time) from postxnprocessor.terminals";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_time) from sparkpay.terminals";
+            SQL = "SELECT MAX(date_time) from postxnprocessor.terminals";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
            
@@ -121,13 +121,13 @@ public class TerminalsService implements TerminalsInterface {
             if (column.equals("acquiring_institution_id")) {
                 SQL = "SELECT bank_code FROM sparkpayweb_db.tbl_financial_institutions WHERE acquirer_id = ?";
                 String bank_code = jdbcTemplate.queryForObject(SQL, new Object[]{id}, String.class);
-                SQL = "SELECT * FROM sparkpay.terminals "
+                SQL = "SELECT * FROM postxnprocessor.terminals "
                 + "WHERE cbn_bank_code = ?";
                 terminals = jdbcTemplate.query(SQL, new Object[]{bank_code}, new TerminalsMapper());
-                SQL = "SELECT MIN(date_time) from sparkpay.terminals "
+                SQL = "SELECT MIN(date_time) from postxnprocessor.terminals "
                     + "WHERE cbn_bank_code = ?";
                 minDate = jdbcTemplate.queryForObject(SQL, new Object[]{bank_code}, String.class);
-                SQL = "SELECT MAX(date_time) from sparkpay.terminals "
+                SQL = "SELECT MAX(date_time) from postxnprocessor.terminals "
                     + "WHERE cbn_bank_code = ?";
                 maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{bank_code}, String.class);
             }
@@ -145,12 +145,12 @@ public class TerminalsService implements TerminalsInterface {
                 if (inString.toString().equals(""))
                     inString = inString.append("(-1");
                 inString = inString.append(")");
-                SQL = "SELECT * FROM sparkpay.terminals "
+                SQL = "SELECT * FROM postxnprocessor.terminals "
                 + "WHERE merchant_id IN " +  inString.toString();
                 terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
-                SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+                SQL = "SELECT MIN(date_time) from postxnprocessor.terminals";
                 minDate = jdbcTemplate.queryForObject(SQL, String.class);
-                SQL = "SELECT MAX(date_time) from sparkpay.terminals ";
+                SQL = "SELECT MAX(date_time) from postxnprocessor.terminals ";
                 maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             }
             else if (column.equals("merchant_id")) {
@@ -165,22 +165,22 @@ public class TerminalsService implements TerminalsInterface {
                 if (inString.toString().equals(""))
                     inString = inString.append("(-1");
                 inString = inString.append(")");
-                SQL = "SELECT * FROM sparkpay.terminals "
+                SQL = "SELECT * FROM postxnprocessor.terminals "
                 + "WHERE merchant_id IN " +  inString.toString();
                 terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
-                SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+                SQL = "SELECT MIN(date_time) from postxnprocessor.terminals";
                 minDate = jdbcTemplate.queryForObject(SQL, String.class);
-                SQL = "SELECT MAX(date_time) from sparkpay.terminals ";
+                SQL = "SELECT MAX(date_time) from postxnprocessor.terminals ";
                 maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             }
             else {
-                SQL = "SELECT * FROM sparkpay.terminals "
+                SQL = "SELECT * FROM postxnprocessor.terminals "
                     + "WHERE "+column+" = ?";
                 terminals = jdbcTemplate.query(SQL, new Object[]{id}, new TerminalsMapper());
-                SQL = "SELECT MIN(date_time) from sparkpay.terminals "
+                SQL = "SELECT MIN(date_time) from postxnprocessor.terminals "
                     + "WHERE "+column+" = ?";
                 minDate = jdbcTemplate.queryForObject(SQL, new Object[]{id}, String.class);
-                SQL = "SELECT MAX(date_time) from sparkpay.terminals "
+                SQL = "SELECT MAX(date_time) from postxnprocessor.terminals "
                     + "WHERE "+column+" = ?";
                 maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{id}, String.class);
             }
@@ -203,7 +203,7 @@ public class TerminalsService implements TerminalsInterface {
         try {
             String SQL;
             List<TerminalModel> terminals;
-            SQL = "SELECT * FROM sparkpay.terminals "
+            SQL = "SELECT * FROM postxnprocessor.terminals "
                 + "WHERE terminal_id = ?";
             terminals = jdbcTemplate.query(SQL, new Object[]{terminal_id}, new TerminalsMapper());
             networkResponse.setCode(200);
@@ -237,7 +237,7 @@ public class TerminalsService implements TerminalsInterface {
         try {
             String SQL;
             int retval;
-            int terminalIDExit = CheckTerminalExit(terminal_id, "sparkpay.terminals", "terminal_id");
+            int terminalIDExit = CheckTerminalExit(terminal_id, "postxnprocessor.terminals", "terminal_id");
             if (terminalIDExit == 0) {
                 int userrole = GetUserRole(sessiontoken);
                 int create_flag = 0;
@@ -247,7 +247,7 @@ public class TerminalsService implements TerminalsInterface {
                 if (userrole == 1) 
                     create_flag = 1;
 
-                SQL = "INSERT into sparkpay.terminals"
+                SQL = "INSERT into postxnprocessor.terminals"
                         + "(terminal_id, owner_id, owner_name, merchant_id, merchant_name, route_mode,"
                         + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, create_flag, date_time) "
                         + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
@@ -281,7 +281,7 @@ public class TerminalsService implements TerminalsInterface {
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE sparkpay.terminals SET owner_id = ?, owner_name = ?, merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
+                    SQL = "UPDATE postxnprocessor.terminals SET owner_id = ?, owner_name = ?, merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
                             + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE terminal_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{owner_id, owner_name, merchant_id, merchant_name, route_mode, acquiring_institution_id,
                         acquiring_institution_name, cbn_bank_code, terminal_type, terminal_id});
@@ -307,7 +307,7 @@ public class TerminalsService implements TerminalsInterface {
                         + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
                     jdbcTemplate.update(SQL, new Object[]{model.getId(), model.getOwner_id(), model.getOwner_name(), terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
                         acquiring_institution_name, cbn_bank_code, terminal_type});
-                    SQL = "UPDATE sparkpay.terminals SET edit_flag = 1 WHERE terminal_id = ?";
+                    SQL = "UPDATE postxnprocessor.terminals SET edit_flag = 1 WHERE terminal_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{terminal_id});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
@@ -364,14 +364,14 @@ public class TerminalsService implements TerminalsInterface {
             String SQL;
             String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
             List<TerminalModel> terminals;
-            SQL = "SELECT * FROM sparkpay.terminals "
+            SQL = "SELECT * FROM postxnprocessor.terminals "
                 +whereQuery + allowedRows 
                 + " ORDER BY date_time DESC";
             terminals = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new TerminalsMapper());
 
-            SQL = "SELECT MIN(date_time) from sparkpay.terminals";
+            SQL = "SELECT MIN(date_time) from postxnprocessor.terminals";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_time) from sparkpay.terminals";
+            SQL = "SELECT MAX(date_time) from postxnprocessor.terminals";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setMeta(meta);

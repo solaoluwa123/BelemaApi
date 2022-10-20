@@ -114,7 +114,7 @@ public class MerchantsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "sparkpay.merchants", "Merchant");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "postxnprocessor.tbl_merchants", "Merchant");
     }
     
     @RequestMapping(value = "/cards/merchants/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -123,7 +123,7 @@ public class MerchantsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.ApprovalHelper(sessiontoken, id, "sparkpay.merchants", "Merchant", type);
+        return GenericInterface.ApprovalHelper(sessiontoken, id, "postxnprocessor.tbl_merchants", "Merchant", type);
     }
     
     @RequestMapping(value = "/cards/merchants/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -132,7 +132,7 @@ public class MerchantsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.RejectHelper(sessiontoken, id, "sparkpay.merchants", "Merchant", type);
+        return GenericInterface.RejectHelper(sessiontoken, id, "postxnprocessor.tbl_merchants", "Merchant", type);
     }
     
     @RequestMapping(value = "/cards/merchants/q/search", method = RequestMethod.GET, headers = "Accept=application/json")

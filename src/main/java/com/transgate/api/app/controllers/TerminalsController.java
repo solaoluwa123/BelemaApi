@@ -122,7 +122,7 @@ public class TerminalsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "terminal_id", "sparkpay.terminals", "Terminal");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "terminal_id", "postxnprocessor.terminals", "Terminal");
     }
     
     @RequestMapping(value = "/cards/terminals/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -131,7 +131,7 @@ public class TerminalsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.ApprovalHelper(sessiontoken, id, "terminal_id", "sparkpay.terminals", "Terminal", type);
+        return GenericInterface.ApprovalHelper(sessiontoken, id, "terminal_id", "postxnprocessor.terminals", "Terminal", type);
     }
     
     @RequestMapping(value = "/cards/terminals/reject/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -140,7 +140,7 @@ public class TerminalsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.RejectHelper(sessiontoken, id, "terminal_id", "sparkpay.terminals", "Terminal", type);
+        return GenericInterface.RejectHelper(sessiontoken, id, "terminal_id", "postxnprocessor.terminals", "Terminal", type);
     }
     
     @RequestMapping(value = "/cards/terminals/q/search", method = RequestMethod.GET, headers = "Accept=application/json")

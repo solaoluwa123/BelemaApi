@@ -565,6 +565,33 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
+    public ResponseEntity GetBySessionId(String id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<FullTransactionModel> transactions;
+            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code "
+                    + "WHERE a.session_id = ? ";
+            transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Transaction");
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetDisputes(String institution) {
         return GetDisputes(0, 0, institution);
     }
