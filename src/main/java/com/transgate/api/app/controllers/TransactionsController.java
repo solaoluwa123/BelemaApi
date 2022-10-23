@@ -213,7 +213,7 @@ public class TransactionsController {
             minAmount,
             maxAmount,
             srcAccountName.replaceAll("space", " "),
-            destAccountName.replaceAll(" ", "space"),
+            destAccountName.replaceAll("space", " "),
             startDate,
             endDate);
     }
