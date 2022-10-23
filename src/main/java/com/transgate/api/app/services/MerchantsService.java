@@ -136,7 +136,7 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.country_code, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
                     + "FROM postxnprocessor.tbl_merchants a "
                     + "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b "
                     + "ON a.merchant_id = b.merchant_id "
@@ -167,7 +167,7 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.country_code, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
                     + "FROM postxnprocessor.tbl_merchants a "
                     + "LEFT JOIN sparkpay.terminals b "
                     + "ON a.merchant_id = b.merchant_id "
@@ -198,7 +198,7 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.country_code, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
                     + "FROM postxnprocessor.tbl_merchants a "
                     + "LEFT JOIN sparkpay.terminals b "
                     + "ON a.merchant_id = b.merchant_id "
@@ -279,7 +279,7 @@ public class MerchantsService implements MerchantsInterface {
                     jdbcTemplate.update(SQL, new Object[]{merchant_id, ptsps.get(i)});
                 }
                 SQL = "INSERT into postxnprocessor.tbl_merchants"
-                        + "(merchant_id, merchant_name, merchant_state, merchant_country,"
+                        + "(merchant_id, merchant_name, merchant_state, country_code,"
                         + "merchant_category_code, create_flag, datecreated) "
                         + "VALUES(?, ?, ?, ?, ?, ?,now())";
                 retval = jdbcTemplate.update(SQL, new Object[]{merchant_id, merchant_name, merchant_state, merchant_country, merchant_category_code, create_flag});
@@ -316,7 +316,7 @@ public class MerchantsService implements MerchantsInterface {
                                 + "VALUES(?, ?, now())";
                         jdbcTemplate.update(SQL, new Object[]{merchant_id, ptsps.get(i)});
                     }
-                    SQL = "UPDATE postxnprocessor.tbl_merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE merchant_id = ?";
+                    SQL = "UPDATE postxnprocessor.tbl_merchants SET merchant_name = ?, merchant_state = ?, country_code = ?, merchant_category_code = ? WHERE merchant_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{merchant_name, merchant_state, merchant_country, merchant_category_code, merchant_id});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
@@ -341,7 +341,7 @@ public class MerchantsService implements MerchantsInterface {
                         jdbcTemplate.update(SQL, new Object[]{merchant.getId(), ptsps.get(i)});
                     }
                     SQL = "INSERT into sparkpayweb_db.merchants_bkp"
-                        + "(id, merchant_id, merchant_name, merchant_state, merchant_country,"
+                        + "(id, merchant_id, merchant_name, merchant_state, country_code,"
                         + "merchant_category_code, date_created) "
                         + "VALUES(?, ?, ?, ?, ?, ?,now())";
                     jdbcTemplate.update(SQL, new Object[]{merchant.getId(), merchant_id, merchant_name, merchant_state, merchant_country, merchant_category_code});
@@ -437,7 +437,7 @@ public class MerchantsService implements MerchantsInterface {
             merchant.setMerchant_category_code(rs.getString("merchant_category_code"));
             merchant.setDate_created(rs.getString("datecreated"));
             merchant.setMerchant_state(rs.getString("merchant_state"));
-            merchant.setMerchant_country(rs.getString("merchant_country"));
+            merchant.setMerchant_country(rs.getString("country_code"));
             merchant.setDelete_flag(rs.getInt("delete_flag"));
             merchant.setEdit_flag(rs.getInt("edit_flag"));
             merchant.setCreate_flag(rs.getInt("create_flag"));

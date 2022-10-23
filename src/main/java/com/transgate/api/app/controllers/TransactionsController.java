@@ -212,8 +212,8 @@ public class TransactionsController {
             destInstitutioncode,
             minAmount,
             maxAmount,
-            srcAccountName,
-            destAccountName,
+            srcAccountName.replaceAll("space", " "),
+            destAccountName.replaceAll(" ", "space"),
             startDate,
             endDate);
     }

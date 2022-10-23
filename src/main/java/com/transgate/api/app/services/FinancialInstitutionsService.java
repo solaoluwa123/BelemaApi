@@ -404,8 +404,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                 case 1:
                     SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
                     jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
-                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET port_number = ?, publickeylocation = ?, institution_name = ? WHERE institution_code = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, name, code});
+                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ? WHERE institution_code = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{name, code});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
                     else
