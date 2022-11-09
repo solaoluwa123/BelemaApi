@@ -13,12 +13,17 @@ import org.springframework.http.ResponseEntity;
  */
 public interface CardsTransactionsInterface {
     public ResponseEntity Get();
+    public ResponseEntity Get(String startDate, String endDate);
     public ResponseEntity Get(int id);
     public ResponseEntity GetByTerminal(String terminalid);
     public ResponseEntity GetByMerchant(String merchantid);
+    public ResponseEntity GetByMerchant(String merchantid, String startDate, String endDate);
     public ResponseEntity GetByFI(String institution);
+    public ResponseEntity GetByFI(String institution, String startDate, String endDate);
     public ResponseEntity GetByPTSP(String ptsp);
+    public ResponseEntity GetByPTSP(String ptsp, String startDate, String endDate);
     public ResponseEntity GetByTerminalOwner(String owner);
+    public ResponseEntity GetByTerminalOwner(String owner, String startDate, String endDate);
     public ResponseEntity SearchTransactions(String message_type,
             String bin,
             String processing_code,

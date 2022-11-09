@@ -47,6 +47,14 @@ public class MerchantsController {
         return MerchantsInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/merchants/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity Get(@RequestHeader(value = "Authorization") String header, @PathVariable ("merchant") String merchant) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return MerchantsInterface.Get(merchant);
+    }
+    
     @RequestMapping(value = "/cards/merchants/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByInstitution(@RequestHeader(value = "Authorization") String header,
             @PathVariable("institution") String institution) {

@@ -338,8 +338,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     ResponseEntity responseEntity = GetFinancialInstitutionByCode(sessiontoken, code);
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     FinancialInstitutionModel institution = networkResponse != null ? (FinancialInstitutionModel) networkResponse.getData().get(0) : new FinancialInstitutionModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, code, businessType, actionType, note, date_created, business_address) VALUES(?, ?, ?, 'deactivate', 'Deactivate financial institution', now(), ?)";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getCode(), institution.getBusinessType(), institution.getBusiness_address()});
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'deactivate', 'Deactivate financial institution', ?)";
+                    jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), institution.getBusiness_address()});
+                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getStatus(), institution.getPublickeylocation(), code, institution.getName()});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
                     else 
@@ -379,8 +381,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     ResponseEntity responseEntity = GetFinancialInstitutionByCode(sessiontoken, code);
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     FinancialInstitutionModel institution = networkResponse != null ? (FinancialInstitutionModel) networkResponse.getData().get(0) : new FinancialInstitutionModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, date_created, business_address) VALUES(?, ?, ?, ?, ?, 'activate', 'Activate financial institution', now(), ?)";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), institution.getBusiness_address()});
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'activate', 'Activate financial institution', ?)";
+                    jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), institution.getBusiness_address()});
+                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getStatus(), institution.getPublickeylocation(), code, institution.getName()});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
                     else 
@@ -757,8 +761,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             String SQL;
             int userrole = GetUserRole(creator, sessiontoken);
             ResponseEntity CreateLoginForContact = usersInterface.Create(sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
-            LoginResponse loginResponse = (LoginResponse) CreateLoginForContact.getBody();
-            if (loginResponse.getCode() == 201) {
+            NetworkResponse response = (NetworkResponse) CreateLoginForContact.getBody();
+            if (response.getStatus().equals("success")) {
                 switch (userrole) {
                     case 1:
                     case 2:
@@ -883,7 +887,9 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     note = contact.getSurname().equals(surname) || surname == null ? note : !note.equals("") ? note + ", change surname from " + contact.getSurname() + " to " + surname : "Change surname from " + contact.getSurname() + " to " + surname;
                     note = contact.getPhone_number().equals(phone_number) || phone_number == null ? note : !note.equals("") ? note + ", change phone number from " + contact.getPhone_number() + " to " + phone_number : "Change phone number from " + contact.getPhone_number() + " to " + phone_number;
                     SQL = "INSERT INTO tbl_financial_institution_contacts_operations(financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'edit', ?, now())";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{contact.getInstitution(), contact.getFirstname(), contact.getSurname(), contact.getPhone_number(), contact.getEmail_address(), note});
+                    jdbcTemplate.update(SQL, new Object[]{contact.getInstitution(), contact.getFirstname(), contact.getSurname(), contact.getPhone_number(), contact.getEmail_address(), note});
+                    SQL = "INSERT INTO tbl_user_details_operations(username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', ?, now())";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{contact.getEmail_address(), firstname, surname, phone_number, contact.getEmail_address(), 4, note});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
                     else
