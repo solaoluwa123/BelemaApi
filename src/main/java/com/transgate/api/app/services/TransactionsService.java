@@ -121,7 +121,96 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
+    public ResponseEntity Get(String institutioncode, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<FullTransactionModel> transactions;
+            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                + "ON a.source_institution_code = b.code "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                + "ON a.destination_institution_code = c.code "
+                + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                + "ORDER BY a.id DESC";
+            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode}, new FullTransactionMapper());
+
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                + "ON a.source_institution_code = b.code "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                + "ON a.destination_institution_code = c.code "
+                + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                + "ORDER BY a.id DESC";
+            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode}, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+            String meta = "{\"totalValue\": " +totalValue+ "}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Transactions By Institution: " + institutioncode);
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Get(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<FullTransactionModel> transactions;
+            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                + "ON a.source_institution_code = b.code "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                + "ON a.destination_institution_code = c.code "
+                + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                + "ORDER BY a.id DESC";
+            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new FullTransactionMapper());
+
+            SQL = "SELECT SUM(a.amount) as totalValue "
+                + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                + "ON a.source_institution_code = b.code "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                + "ON a.destination_institution_code = c.code "
+                + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                + "ORDER BY a.id DESC";
+            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{startDate, endDate}, Double.class);
+            totalValue = totalValue != null ? totalValue : 0;
+//            SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+//            SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ "}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Transactions");
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity SearchTransactions(String session_id,
+            String response_code,
             String source_institution_code,
             String destination_institution_code,
             String minAmount,
@@ -134,7 +223,7 @@ public class TransactionsService implements TransactionsInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String whereQuery = !session_id.equals("") 
-                    || !source_institution_code.equals("") 
+                    || !response_code.equals("") 
                     || !source_institution_code.equals("")
                     || !destination_institution_code.equals("")
                     || !originator_account_name.equals("")
@@ -147,6 +236,14 @@ public class TransactionsService implements TransactionsInterface {
             
             if (!session_id.equals("")) {
                 whereQuery+=" a.session_id = '" + session_id + "'";
+            }
+            if (!response_code.equals("") && response_code.equals("00")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.response_code = '00'";
+            }
+            if (!response_code.equals("") && !response_code.equals("00")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.response_code != '00'";
             }
             if (!source_institution_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -201,11 +298,7 @@ public class TransactionsService implements TransactionsInterface {
                 + " ORDER BY a.id DESC";
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
             totalValue = totalValue != null ? totalValue : 0;
-            SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
-            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
-            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
-            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            String meta = "{\"totalValue\": " +totalValue+ "}";
             networkResponse.setMeta(meta);
 
             networkResponse.setCode(200);
@@ -489,11 +582,7 @@ public class TransactionsService implements TransactionsInterface {
                 + "WHERE a.source_institution_code = ? OR a.destination_institution_code = ? ORDER BY a.id DESC";
             Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
             totalValue = totalValue != null ? totalValue : 0;
-            SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
-            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
-            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
-            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            String meta = "{\"totalValue\": " +totalValue+ "}";
            
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -544,17 +633,44 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.destination_institution_code = c.code ";
                 Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
                 totalValue = totalValue != null ? totalValue : 0;
-                SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
-                String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-                SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
-                String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
-            String meta = "{\"totalValue\": " +totalValue+ ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+//                SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//                String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+//                SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//                String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"totalValue\": " +totalValue+ "}";
                 networkResponse.setMeta(meta);
             
             }
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage(id > 0 ? "Transaction" : "All transactions");
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetBySessionId(String id) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<FullTransactionModel> transactions;
+            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code "
+                    + "WHERE a.session_id = ? ";
+            transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Transaction");
             networkResponse.setData((ArrayList) transactions);
             
             return responseManager.ResponseOk(networkResponse);

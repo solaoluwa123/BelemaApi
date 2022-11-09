@@ -743,6 +743,64 @@ public class UsersService implements UsersInterface {
     }
     
     @Override
+    public ResponseEntity UpdateNames(String sessiontoken, String firstname, String surname, String phone_number, String username) {
+        try {
+            String SQL;
+            int retVal;
+            SQL = "UPDATE tbl_user_details SET firstname = ?, surname = ?, phone_number = ? WHERE session_token = ?";
+            retVal = jdbcTemplate.update(SQL, new Object[]{firstname, surname, phone_number, sessiontoken});
+            if (retVal > 0){
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("success");
+                networkResponse.setMessage("Profile Updated");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            else
+                return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity UpdatePassword(String sessiontoken, String password, String session_token, String username) {
+        LoginResponse response = new LoginResponse();
+        try {
+            String SQL;
+            SQL = "SELECT a.password from sparkpayweb_db.tbl_users a "
+                    + "WHERE a.username = ? AND a.enabled = 1";
+            String security = jdbcTemplate.queryForObject(SQL, new Object[]{username}, String.class);
+            boolean comparePassword = BCrypt.checkpw(session_token, security);
+            if (comparePassword) {
+                String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ? WHERE username = ?";
+                jdbcTemplate.update(SQL, new Object[]{hashPassword, username});
+                response.setCode(200);
+                response.setMessage("Password updated successfully");
+                return responseManager.ResponseOk(response);
+            }
+            else {
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Current password is incorrect");
+                return responseManager.ResponseOk(response);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println(ex);
+            if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
+                response.setCode(400);
+                response.setStatus("failed");
+                response.setMessage("Unable to handle password reset");
+                return responseManager.ResponseOk(response);
+            }
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseUnathorized();
+        }
+    }
+    
+    @Override
     public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username) {
         try {
             String SQL;
@@ -793,7 +851,7 @@ public class UsersService implements UsersInterface {
     }
     
     @Override
-    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username) {
+    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact) {
         try {
             String SQL;
             int userrole = GetUserRole(username, sessiontoken);
@@ -808,6 +866,10 @@ public class UsersService implements UsersInterface {
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             SQL = "UPDATE tbl_user_details SET deleted = 1 WHERE id = ?";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getId()});
+                            if (isContact) {
+                                SQL = "DELETE FROM tbl_financial_institution_contacts_operations WHERE email_address = ? AND actionType = 'delete'";
+                                jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address()});
+                            }
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseDeleted();
                             else
@@ -817,10 +879,16 @@ public class UsersService implements UsersInterface {
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             SQL = "UPDATE tbl_user_details SET firstname = ?, surname = ?, phone_number = ?, role = ? WHERE username = ? AND email_address = ?";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getRoleid(), users.get(0).getUsername(), users.get(0).getEmail_address()});
-                            if (retVal > 0 && retVal2 > 0)
-                                return responseManager.ResponseAccepted();
-                            else
-                                return responseManager.ResponseInternalServerError();
+                            if (isContact) {
+                                SQL = "DELETE FROM tbl_financial_institution_contacts_operations WHERE email_address = ? AND actionType = 'edit'";
+                                jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address()});
+                                SQL = "UPDATE tbl_financial_institution_contacts SET firstname = ?, surname = ?, phone_number = ? WHERE email_address = ?";
+                                jdbcTemplate.update(SQL, new Object[]{users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getEmail_address()});
+                            }
+//                            if (retVal > 0 && retVal2 > 0)
+                            return responseManager.ResponseAccepted();
+//                            else
+//                                return responseManager.ResponseInternalServerError();
                         case "create":
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
@@ -891,6 +959,36 @@ public class UsersService implements UsersInterface {
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage(systemUsers ? "Pending System Users" : "Pending Other Users");
+            networkResponse.setData((ArrayList) users);
+            return responseManager.ResponseOk(networkResponse);
+            
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetContactsForActions() {
+        try {
+            NetworkResponse networkResponse = new NetworkResponse();
+            String SQL;
+            SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
+                    + "b.role_name, "
+                    + "c.financial_institution_code, d.name as institution_name  "
+                    + "from tbl_user_details_operations a "
+                    + "LEFT JOIN tbl_role b "
+                    + "ON a.role = b.id "
+                    + "LEFT JOIN tbl_financial_institution_contacts c "
+                    + "ON a.email_address = c.email_address "
+                    + "LEFT JOIN tbl_financial_institutions d "
+                    + "ON c.financial_institution_code = d.code "
+                    + "WHERE a.role = 4 "
+                    + "ORDER BY a.id DESC";
+            List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper2());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Pending Institution Contacts");
             networkResponse.setData((ArrayList) users);
             return responseManager.ResponseOk(networkResponse);
             

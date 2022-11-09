@@ -51,7 +51,7 @@ public class MerchantsService implements MerchantsInterface {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpay.merchants WHERE merchant_id = ? AND edit_flag = 1";
+            SQL = "SELECT COUNT(*) FROM postxnprocessor.tbl_merchants WHERE merchant_id = ? AND edit_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{merchant_id}, int.class);
 
             found = totalRows > 0;
@@ -81,19 +81,19 @@ public class MerchantsService implements MerchantsInterface {
             String SQL;
             List<CardsMerchantModel> merchants;
             if (!pending) {
-                SQL = "SELECT * FROM sparkpay.merchants "
+                SQL = "SELECT * FROM postxnprocessor.tbl_merchants "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
                     + "ORDER BY id DESC";
             }
             else {
-                SQL = "SELECT * FROM sparkpay.merchants "
+                SQL = "SELECT * FROM postxnprocessor.tbl_merchants "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY id DESC";
             }
             merchants = jdbcTemplate.query(SQL, new MerchantsMapper());
-            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            SQL = "SELECT MIN(datecreated) from postxnprocessor.tbl_merchants";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            SQL = "SELECT MAX(datecreated) from postxnprocessor.tbl_merchants";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setCode(200);
@@ -115,7 +115,7 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT * FROM sparkpay.merchants "
+            SQL = "SELECT * FROM postxnprocessor.tbl_merchants "
                 + "WHERE merchant_id = ?";
             merchants = jdbcTemplate.query(SQL, new Object[]{merchant_id}, new MerchantsMapper());
             networkResponse.setCode(200);
@@ -136,16 +136,16 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.date_created, a.delete_flag, a.edit_flag, a.create_flag "
-                    + "FROM sparkpay.merchants a "
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.country_code, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM postxnprocessor.tbl_merchants a "
                     + "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b "
                     + "ON a.merchant_id = b.merchant_id "
                 + "WHERE b.ptsp_id = ?";
             merchants = jdbcTemplate.query(SQL, new Object[]{ptsp}, new MerchantsMapper());
             
-            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            SQL = "SELECT MIN(datecreated) from postxnprocessor.tbl_merchants";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            SQL = "SELECT MAX(datecreated) from postxnprocessor.tbl_merchants";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setCode(200);
@@ -167,16 +167,16 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.date_created, a.delete_flag, a.edit_flag, a.create_flag "
-                    + "FROM sparkpay.merchants a "
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.country_code, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM postxnprocessor.tbl_merchants a "
                     + "LEFT JOIN sparkpay.terminals b "
                     + "ON a.merchant_id = b.merchant_id "
                 + "WHERE b.owner_id = ?";
             merchants = jdbcTemplate.query(SQL, new Object[]{owner}, new MerchantsMapper());
             
-            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            SQL = "SELECT MIN(datecreated) from postxnprocessor.tbl_merchants";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            SQL = "SELECT MAX(datecreated) from postxnprocessor.tbl_merchants";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setCode(200);
@@ -198,8 +198,8 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.merchant_country, a.merchant_category_code, a.date_created, a.delete_flag, a.edit_flag, a.create_flag "
-                    + "FROM sparkpay.merchants a "
+            SQL = "SELECT a.id, a.merchant_id, a.merchant_name, a.merchant_state, a.country_code, a.merchant_category_code, a.datecreated, a.delete_flag, a.edit_flag, a.create_flag "
+                    + "FROM postxnprocessor.tbl_merchants a "
                     + "LEFT JOIN sparkpay.terminals b "
                     + "ON a.merchant_id = b.merchant_id "
                     + "LEFT JOIN sparkpayweb_db.tbl_financial_institutions c "
@@ -207,9 +207,9 @@ public class MerchantsService implements MerchantsInterface {
                 + "WHERE c.acquirer_id = ?";
             merchants = jdbcTemplate.query(SQL, new Object[]{institution}, new MerchantsMapper());
             
-            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            SQL = "SELECT MIN(datecreated) from postxnprocessor.tbl_merchants";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            SQL = "SELECT MAX(datecreated) from postxnprocessor.tbl_merchants";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setCode(200);
@@ -231,7 +231,7 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT * FROM sparkpay.merchants "
+            SQL = "SELECT * FROM postxnprocessor.tbl_merchants "
                 + "WHERE id = ?";
             merchants = jdbcTemplate.query(SQL, new Object[]{id}, new MerchantsMapper());
             networkResponse.setCode(200);
@@ -262,7 +262,7 @@ public class MerchantsService implements MerchantsInterface {
         try {
             String SQL;
             int retval;
-            int terminalIDExit = CheckMerchantExit(merchant_id, "sparkpay.merchants", "merchant_id");
+            int terminalIDExit = CheckMerchantExit(merchant_id, "postxnprocessor.tbl_merchants", "merchant_id");
             if (terminalIDExit == 0) {
                 int userrole = GetUserRole(sessiontoken);
                 int create_flag = 0;
@@ -278,9 +278,9 @@ public class MerchantsService implements MerchantsInterface {
                             + "VALUES(?, ?, now())";
                     jdbcTemplate.update(SQL, new Object[]{merchant_id, ptsps.get(i)});
                 }
-                SQL = "INSERT into sparkpay.merchants"
-                        + "(merchant_id, merchant_name, merchant_state, merchant_country,"
-                        + "merchant_category_code, create_flag, date_created) "
+                SQL = "INSERT into postxnprocessor.tbl_merchants"
+                        + "(merchant_id, merchant_name, merchant_state, country_code,"
+                        + "merchant_category_code, create_flag, datecreated) "
                         + "VALUES(?, ?, ?, ?, ?, ?,now())";
                 retval = jdbcTemplate.update(SQL, new Object[]{merchant_id, merchant_name, merchant_state, merchant_country, merchant_category_code, create_flag});
                 if (retval > 0) 
@@ -316,7 +316,7 @@ public class MerchantsService implements MerchantsInterface {
                                 + "VALUES(?, ?, now())";
                         jdbcTemplate.update(SQL, new Object[]{merchant_id, ptsps.get(i)});
                     }
-                    SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE merchant_id = ?";
+                    SQL = "UPDATE postxnprocessor.tbl_merchants SET merchant_name = ?, merchant_state = ?, country_code = ?, merchant_category_code = ? WHERE merchant_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{merchant_name, merchant_state, merchant_country, merchant_category_code, merchant_id});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
@@ -341,11 +341,11 @@ public class MerchantsService implements MerchantsInterface {
                         jdbcTemplate.update(SQL, new Object[]{merchant.getId(), ptsps.get(i)});
                     }
                     SQL = "INSERT into sparkpayweb_db.merchants_bkp"
-                        + "(id, merchant_id, merchant_name, merchant_state, merchant_country,"
+                        + "(id, merchant_id, merchant_name, merchant_state, country_code,"
                         + "merchant_category_code, date_created) "
                         + "VALUES(?, ?, ?, ?, ?, ?,now())";
                     jdbcTemplate.update(SQL, new Object[]{merchant.getId(), merchant_id, merchant_name, merchant_state, merchant_country, merchant_category_code});
-                    SQL = "UPDATE sparkpay.merchants SET edit_flag = 1 WHERE merchant_id = ?";
+                    SQL = "UPDATE postxnprocessor.tbl_merchants SET edit_flag = 1 WHERE merchant_id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{merchant_id});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
@@ -393,23 +393,23 @@ public class MerchantsService implements MerchantsInterface {
 
             if (!start_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" date_created >= '" + start_date + "'";
+                whereQuery+=" datecreated >= '" + start_date + "'";
             }
             if (!end_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" date_created < '" + end_date + "'";
+                whereQuery+=" datecreated < '" + end_date + "'";
             }
             String SQL;
             String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
             List<CardsMerchantModel> merchants;
-            SQL = "SELECT * FROM sparkpay.merchants "
+            SQL = "SELECT * FROM postxnprocessor.tbl_merchants "
                 +whereQuery + allowedRows 
-                + " ORDER BY date_created DESC";
+                + " ORDER BY datecreated DESC";
             merchants = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new MerchantsMapper());
 
-            SQL = "SELECT MIN(date_created) from sparkpay.merchants";
+            SQL = "SELECT MIN(datecreated) from postxnprocessor.tbl_merchants";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_created) from sparkpay.merchants";
+            SQL = "SELECT MAX(datecreated) from postxnprocessor.tbl_merchants";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{ \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
             networkResponse.setMeta(meta);
@@ -435,9 +435,9 @@ public class MerchantsService implements MerchantsInterface {
             merchant.setMerchant_id(rs.getString("merchant_id"));
             merchant.setMerchant_name(rs.getString("merchant_name"));
             merchant.setMerchant_category_code(rs.getString("merchant_category_code"));
-            merchant.setDate_created(rs.getString("date_created"));
+            merchant.setDate_created(rs.getString("datecreated"));
             merchant.setMerchant_state(rs.getString("merchant_state"));
-            merchant.setMerchant_country(rs.getString("merchant_country"));
+            merchant.setMerchant_country(rs.getString("country_code"));
             merchant.setDelete_flag(rs.getInt("delete_flag"));
             merchant.setEdit_flag(rs.getInt("edit_flag"));
             merchant.setCreate_flag(rs.getInt("create_flag"));

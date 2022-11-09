@@ -168,13 +168,40 @@ public class UsersController {
         return usersInterface.Edit(sessiontoken, user.getId(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getRoleid(), user.getUsername());
     }
     
+    @RequestMapping(value = "/users/update-names", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity UpdateNames(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.UpdateNames(sessiontoken, user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getUsername());
+    }
+    
+    @RequestMapping(value = "/users/update-password", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity UpdatePassword(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.UpdatePassword(sessiontoken, user.getSecurity(), user.getSession_token(), user.getUsername());
+    }
+    
     @RequestMapping(value = "/users/approval", method = RequestMethod.PUT, headers = "Accept=application/json")
     public ResponseEntity UserApprovals(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestBody UserModel user) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername());
+        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername(), false);
+    }
+    
+    @RequestMapping(value = "/users/contact/approval", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity ContactApprovals(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername(), true);
     }
     
     @RequestMapping(value = "/users/reject/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -184,6 +211,17 @@ public class UsersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return GenericInterface.DeleteHelper(sessiontoken, id, "transgateweb_db.tbl_user_details_operations", "Users");
+    }
+    
+    @RequestMapping(value = "/contact/reject/{id}/{email}", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity ContactReject(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("id") int id,
+            @PathVariable("email") String email) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        GenericInterface.DeleteHelper(sessiontoken, email, "email_address", "transgateweb_db.tbl_financial_institution_contacts_operations", "Contacts");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "transgateweb_db.tbl_user_details_operations", "Contacts");
     }
     
     @RequestMapping(value = "/users/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -200,5 +238,13 @@ public class UsersController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return usersInterface.GetUsersForActions(false);
+    }
+    
+    @RequestMapping(value = "/contacts/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetContactUsersForActions(@RequestHeader(value = "Authorization") String header) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.GetContactsForActions();
     }
 }

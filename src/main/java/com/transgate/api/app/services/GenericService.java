@@ -207,8 +207,8 @@ public class GenericService implements GenericInterface {
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.institution_code = b.code "
-                    + "WHERE a.institution_code = ? AND a.settlement_date BETWEEN ? AND ?";
-            rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
+                    + "WHERE a.institution_code = ? ORDER BY a.settlement_date DESC";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{institution});
             
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -230,9 +230,8 @@ public class GenericService implements GenericInterface {
             SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.institution_code = b.code "
-                    + "WHERE a.settlement_date BETWEEN ? AND ?";
-            rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                    + "ON a.institution_code = b.code ORDER BY a.settlement_date DESC";
+            rows = jdbcTemplate.queryForList(SQL);
             
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -262,37 +261,11 @@ public class GenericService implements GenericInterface {
             inString = inString.append(")");
             String SQL;
             List<Map<String, Object>> rows;
-            SQL = "SELECT a.cbn_bank_code FROM sparkpay.terminals a WHERE a.merchant_id IN " + inString.toString() + " GROUP BY a.cbn_bank_code";
-            rows = jdbcTemplate.queryForList(SQL);
-            inString = new StringBuilder("(");
-            for (final Map<String, Object> row : rows) {
-                inString.append("'").append(row.get("cbn_bank_code")).append("'");
-                inString.append(",");
-            }
-            inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals(""))
-                inString = inString.append("(-1");
-            inString = inString.append(")");
-            
-            SQL = "SELECT a.acquirer_id FROM sparkpayweb_db.tbl_financial_institutions a "
-                    + "WHERE a.bank_code IN " + inString.toString();
-            rows = jdbcTemplate.queryForList(SQL);
-            inString = new StringBuilder("(");
-            for (final Map<String, Object> row : rows) {
-                inString.append("'").append(row.get("acquirer_id")).append("'");
-                inString.append(",");
-            }
-            inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals(""))
-                inString = inString.append("(-1");
-            inString = inString.append(")");
-            
-            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
-                    + "FROM sparkpay.tbl_settlement_details a "
-                    + ""
-                    + "WHERE a.acquirer_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
+            SQL = "SELECT a.id, a.institution_name, a.merchant_id, a.acqVol, a.acqVal, a.msc, a.net_set_pos, a.settlement_date, a.report_location, b.merchant_name "
+                    + "FROM sparkpay.tbl_settlement_details_merchant a "
+                    + "LEFT JOIN postxnprocessor.tbl_merchants b "
+                    + "ON a.merchant_id = b.merchant_id "
+                    + "WHERE a.merchant_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             
             networkResponse.setCode(200);
@@ -324,38 +297,12 @@ public class GenericService implements GenericInterface {
             if (inString.toString().equals(""))
                 inString = inString.append("(-1");
             inString = inString.append(")");
-            
-            SQL = "SELECT a.cbn_bank_code FROM sparkpay.terminals a WHERE a.merchant_id IN " + inString.toString() + " GROUP BY a.cbn_bank_code";
-            rows = jdbcTemplate.queryForList(SQL);
-            inString = new StringBuilder("(");
-            for (final Map<String, Object> row : rows) {
-                inString.append("'").append(row.get("cbn_bank_code")).append("'");
-                inString.append(",");
-            }
-            inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals(""))
-                inString = inString.append("(-1");
-            inString = inString.append(")");
-            
-            SQL = "SELECT a.acquirer_id FROM sparkpayweb_db.tbl_financial_institutions a "
-                    + "WHERE a.bank_code IN " + inString.toString();
-            rows = jdbcTemplate.queryForList(SQL);
-            inString = new StringBuilder("(");
-            for (final Map<String, Object> row : rows) {
-                inString.append("'").append(row.get("acquirer_id")).append("'");
-                inString.append(",");
-            }
-            inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals(""))
-                inString = inString.append("(-1");
-            inString = inString.append(")");
-            
-            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
-                    + "FROM sparkpay.tbl_settlement_details a "
-                    + ""
-                    + "WHERE a.acquirer_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
+
+            SQL = "SELECT a.id, a.institution_name, a.merchant_id, a.acqVol, a.acqVal, a.msc, a.net_set_pos, a.settlement_date, a.report_location, b.merchant_name "
+                    + "FROM sparkpay.tbl_settlement_details_merchant a "
+                    + "LEFT JOIN postxnprocessor.tbl_merchants b "
+                    + "ON a.merchant_id = b.merchant_id "
+                    + "WHERE a.merchant_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             
             networkResponse.setCode(200);
@@ -443,6 +390,7 @@ public class GenericService implements GenericInterface {
             int retVal;
             switch (userrole) {
                 case 1:
+                case 3:
                     SQL = "DELETE FROM "+table+" WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
                     if (retVal > 0)
@@ -481,6 +429,7 @@ public class GenericService implements GenericInterface {
             int retVal;
             switch (userrole) {
                 case 1:
+                case 3:
                     SQL = "DELETE FROM "+table+" WHERE "+column+" = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
                     if (retVal > 0)
@@ -528,7 +477,7 @@ public class GenericService implements GenericInterface {
                                 rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
                                 String merchant_id = rows.size() > 0 ? (String) rows.get(0).get("merchant_id") : "";
                                 for (final Map<String, Object> row : rows) {
-                                    SQL = "UPDATE sparkpay.merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE id = ?";
+                                    SQL = "UPDATE postxnprocessor.tbl_merchants SET merchant_name = ?, merchant_state = ?, merchant_country = ?, merchant_category_code = ? WHERE id = ?";
                                     jdbcTemplate.update(SQL, new Object[]{row.get("merchant_name"), row.get("merchant_state"), row.get("merchant_country"), row.get("merchant_category_code"), id});
                                     SQL = "DELETE FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
                                     jdbcTemplate.update(SQL, new Object[]{id});

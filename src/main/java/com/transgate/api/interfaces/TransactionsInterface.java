@@ -14,6 +14,10 @@ import org.springframework.http.ResponseEntity;
 public interface TransactionsInterface {
     public ResponseEntity Get();
     
+    public ResponseEntity Get(String startDate, String endDate);
+    
+    public ResponseEntity GetBySessionId(String sessionid);
+    
     public ResponseEntity GetTransactionsVolume(String startDate, String endDate);
     
     public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate);
@@ -27,6 +31,8 @@ public interface TransactionsInterface {
     public ResponseEntity Get(int id);
     
     public ResponseEntity Get(String institutioncode);
+    
+    public ResponseEntity Get(String institutioncode, String startDate, String endDate);
     
     public ResponseEntity LogDispute(String sessiontoken, String sessionId, String amount, String wallet, String sourceInstitution, String type, String username);
     
@@ -45,6 +51,7 @@ public interface TransactionsInterface {
     public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status);
     
     public ResponseEntity SearchTransactions(String srcSessionid,
+            String responseCode,
             String srcInstitutioncode,
             String destInstitutioncode,
             String minAmount,

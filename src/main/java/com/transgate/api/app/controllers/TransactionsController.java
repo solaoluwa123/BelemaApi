@@ -39,6 +39,16 @@ public class TransactionsController {
         }
         return transactionsInterface.Get();
     }
+    
+    @RequestMapping(value = "/transactions-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity Get(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.Get(startDate, endDate);
+    }
         
     @RequestMapping(value = "/transactions-summary", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTransactionsVolume(@RequestHeader(value = "Authorization") String header,
@@ -119,12 +129,12 @@ public class TransactionsController {
         return transactionsInterface.GetInsitutionTnxTrend(institutioncode, type, startDate, endDate);
     }
     
-    @RequestMapping(value = "/transactions/{id}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetOne(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("id") int id) {
+    @RequestMapping(value = "/transactions/{sessionid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetOne(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("sessionid") String sessionid) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(id);
+        return transactionsInterface.GetBySessionId(sessionid);
     }
     
     @RequestMapping(value = "/transactions/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -133,6 +143,18 @@ public class TransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return transactionsInterface.Get(institutioncode);
+    }
+    
+    @RequestMapping(value = "/transactions-by-date/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetInstitutionTransactions(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.Get(institutioncode, startDate, endDate);
     }
     
     @RequestMapping(value = "/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -195,6 +217,7 @@ public class TransactionsController {
             @RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken,  
             @RequestParam("srcSessionid") String srcSessionid, 
+            @RequestParam("responseCode") String responseCode, 
             @RequestParam("srcAccountName") String srcAccountName, 
             @RequestParam("destAccountName") String destAccountName, 
             @RequestParam("srcInstitutioncode") String srcInstitutioncode, 
@@ -208,12 +231,13 @@ public class TransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return transactionsInterface.SearchTransactions(srcSessionid,
+            responseCode,
             srcInstitutioncode,
             destInstitutioncode,
             minAmount,
             maxAmount,
-            srcAccountName,
-            destAccountName,
+            srcAccountName.replaceAll("space", " "),
+            destAccountName.replaceAll("space", " "),
             startDate,
             endDate);
     }

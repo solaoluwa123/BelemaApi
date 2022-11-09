@@ -41,6 +41,16 @@ public class CardsTransactionsController {
         return CardsTransactionsInterface.Get();
     }
     
+    @RequestMapping(value = "/cards/transactions-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity Get(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.Get(startDate, endDate);
+    }
+    
     @RequestMapping(value = "/cards/transactions/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByFI(@RequestHeader(value = "Authorization") String header,
             @PathVariable("institution") String institution) {
@@ -50,6 +60,17 @@ public class CardsTransactionsController {
         return CardsTransactionsInterface.GetByFI(institution);
     }
     
+    @RequestMapping(value = "/cards/transactions-by-date/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByFI(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetByFI(institution, startDate, endDate);
+    }
+    
     @RequestMapping(value = "/cards/transactions/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header,
             @PathVariable("merchant") String merchant) {
@@ -57,6 +78,17 @@ public class CardsTransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return CardsTransactionsInterface.GetByMerchant(merchant);
+    }
+    
+    @RequestMapping(value = "/cards/transactions-by-date/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @PathVariable("merchant") String merchant) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetByMerchant(merchant, startDate, endDate);
     }
     
     @RequestMapping(value = "/cards/transactions/terminal/{terminal}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -77,6 +109,17 @@ public class CardsTransactionsController {
         return CardsTransactionsInterface.GetByPTSP(ptsp);
     }
     
+    @RequestMapping(value = "/cards/transactions-by-date/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByPTSP(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @PathVariable("ptsp") String ptsp) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetByPTSP(ptsp, startDate, endDate);
+    }
+    
     @RequestMapping(value = "/cards/transactions/terminal-owner/{owner}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
             @PathVariable("owner") String owner) {
@@ -84,6 +127,17 @@ public class CardsTransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return CardsTransactionsInterface.GetByTerminalOwner(owner);
+    }
+    
+    @RequestMapping(value = "/cards/transactions-by-date/terminal-owner/{owner}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @PathVariable("owner") String owner) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetByTerminalOwner(owner, startDate, endDate);
     }
     
     @RequestMapping(value = "/cards/transactions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")

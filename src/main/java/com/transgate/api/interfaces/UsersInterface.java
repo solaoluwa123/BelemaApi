@@ -34,9 +34,15 @@ public interface UsersInterface {
     
     public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username);
     
-    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username);
+    public ResponseEntity UpdateNames(String sessiontoken, String firstname, String surname, String phone_number, String username);
+    
+    public ResponseEntity UpdatePassword(String sessiontoken, String security, String session_token, String username);
+    
+    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact);
     
     public ResponseEntity GetUsersForActions(boolean systemUsers);
+    
+    public ResponseEntity GetContactsForActions();
     
     public ResponseEntity ClearUserSession(String sessiontoken, String username);
 }
