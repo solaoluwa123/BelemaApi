@@ -14,6 +14,7 @@ import com.transgate.api.models.TNXModel;
 import com.transgate.api.models.TransactionModel;
 import com.transgate.api.models.TransactionSummaryModel;
 import com.transgate.api.util.ResponseManager;
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -121,10 +122,11 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
-    public ResponseEntity Get(String institutioncode, String startDate, String endDate) {
+    public ResponseEntity Get(String institutioncode, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
@@ -134,10 +136,10 @@ public class TransactionsService implements TransactionsInterface {
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destination_institution_code = c.code "
                 + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
-                + "ORDER BY a.id DESC";
-            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode}, new FullTransactionMapper());
+                + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.source_institution_code = b.code "
@@ -145,9 +147,13 @@ public class TransactionsService implements TransactionsInterface {
                 + "ON a.destination_institution_code = c.code "
                 + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
                 + "ORDER BY a.id DESC";
-            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode}, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
-            String meta = "{\"totalValue\": " +totalValue+ "}";
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             networkResponse.setMeta(meta);
 
             networkResponse.setCode(200);
@@ -163,10 +169,11 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
-    public ResponseEntity Get(String startDate, String endDate) {
+    public ResponseEntity Get(String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
@@ -176,10 +183,10 @@ public class TransactionsService implements TransactionsInterface {
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destination_institution_code = c.code "
                 + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
-                + "ORDER BY a.id DESC";
-            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new FullTransactionMapper());
+                + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.source_institution_code = b.code "
@@ -187,13 +194,17 @@ public class TransactionsService implements TransactionsInterface {
                 + "ON a.destination_institution_code = c.code "
                 + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
                 + "ORDER BY a.id DESC";
-            Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{startDate, endDate}, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
 //            SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
 //            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
 //            SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
 //            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
-            String meta = "{\"totalValue\": " +totalValue+ "}";
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             networkResponse.setMeta(meta);
 
             networkResponse.setCode(200);
@@ -218,7 +229,9 @@ public class TransactionsService implements TransactionsInterface {
             String originator_account_name,
             String beneficiary_account_name,
             String startDate,
-            String endDate
+            String endDate, 
+            int page, 
+            int limit
     ) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -278,6 +291,7 @@ public class TransactionsService implements TransactionsInterface {
                 whereQuery+=" a.transaction_date_time < '" + endDate + "'";
             }
             String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, b.name as srcInstitutionName, c.name as destInstitutionName "
@@ -286,19 +300,27 @@ public class TransactionsService implements TransactionsInterface {
                 + "ON a.source_institution_code = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destination_institution_code = c.code " + whereQuery
-                + " ORDER BY a.id DESC";
-            transactions = jdbcTemplate.query(SQL, new FullTransactionMapper());
+                + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.source_institution_code = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destination_institution_code = c.code " + whereQuery
                 + " ORDER BY a.id DESC";
-            Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
-            totalValue = totalValue != null ? totalValue : 0;
-            String meta = "{\"totalValue\": " +totalValue+ "}";
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+//            SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+//            SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             networkResponse.setMeta(meta);
 
             networkResponse.setCode(200);

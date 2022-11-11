@@ -43,11 +43,13 @@ public class TransactionsController {
     @RequestMapping(value = "/transactions-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate,
-            @RequestParam("endDate") String endDate) {
+            @RequestParam("endDate") String endDate,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(startDate, endDate);
+        return transactionsInterface.Get(startDate, endDate, page, limit);
     }
         
     @RequestMapping(value = "/transactions-summary", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -150,11 +152,13 @@ public class TransactionsController {
             @RequestHeader(value = "auth-token") String sessiontoken, 
             @PathVariable ("institutioncode") String institutioncode,
             @RequestParam("startDate") String startDate,
-            @RequestParam("endDate") String endDate) {
+            @RequestParam("endDate") String endDate,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(institutioncode, startDate, endDate);
+        return transactionsInterface.Get(institutioncode, startDate, endDate, page, limit);
     }
     
     @RequestMapping(value = "/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -225,7 +229,9 @@ public class TransactionsController {
             @RequestParam("minAmount") String minAmount, 
             @RequestParam("maxAmount") String maxAmount, 
             @RequestParam("startDate") String startDate, 
-            @RequestParam("endDate") String endDate
+            @RequestParam("endDate") String endDate,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit
     ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
@@ -239,6 +245,8 @@ public class TransactionsController {
             srcAccountName.replaceAll("space", " "),
             destAccountName.replaceAll("space", " "),
             startDate,
-            endDate);
+            endDate,
+            page,
+            limit);
     }
 }
