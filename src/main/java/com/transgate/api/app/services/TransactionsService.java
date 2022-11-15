@@ -13,6 +13,7 @@ import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.TNXModel;
 import com.transgate.api.models.TransactionModel;
 import com.transgate.api.models.TransactionSummaryModel;
+import com.transgate.api.util.ResponseCodeInterpreter;
 import com.transgate.api.util.ResponseManager;
 import java.math.BigDecimal;
 import java.sql.ResultSet;
@@ -943,6 +944,7 @@ public class TransactionsService implements TransactionsInterface {
     class DisputeTransactionMapper implements RowMapper<DisputeModel> {
         @Override
         public DisputeModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            ResponseCodeInterpreter responseCodeInterpreter = new ResponseCodeInterpreter();
             DisputeModel response = new DisputeModel();            
             response.setId(rs.getInt("id"));
             response.setTransactionId(rs.getInt("transactionid"));
@@ -961,6 +963,7 @@ public class TransactionsService implements TransactionsInterface {
             response.setSrcInstitutioncode(rs.getString("source_institution_code"));
             response.setDestSessionId(rs.getString("session_id"));
             response.setSrcResponsecode(rs.getString("response_code"));
+            response.setResponseCodeDefinition(responseCodeInterpreter.InterpreteCode(rs.getString("response_code").length() > 0 ? rs.getString("response_code") : ""));
             response.setDestAccountNumber(rs.getString("beneficiary_account_number"));
             response.setDestAccountName(rs.getString("beneficiary_account_name"));
             response.setDestKycLevel(rs.getString("beneficiary_kyc"));
@@ -997,6 +1000,7 @@ public class TransactionsService implements TransactionsInterface {
         @Override
         public FullTransactionModel mapRow(ResultSet rs, int arg1) throws SQLException {
             FullTransactionModel response = new FullTransactionModel();            
+            ResponseCodeInterpreter responseCodeInterpreter = new ResponseCodeInterpreter();
             response.setId(rs.getInt("id"));
             response.setSrcSessionid(rs.getString("session_id"));
             response.setSrcAccountNumber(rs.getString("originator_account_number"));
@@ -1007,6 +1011,7 @@ public class TransactionsService implements TransactionsInterface {
             response.setSrcInstitutioncode(rs.getString("source_institution_code"));
             response.setDestSessionId(rs.getString("session_id"));
             response.setSrcResponsecode(rs.getString("response_code"));
+            response.setResponseCodeDefinition(responseCodeInterpreter.InterpreteCode(rs.getString("response_code").length() > 0 ? rs.getString("response_code") : ""));
             response.setDestAccountNumber(rs.getString("beneficiary_account_number"));
             response.setDestAccountName(rs.getString("beneficiary_account_name"));
             response.setDestKycLevel(rs.getString("beneficiary_kyc"));
@@ -1051,7 +1056,8 @@ public class TransactionsService implements TransactionsInterface {
     class TransactionMapper implements RowMapper<TransactionModel> {
         @Override
         public TransactionModel mapRow(ResultSet rs, int arg1) throws SQLException {
-            TransactionModel response = new TransactionModel();            
+            TransactionModel response = new TransactionModel();    
+            ResponseCodeInterpreter responseCodeInterpreter = new ResponseCodeInterpreter();
             response.setId(rs.getInt("id"));
             response.setSrcSessionid(rs.getString("session_id"));
             response.setSrcAccountNumber(rs.getString("originator_account_number"));
@@ -1062,6 +1068,7 @@ public class TransactionsService implements TransactionsInterface {
             response.setSrcInstitutioncode(rs.getString("source_institution_code"));
             response.setDestSessionId(rs.getString("session_id"));
             response.setSrcResponsecode(rs.getString("response_code"));
+            response.setResponseCodeDefinition(responseCodeInterpreter.InterpreteCode(rs.getString("response_code").length() > 0 ? rs.getString("response_code") : ""));
             response.setDestAccountNumber(rs.getString("beneficiary_account_number"));
             response.setDestAccountName(rs.getString("beneficiary_account_name"));
             response.setDestKycLevel(rs.getString("beneficiary_kyc"));
