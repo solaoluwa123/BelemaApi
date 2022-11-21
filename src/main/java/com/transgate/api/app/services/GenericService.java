@@ -207,7 +207,7 @@ public class GenericService implements GenericInterface {
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.institution_code = b.code "
-                    + "WHERE a.institution_code = ? ORDER BY a.settlement_date DESC";
+                    + "WHERE a.institution_code = ? AND a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{institution});
             
             networkResponse.setCode(200);
@@ -230,7 +230,7 @@ public class GenericService implements GenericInterface {
             SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.institution_code = b.code ORDER BY a.settlement_date DESC";
+                    + "ON a.institution_code = b.code WHERE a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
             
             networkResponse.setCode(200);
@@ -265,7 +265,7 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_settlement_details_merchant a "
                     + "LEFT JOIN postxnprocessor.tbl_merchants b "
                     + "ON a.merchant_id = b.merchant_id "
-                    + "WHERE a.merchant_id IN "+inString.toString()+" AND a.settlement_date BETWEEN ? AND ?";
+                    + "WHERE a.merchant_id IN "+inString.toString()+" AND a.settlement_date AND a.report_location LIKE '%.xlsx' BETWEEN ? AND ?";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             
             networkResponse.setCode(200);
