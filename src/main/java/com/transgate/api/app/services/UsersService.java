@@ -778,7 +778,10 @@ public class UsersService implements UsersInterface {
                 SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ? WHERE username = ?";
                 jdbcTemplate.update(SQL, new Object[]{hashPassword, username});
                 response.setCode(200);
+                response.setStatus("success");
                 response.setMessage("Password updated successfully");
+                SQL = "UPDATE tbl_user_details SET date_updated = now() WHERE username = ? AND session_token = ?";
+                jdbcTemplate.update(SQL, new Object[]{username, sessiontoken});
                 return responseManager.ResponseOk(response);
             }
             else {
