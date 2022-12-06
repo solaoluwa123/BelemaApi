@@ -151,7 +151,7 @@ public class UsersService implements UsersInterface {
 //                SQL = "INSERT into tbl_user_token(username, token, date_created) VALUES(?, ?, now())";
 //                jdbcTemplate.update(SQL, new Object[]{username, token});
 //                response.setToken(token);
-                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.session_token, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name "
+                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.session_token, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name "
                         + "from tbl_user_details a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
@@ -181,7 +181,7 @@ public class UsersService implements UsersInterface {
                     response.setFinancial_institution_name(details.get(0).getInstitutionName());
                     response.setLast_login(details.get(0).getLast_login());
                     response.setSession_token(sessiontoken);
-                    response.setDate_updated(null);
+                    response.setDate_updated(details.get(0).getDate_updated());
                 }
                 else {
                     userRoleid = 4;
@@ -432,7 +432,7 @@ public class UsersService implements UsersInterface {
         LoginResponse response = new LoginResponse();
         try {
             String SQL;
-            SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
+            SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
                         + "from tbl_user_details a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
@@ -457,7 +457,7 @@ public class UsersService implements UsersInterface {
                 response.setRoleid(userRoleid);
                 response.setRole(details.get(0).getRole());
                 response.setDate_created(details.get(0).getDate_created());
-                response.setDate_updated(null);
+                response.setDate_updated(details.get(0).getDate_updated());
                 return responseManager.ResponseOk(response);
             }
             else {
@@ -485,7 +485,7 @@ public class UsersService implements UsersInterface {
         try {
             String SQL;
             if (systemUsers)
-                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
+                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
                         + "from tbl_user_details a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
@@ -496,7 +496,7 @@ public class UsersService implements UsersInterface {
                         + "WHERE a.deleted = 0 AND role < 4 "
                         + "ORDER BY a.id DESC";
             else
-                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.last_login, "
+                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, "
                         + "b.role_name, "
                         + "c.institution_id as financial_institution_code, c.institution_name as institution_name  "
                         + "from tbl_user_details a "
@@ -1017,7 +1017,7 @@ public class UsersService implements UsersInterface {
             response.setDate_created(rs.getString("date_created"));
 //            response.setSession_token(rs.getString("session_token") != null ? rs.getString("session_token") : "");
             response.setLast_login(rs.getString("last_login"));
-            response.setDate_updated("");
+            response.setDate_updated(rs.getString("date_updated"));
             response.setInstitution(rs.getString("financial_institution_code") != null ? rs.getString("financial_institution_code") : "-1");
             response.setInstitutionName(rs.getString("institution_name") != null ? rs.getString("institution_name") : "");
             return response;

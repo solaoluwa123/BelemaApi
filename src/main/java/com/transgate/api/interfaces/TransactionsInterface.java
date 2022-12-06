@@ -50,6 +50,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status);
     
+    public ResponseEntity SearchTransactionsForSessionIds(String sessionids);
+    
     public ResponseEntity SearchTransactions(String srcSessionid,
             String responseCode,
             String srcInstitutioncode,

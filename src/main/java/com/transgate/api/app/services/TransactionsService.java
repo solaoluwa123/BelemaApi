@@ -11,6 +11,7 @@ import com.transgate.api.models.DisputeTypeModel;
 import com.transgate.api.models.FullTransactionModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.TNXModel;
+import com.transgate.api.models.TransactionHalfModel;
 import com.transgate.api.models.TransactionModel;
 import com.transgate.api.models.TransactionSummaryModel;
 import com.transgate.api.util.ResponseCodeInterpreter;
@@ -533,6 +534,23 @@ public class TransactionsService implements TransactionsInterface {
             networkResponse.setTnxModel(tnxModel);
 //            String meta = "{\"totalSuccessFul\": " +totalSuccessFul+ ", \"totalFailures\": " + totalFailures +"}";
 //            networkResponse.setMeta(meta);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity SearchTransactionsForSessionIds(String sessionids) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            System.out.println("sessionids: " + sessionids);
+            String SQL = "SELECT a.session_id, a.name_enquiry_ref, a.response_code, a.transaction_date_time, a.amount FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.session_id IN ("+sessionids+")";
+            List<TransactionHalfModel> transactions = jdbcTemplate.query(SQL, new TransactionHalfMapper());
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions For Uploaded Session IDs");
+            networkResponse.setData((ArrayList) transactions);
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
@@ -1079,6 +1097,20 @@ public class TransactionsService implements TransactionsInterface {
             response.setNarration(rs.getString("narration"));
             response.setTransactiondate(rs.getString("transaction_date_time"));
             response.setUsername(rs.getString("name_enquiry_ref"));
+            return response;
+        }
+    }
+    
+    class TransactionHalfMapper implements RowMapper<TransactionHalfModel> {
+        @Override
+        public TransactionHalfModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            TransactionHalfModel response = new TransactionHalfModel();    
+            ResponseCodeInterpreter responseCodeInterpreter = new ResponseCodeInterpreter();
+            response.setSessionid(rs.getString("session_id"));
+            response.setAmount(rs.getString("amount"));
+            response.setResponsecode(rs.getString("response_code"));
+            response.setResponsecodedefinition(responseCodeInterpreter.InterpreteCode(rs.getString("response_code").length() > 0 ? rs.getString("response_code") : ""));
+            response.setTransactiondate(rs.getString("transaction_date_time"));
             return response;
         }
     }

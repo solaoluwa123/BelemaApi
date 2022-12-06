@@ -7,6 +7,7 @@ package com.transgate.api.app.controllers;
 
 import com.transgate.api.interfaces.TransactionsInterface;
 import com.transgate.api.models.DisputeModel;
+import com.transgate.api.models.TransactionModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -145,6 +146,16 @@ public class TransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return transactionsInterface.Get(institutioncode);
+    }
+    
+    @RequestMapping(value = "/transactions-by-session-ids", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity SearchTransactionsForSessionIds(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @RequestBody TransactionModel model) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.SearchTransactionsForSessionIds(model.getSrcSessionid());
     }
     
     @RequestMapping(value = "/transactions-by-date/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")

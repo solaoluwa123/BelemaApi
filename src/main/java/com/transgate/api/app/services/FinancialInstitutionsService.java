@@ -322,8 +322,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                 case 1:
                     SQL = "UPDATE ajiswitch_db.tbl_nodes SET is_active = -1 WHERE institution_code = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{code});
-                    if (retVal > 0)
+                    if (retVal > 0){
+                        ActivateDeactivateContacts("deactivate", code);
                         return responseManager.ResponseAccepted();
+                    }
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
@@ -365,8 +367,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                 case 1:
                     SQL = "UPDATE ajiswitch_db.tbl_nodes SET is_active = 1 WHERE institution_code = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{code});
-                    if (retVal > 0)
+                    if (retVal > 0){
+                        ActivateDeactivateContacts("activated", code);
                         return responseManager.ResponseAccepted();
+                    }
                     else
                         return responseManager.ResponseBadRequest();
                 case 2:
@@ -451,6 +455,16 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         }
     }
     
+    private void ActivateDeactivateContacts(String action, String institution) {
+        int isEnabled = action.equals("deactivate") ? -1 : 1;
+        String SQL = "UPDATE sparkpayweb_db.tbl_users a "
+                + "LEFT JOIN tbl_financial_institution_contacts b "
+                + "ON a.username = b.email_address "
+                + "SET a.enabled = ? "
+                + "WHERE b.financial_institution_code = ?";
+        jdbcTemplate.update(SQL, new Object[]{isEnabled, institution});
+    }
+    
     @Override
     public ResponseEntity FinancialInstitutionApprovals(String sessiontoken, int id, String actionType, String username) {
         try {
@@ -469,8 +483,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             SQL = "UPDATE ajiswitch_db.tbl_nodes SET is_active = ? WHERE institution_code = ?";
                             int acInt = actionType.equals("deactivate") ? -1 : 1;
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{acInt, institutions.get(0).getCode()});
-                            if (retVal > 0 && retVal2 > 0)
+                            if (retVal > 0 && retVal2 > 0){
+                                ActivateDeactivateContacts(actionType, institutions.get(0).getCode());
                                 return responseManager.ResponseAccepted();
+                            }
                             else
                                 return responseManager.ResponseInternalServerError();
                         case "edit":
@@ -761,7 +777,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             String SQL;
             int userrole = GetUserRole(creator, sessiontoken);
             ResponseEntity CreateLoginForContact = usersInterface.Create(sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
-            NetworkResponse response = (NetworkResponse) CreateLoginForContact.getBody();
+            LoginResponse response = (LoginResponse) CreateLoginForContact.getBody();
             if (response.getStatus().equals("success")) {
                 switch (userrole) {
                     case 1:
