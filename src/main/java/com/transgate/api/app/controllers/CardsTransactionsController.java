@@ -44,100 +44,120 @@ public class CardsTransactionsController {
     @RequestMapping(value = "/cards/transactions-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate,
-            @RequestParam("endDate") String endDate) {
+            @RequestParam("endDate") String endDate,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.Get(startDate, endDate);
+        return CardsTransactionsInterface.Get(startDate, endDate, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByFI(@RequestHeader(value = "Authorization") String header,
-            @PathVariable("institution") String institution) {
+            @PathVariable("institution") String institution,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByFI(institution);
+        return CardsTransactionsInterface.GetByFI(institution, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions-by-date/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByFI(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
-            @PathVariable("institution") String institution) {
+            @PathVariable("institution") String institution,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByFI(institution, startDate, endDate);
+        return CardsTransactionsInterface.GetByFI(institution, startDate, endDate, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header,
-            @PathVariable("merchant") String merchant) {
+            @PathVariable("merchant") String merchant,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByMerchant(merchant);
+        return CardsTransactionsInterface.GetByMerchant(merchant, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions-by-date/merchant/{merchant}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByMerchant(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
-            @PathVariable("merchant") String merchant) {
+            @PathVariable("merchant") String merchant,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByMerchant(merchant, startDate, endDate);
+        return CardsTransactionsInterface.GetByMerchant(merchant, startDate, endDate, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions/terminal/{terminal}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByTerminal(@RequestHeader(value = "Authorization") String header,
-            @PathVariable("terminal") String terminal) {
+            @PathVariable("terminal") String terminal,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByTerminal(terminal);
+        return CardsTransactionsInterface.GetByTerminal(terminal, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByPTSP(@RequestHeader(value = "Authorization") String header,
-            @PathVariable("ptsp") String ptsp) {
+            @PathVariable("ptsp") String ptsp,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByPTSP(ptsp);
+        return CardsTransactionsInterface.GetByPTSP(ptsp, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions-by-date/ptsp/{ptsp}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByPTSP(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
-            @PathVariable("ptsp") String ptsp) {
+            @PathVariable("ptsp") String ptsp,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByPTSP(ptsp, startDate, endDate);
+        return CardsTransactionsInterface.GetByPTSP(ptsp, startDate, endDate, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions/terminal-owner/{owner}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
-            @PathVariable("owner") String owner) {
+            @PathVariable("owner") String owner,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByTerminalOwner(owner);
+        return CardsTransactionsInterface.GetByTerminalOwner(owner, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions-by-date/terminal-owner/{owner}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetByTerminalOwner(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
-            @PathVariable("owner") String owner) {
+            @PathVariable("owner") String owner,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.GetByTerminalOwner(owner, startDate, endDate);
+        return CardsTransactionsInterface.GetByTerminalOwner(owner, startDate, endDate, page, limit);
     }
     
     @RequestMapping(value = "/cards/transactions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -153,6 +173,8 @@ public class CardsTransactionsController {
             @RequestParam("max_amount") String max_amount, 
             @RequestParam("start_date") String start_date, 
             @RequestParam("end_date") String end_date,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
             @RequestParam("retrieval_ref_number") String retrieval_ref_number, 
             @RequestParam("acquirer_institution_id") String acquirer_institution_id, 
             @RequestParam("pan") String pan, 
@@ -179,7 +201,9 @@ public class CardsTransactionsController {
             terminal_id,
             merchant_id,
             location_name_address,
-            approval_code);
+            approval_code,
+            page,
+            limit);
     }
     
     @RequestMapping(value = "/cards/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -197,6 +221,14 @@ public class CardsTransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return CardsTransactionsInterface.GetDisputes(institutioncode);
+    }
+    
+    @RequestMapping(value = "/cards/transactions/disputes/merchant/{merchantid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetDisputesByMerchant(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("merchantid") String merchantid) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return CardsTransactionsInterface.GetDisputesByMerchant(merchantid);
     }
     
     @RequestMapping(value = "/cards/transactions/disputes/approve", method = RequestMethod.POST, headers = "Accept=application/json")

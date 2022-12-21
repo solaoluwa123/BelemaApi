@@ -13,17 +13,17 @@ import org.springframework.http.ResponseEntity;
  */
 public interface CardsTransactionsInterface {
     public ResponseEntity Get();
-    public ResponseEntity Get(String startDate, String endDate);
+    public ResponseEntity Get(String startDate, String endDate, int page, int limit);
     public ResponseEntity Get(int id);
-    public ResponseEntity GetByTerminal(String terminalid);
-    public ResponseEntity GetByMerchant(String merchantid);
-    public ResponseEntity GetByMerchant(String merchantid, String startDate, String endDate);
-    public ResponseEntity GetByFI(String institution);
-    public ResponseEntity GetByFI(String institution, String startDate, String endDate);
-    public ResponseEntity GetByPTSP(String ptsp);
-    public ResponseEntity GetByPTSP(String ptsp, String startDate, String endDate);
-    public ResponseEntity GetByTerminalOwner(String owner);
-    public ResponseEntity GetByTerminalOwner(String owner, String startDate, String endDate);
+    public ResponseEntity GetByTerminal(String terminalid, int page, int limit);
+    public ResponseEntity GetByMerchant(String merchantid, int page, int limit);
+    public ResponseEntity GetByMerchant(String merchantid, String startDate, String endDate, int page, int limit);
+    public ResponseEntity GetByFI(String institution, int page, int limit);
+    public ResponseEntity GetByFI(String institution, String startDate, String endDate, int page, int limit);
+    public ResponseEntity GetByPTSP(String ptsp, int page, int limit);
+    public ResponseEntity GetByPTSP(String ptsp, String startDate, String endDate, int page, int limit);
+    public ResponseEntity GetByTerminalOwner(String owner, int page, int limit);
+    public ResponseEntity GetByTerminalOwner(String owner, String startDate, String endDate, int page, int limit);
     public ResponseEntity SearchTransactions(String message_type,
             String bin,
             String processing_code,
@@ -39,11 +39,15 @@ public interface CardsTransactionsInterface {
             String terminal_id,
             String merchant_id,
             String location_name_address,
-            String approval_code);
+            String approval_code, 
+            int page, 
+            int limit);
     
     public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String username);
     
     public ResponseEntity GetDisputes(String institutioncode);
+    
+    public ResponseEntity GetDisputesByMerchant(String merchantid);
     
     public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status);
 }
