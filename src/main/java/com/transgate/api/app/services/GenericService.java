@@ -207,7 +207,7 @@ public class GenericService implements GenericInterface {
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.institution_code = b.code "
-                    + "WHERE a.institution_code = ? AND a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+                    + "WHERE a.institution_code = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{institution});
             
             networkResponse.setCode(200);
@@ -230,7 +230,7 @@ public class GenericService implements GenericInterface {
             SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.institution_code = b.code WHERE a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+                    + "ON a.institution_code = b.code WHERE a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv' ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
             
             networkResponse.setCode(200);
@@ -265,7 +265,7 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_settlement_details_merchant a "
                     + "LEFT JOIN postxnprocessor.tbl_merchants b "
                     + "ON a.merchant_id = b.merchant_id "
-                    + "WHERE a.merchant_id IN "+inString.toString()+" AND a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+                    + "WHERE a.merchant_id IN "+inString.toString()+" AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
             
             networkResponse.setCode(200);
@@ -302,7 +302,7 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_settlement_details_merchant a "
                     + "LEFT JOIN postxnprocessor.tbl_merchants b "
                     + "ON a.merchant_id = b.merchant_id "
-                    + "WHERE a.merchant_id IN "+inString.toString()+" AND a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+                    + "WHERE a.merchant_id IN "+inString.toString()+" AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
             
             networkResponse.setCode(200);
@@ -322,9 +322,16 @@ public class GenericService implements GenericInterface {
         try {
             String SQL;
             List<Map<String, Object>> rows;
-            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
-                    + "FROM sparkpay.tbl_settlement_details a "
-                    + "WHERE a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+//            SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
+//                    + "FROM sparkpay.tbl_settlement_details a "
+//                    + "WHERE a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv' ORDER BY a.settlement_date DESC";
+//            rows = jdbcTemplate.queryForList(SQL);
+            
+            SQL = "SELECT a.id, a.institution_name, a.merchant_id, a.acqVol, a.acqVal, a.msc, a.net_set_pos, a.settlement_date, a.report_location, b.merchant_name "
+                    + "FROM sparkpay.tbl_settlement_details_merchant a "
+                    + "LEFT JOIN postxnprocessor.tbl_merchants b "
+                    + "ON a.merchant_id = b.merchant_id "
+                    + "WHERE a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv' ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
             
             networkResponse.setCode(200);
@@ -346,7 +353,7 @@ public class GenericService implements GenericInterface {
             List<Map<String, Object>> rows;
             SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
                     + "FROM sparkpay.tbl_settlement_details a "
-                    + "WHERE a.acquirer_id = ? AND a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+                    + "WHERE a.acquirer_id = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{acquirer});
             
             networkResponse.setCode(200);
@@ -368,7 +375,7 @@ public class GenericService implements GenericInterface {
             List<Map<String, Object>> rows;
             SQL = "SELECT a.id, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location, a.acquirer_id, a.issuer_id "
                     + "FROM sparkpay.tbl_settlement_details a "
-                    + "WHERE a.issuer_id = ? AND a.report_location LIKE '%.xlsx' ORDER BY a.settlement_date DESC";
+                    + "WHERE a.issuer_id = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{issuer});
             
             networkResponse.setCode(200);

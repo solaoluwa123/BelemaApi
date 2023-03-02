@@ -12,4 +12,5 @@ package com.transgate.api.interfaces;
 public interface UnlockAccountsInterface {
     public void Unlock();
     public void ReduceLockTime();
+    public void AutoPassDisputesForSettlement();
 }

@@ -54,6 +54,12 @@ public class UsersController {
         return responseManager.ResponseAccepted();
     }
     
+    @RequestMapping(value = "/app/crons/autopassdisputesforsettlement", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity AutoPassDisputesForSettlement() {
+        unlockAccountsInterface.AutoPassDisputesForSettlement();
+        return responseManager.ResponseAccepted();
+    }
+    
     @RequestMapping(value = "/users/login", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity Login(@RequestHeader(value = "Authorization") String header,
             @RequestBody LoginRequest login) {

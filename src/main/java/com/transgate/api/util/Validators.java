@@ -13,4 +13,22 @@ public class Validators {
     public final String validHeader() {
         return "Bearer 958455015C7DB0F3CEDD56F8F3E50E94568905B636A4954A478030E2603E8A7758F8843B7A6EDC837CA5C6B57B262FDF3B44C7FF706DC3EB991EECFC7840FEC7";
     }
+    
+    public int removeLeadingZero(String str) {
+        return Integer.parseInt(str);
+//        if (str.substring(0, 1).equals("0"))
+//            return str.substring(1, str.length());
+//        else
+//            return str;
+    }
+    
+    public String FormatCardHolderAcctNum(String cardHolderAcctNum){
+        String path_1 = cardHolderAcctNum.substring(0, 3);
+        String path_2 = cardHolderAcctNum.substring(3, 10);
+        String path_3 = cardHolderAcctNum.substring(10, 12);
+        String path_4 = cardHolderAcctNum.substring(12, 16);
+        String path_5 = cardHolderAcctNum.substring(16, cardHolderAcctNum.length());
+        String formatCardHolderAcctNum = removeLeadingZero(path_1) + "/" + removeLeadingZero(path_2) + "/" + removeLeadingZero(path_3) + "/" + removeLeadingZero(path_4) + "/" + removeLeadingZero(path_5);
+        return formatCardHolderAcctNum;
+    }
 }

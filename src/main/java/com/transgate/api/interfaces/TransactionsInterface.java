@@ -14,9 +14,11 @@ import org.springframework.http.ResponseEntity;
 public interface TransactionsInterface {
     public ResponseEntity Get();
     
-    public ResponseEntity Get(String startDate, String endDate, int page, int limit);
+    public ResponseEntity Get(String startDate, String endDate, int page, int limit, boolean isCurrent);
     
     public ResponseEntity GetBySessionId(String sessionid);
+    
+    public ResponseEntity GetBySessionId(String sessionid, boolean isCurrent);
     
     public ResponseEntity GetTransactionsVolume(String startDate, String endDate);
     
@@ -32,9 +34,11 @@ public interface TransactionsInterface {
     
     public ResponseEntity Get(String institutioncode);
     
-    public ResponseEntity Get(String institutioncode, String startDate, String endDate, int page, int limit);
+    public ResponseEntity Get(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent);
     
     public ResponseEntity LogDispute(String sessiontoken, String sessionId, String amount, String wallet, String sourceInstitution, String type, String username);
+    
+    public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String sourceInstitution, String username);
     
     public ResponseEntity GetDisputes(String institutioncode);
     
@@ -48,7 +52,7 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetDisputeTypes();
     
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status);
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status, String proof_of_reject_uri);
     
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids);
     
@@ -63,5 +67,6 @@ public interface TransactionsInterface {
             String startDate,
             String endDate, 
             int page, 
-            int limit);
+            int limit,
+            boolean isCurrent);
 }

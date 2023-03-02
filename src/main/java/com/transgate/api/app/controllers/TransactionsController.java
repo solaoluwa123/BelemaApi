@@ -46,11 +46,12 @@ public class TransactionsController {
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
             @RequestParam("page") int page,
-            @RequestParam("limit") int limit) {
+            @RequestParam("limit") int limit,
+            @RequestParam("isCurrent") boolean isCurrent) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(startDate, endDate, page, limit);
+        return transactionsInterface.Get(startDate, endDate, page, limit, isCurrent);
     }
         
     @RequestMapping(value = "/transactions-summary", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -140,6 +141,18 @@ public class TransactionsController {
         return transactionsInterface.GetBySessionId(sessionid);
     }
     
+    @RequestMapping(value = "/transactions-by-session-id/{sessionid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetOneBySessionId(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("sessionid") String sessionid,
+            @RequestParam("isCurrent") boolean isCurrent
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetBySessionId(sessionid, isCurrent);
+    }
+    
     @RequestMapping(value = "/transactions/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetInstitutionTransactions(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("institutioncode") String institutioncode) {
         if (!validators.validHeader().equals(header)) {
@@ -165,11 +178,12 @@ public class TransactionsController {
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
             @RequestParam("page") int page,
-            @RequestParam("limit") int limit) {
+            @RequestParam("limit") int limit,
+            @RequestParam("isCurrent") boolean isCurrent) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(institutioncode, startDate, endDate, page, limit);
+        return transactionsInterface.Get(institutioncode, startDate, endDate, page, limit, isCurrent);
     }
     
     @RequestMapping(value = "/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -181,13 +195,22 @@ public class TransactionsController {
         return transactionsInterface.LogDispute(sessiontoken, dispute.getSrcSessionid(), dispute.getSrcAmount(), dispute.getSrcAccountNumber(), dispute.getSrcInstitutioncode(), dispute.getType(), dispute.getUsername());
     }
     
+    @RequestMapping(value = "/transactions/disputes/create/bulk", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity CreateBulkDisputes(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody DisputeModel dispute) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.LogDisputesBulk(sessiontoken, dispute.getRecords(), dispute.getSrcInstitutioncode(), dispute.getUsername());
+    }
+    
     @RequestMapping(value = "/transactions/disputes/approve", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity ApproveSettlement(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestBody DisputeModel dispute) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getUsername(), dispute.getStatus());
+        return transactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getUsername(), dispute.getStatus(), dispute.getProof_of_reject_uri());
     }
     
     @RequestMapping(value = "/transactions/disputes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -242,7 +265,8 @@ public class TransactionsController {
             @RequestParam("startDate") String startDate, 
             @RequestParam("endDate") String endDate,
             @RequestParam("page") int page,
-            @RequestParam("limit") int limit
+            @RequestParam("limit") int limit,
+            @RequestParam("isCurrent") boolean isCurrent
     ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
@@ -258,6 +282,7 @@ public class TransactionsController {
             startDate,
             endDate,
             page,
-            limit);
+            limit,
+            isCurrent);
     }
 }

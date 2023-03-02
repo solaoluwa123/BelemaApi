@@ -12,6 +12,8 @@ package com.transgate.api.models;
 public class DisputeModel extends FullTransactionModel {
     String type, loggedBy, dateModified, dateCreated;
     int transactionId, status, resolved;
+    String resolvedBy, records, timeline_date, proof_of_reject_uri;
+    
     public String getType() {
         return type;
     }
@@ -66,6 +68,38 @@ public class DisputeModel extends FullTransactionModel {
 
     public void setTransactionId(int transactionId) {
         this.transactionId = transactionId;
+    }
+
+    public String getResolvedBy() {
+        return resolvedBy;
+    }
+
+    public void setResolvedBy(String resolvedBy) {
+        this.resolvedBy = resolvedBy;
+    }
+
+    public String getRecords() {
+        return records;
+    }
+
+    public void setRecords(String records) {
+        this.records = records;
+    }
+
+    public String getTimeline_date() {
+        return timeline_date;
+    }
+
+    public void setTimeline_date(String timeline_date) {
+        this.timeline_date = timeline_date;
+    }
+
+    public String getProof_of_reject_uri() {
+        return proof_of_reject_uri;
+    }
+
+    public void setProof_of_reject_uri(String proof_of_reject_uri) {
+        this.proof_of_reject_uri = proof_of_reject_uri;
     }
     
 }
