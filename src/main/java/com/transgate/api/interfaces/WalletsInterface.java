@@ -13,9 +13,11 @@ import org.springframework.http.ResponseEntity;
  */
 public interface WalletsInterface {
 
-    public ResponseEntity Create(String sessiontoken, String walletname, String institutionCode, String creator);
+    public ResponseEntity Create(String sessiontoken, String walletname, String institutionCode, String creator, int type);
 
     public ResponseEntity GetWallets();
+    
+    public ResponseEntity GetWalletActivity(String walletnumber);
 
     public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, float amount, String fundby);
     

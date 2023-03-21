@@ -261,6 +261,23 @@ public class UsersService implements UsersInterface {
                         response.setTransgateMenu(eM);
                     }
                 }
+                else if (userRoleid == 8) {
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
+                            + "ORDER BY a.id ASC";
+                    menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
+
+                    if (menu.size() > 0) {
+                        response.setTransgateMenu(menu);
+                    }
+                    else {
+                        List<MenuModel> eM = new ArrayList<>();
+                        response.setTransgateMenu(eM);
+                    }
+                }
                 else
                     response.setTransgateMenu(new ArrayList<>());
                 if (userRoleid < 4) 

@@ -14,6 +14,7 @@ public class WalletModel {
     int id, wallettype;
     float balance, lien, amount;
     String actionType, assignnee, note;
+    String walletTypeName, status;
 
     public String getCreator() {
         return creator;
@@ -133,6 +134,22 @@ public class WalletModel {
 
     public void setNote(String note) {
         this.note = note;
+    }
+
+    public String getWalletTypeName() {
+        return walletTypeName;
+    }
+
+    public void setWalletTypeName(String walletTypeName) {
+        this.walletTypeName = walletTypeName;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
     }
     
 }

@@ -13,6 +13,7 @@ public class CardsDisputeModel extends CardsTransactionModel {
     String logged_by, date_modified, date_created, type;
     int transaction_id, status, resolved;
     String resolved_by, records, timeline_date, proof_of_reject_uri, cardholder_acct_nuban, cardholder_acct_number;
+    String result;
 
     public String getLogged_by() {
         return logged_by;
@@ -108,6 +109,14 @@ public class CardsDisputeModel extends CardsTransactionModel {
 
     public void setCardholder_acct_nuban(String cardholder_acct_nuban) {
         this.cardholder_acct_nuban = cardholder_acct_nuban;
+    }
+
+    public String getResult() {
+        return result;
+    }
+
+    public void setResult(String result) {
+        this.result = result;
     }
     
 }

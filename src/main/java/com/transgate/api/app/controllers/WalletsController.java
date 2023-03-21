@@ -38,7 +38,7 @@ public class WalletsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return walletInterface.Create(sessiontoken, wallet.getWalletname(), wallet.getFinancialInstitutionCode(), wallet.getCreator());
+        return walletInterface.Create(sessiontoken, wallet.getWalletname(), wallet.getFinancialInstitutionCode(), wallet.getCreator(), wallet.getWallettype());
     }
     
     @RequestMapping(value = "/wallets/get", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -55,6 +55,14 @@ public class WalletsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return walletInterface.GetWalletByNumber(walletnumber);
+    }
+    
+    @RequestMapping(value = "/wallet/activity/{walletnumber}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetWalletActivity(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("walletnumber") String walletnumber) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return walletInterface.GetWalletActivity(walletnumber);
     }
     
     @RequestMapping(value = "/wallets/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

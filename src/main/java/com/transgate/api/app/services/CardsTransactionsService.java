@@ -1006,6 +1006,31 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     }
     
     @Override
+    public ResponseEntity GetOneDispute(String uniqueId) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+                            + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
+                            + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
+                            + "FROM sparkpayweb_db.tbl_disputes a "
+                            + "WHERE a.unique_log_code = ?";
+            
+            List<CardsDisputeModel> transactions = jdbcTemplate.query(SQL, new Object[]{uniqueId}, new CardsTransactionsDisputesMapper());
+                        
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Found dispute: " + uniqueId);
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetDisputes(String institutioncode, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -1250,6 +1275,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setResponse_code(rs.getString("response_code"));
             tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? validators.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : "");
             tnx.setStatus_code_message(rs.getString("response_code") != null && rs.getString("response_code").toLowerCase() != "null" && rs.getString("response_code") != "" ? transactionsCodeInterpreter.GetResponse(rs.getString("response_code")) : "");
+            if (rs.getInt("status") == -1) tnx.setResult("PENDING");
+            else if (rs.getInt("status") == 1) tnx.setResult("REJECTED");
+            else if (rs.getInt("status") == 0 && rs.getInt("resolved") == 0) tnx.setResult("ACCEPTED");
+            else if (rs.getInt("status") == 0 && rs.getInt("resolved") == 1) tnx.setResult("RESOLVED");
             return tnx;
         }
     }

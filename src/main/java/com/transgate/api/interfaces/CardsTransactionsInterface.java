@@ -60,6 +60,8 @@ public interface CardsTransactionsInterface {
     
     public ResponseEntity GetDisputes(String institutioncode, String startDate, String endDate, int page, int limit);
     
+    public ResponseEntity GetOneDispute(String uniqueId);
+    
     public ResponseEntity GetArbitratedDisputes(String institutioncode);
     
     public ResponseEntity GetDisputesByMerchant(String merchantid, String startDate, String endDate, int page, int limit);

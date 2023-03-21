@@ -13,36 +13,36 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.web.client.RestTemplate;
 
-class TaskHelper4 extends TimerTask {
-//    app/crons/autopassdisputesforsettlement
-    private static final String BASEURI = "http://localhost:82/sparkpayapi";
-    
-    public void executeGet(String targetURL) {
-        HttpURLConnection connection = null;
-        try {
-            URL url = new URL(BASEURI + "/" + targetURL);
-            connection = (HttpURLConnection) url.openConnection();
-            connection.setDoOutput(true);
-            BufferedReader rd = new BufferedReader(new InputStreamReader(connection.getInputStream()));
-            StringBuilder myResponse = new StringBuilder();
-            String my_response;
-            while ((my_response = rd.readLine()) != null) {
-                myResponse.append(my_response);
-            }
-        } catch (IOException e) {
-            System.out.println(e.toString());
-        } finally {
-            if (connection != null) {
-                connection.disconnect();
-            }
-        }
-    }
-    
-    @Override
-    public void run() {
-        executeGet("app/crons/cards/disputes/update-dispute-data");
-    }
-}
+//class TaskHelper4 extends TimerTask {
+////    app/crons/autopassdisputesforsettlement
+//    private static final String BASEURI = "http://localhost:82/sparkpayapi";
+//    
+//    public void executeGet(String targetURL) {
+//        HttpURLConnection connection = null;
+//        try {
+//            URL url = new URL(BASEURI + "/" + targetURL);
+//            connection = (HttpURLConnection) url.openConnection();
+//            connection.setDoOutput(true);
+//            BufferedReader rd = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+//            StringBuilder myResponse = new StringBuilder();
+//            String my_response;
+//            while ((my_response = rd.readLine()) != null) {
+//                myResponse.append(my_response);
+//            }
+//        } catch (IOException e) {
+//            System.out.println(e.toString());
+//        } finally {
+//            if (connection != null) {
+//                connection.disconnect();
+//            }
+//        }
+//    }
+//    
+//    @Override
+//    public void run() {
+//        executeGet("app/crons/cards/disputes/update-dispute-data");
+//    }
+//}
 
 class TaskHelper3 extends TimerTask {
 //    app/crons/autopassdisputesforsettlement
@@ -153,24 +153,75 @@ public class TransgateApi //extends SpringBootServletInitializer
 //        return application.sources(SparkpayApplication.class);
 //    }
     
-    static Timer timer = new Timer();
-    
-    static TimerTask taskHelper = new TaskHelper();
-    static TimerTask taskHelper2 = new TaskHelper2();
-    static TimerTask taskHelper3 = new TaskHelper3();
-    static TimerTask taskHelper4 = new TaskHelper4();
+//    static Timer timer = new Timer();
+//    
+//    static TimerTask taskHelper = new TaskHelper();
+//    static TimerTask taskHelper2 = new TaskHelper2();
+//    static TimerTask taskHelper3 = new TaskHelper3();
+//    static TimerTask taskHelper4 = new TaskHelper4();
     
     @Bean
     public RestTemplate handleRestTemplate() {
         return new RestTemplate();
     }
 
+    private static final String BASEURI = "http://localhost:82/sparkpayapi";
+    public static void executeGet(String targetURL) {
+        HttpURLConnection connection = null;
+        try {
+            URL url = new URL(BASEURI + "/" + targetURL);
+            connection = (HttpURLConnection) url.openConnection();
+            connection.setDoOutput(true);
+            BufferedReader rd = new BufferedReader(new InputStreamReader(connection.getInputStream()));
+            StringBuilder myResponse = new StringBuilder();
+            String my_response;
+            while ((my_response = rd.readLine()) != null) {
+                myResponse.append(my_response);
+            }
+        } catch (IOException e) {
+            System.out.println(e.toString());
+        } finally {
+            if (connection != null) {
+                connection.disconnect();
+            }
+        }
+    }
+    
     public static void main(String[] args) throws JSONException {
+        Timer timer1 = new Timer();
+        Timer timer2 = new Timer();
+//        Timer timer3 = new Timer();
+        timer1.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                // code to be executed repeatedly
+                executeGet("users/crons/reducelocktime");
+                executeGet("users/crons/unlock");
+                executeGet("app/crons/cards/disputes/update-nuban");
+            }
+        }, 0, 60000);
+        
+        timer2.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                // code to be executed repeatedly
+                executeGet("app/crons/autopassdisputesforsettlement");
+            }
+        }, 0, 3600000);
+        
+//        timer3.schedule(new TimerTask() {
+//            @Override
+//            public void run() {
+//                // code to be executed repeatedly
+//                executeGet("app/crons/cards/disputes/update-nuban");
+//            }
+//        }, 0, 15000);
+        
 //    Validators validators = new Validators();
 //    RestCall restCall = new RestCall();
-        timer.scheduleAtFixedRate(taskHelper, 120000, 120000); //run at every 2mins
-        timer.scheduleAtFixedRate(taskHelper2, 3600000, 3600000);  //run at every 1 hr
-        timer.scheduleAtFixedRate(taskHelper3, 5000, 5000);  //run at every 5 secs
+//        timer.scheduleAtFixedRate(taskHelper, 0, 60000); //run at every 1min
+//        timer.scheduleAtFixedRate(taskHelper2, 0, 3600000);  //run at every 1 hr
+//        timer.scheduleAtFixedRate(taskHelper3, 0, 5000);  //run at every 5 secs
 //        timer.scheduleAtFixedRate(taskHelper4, 2000, 5000);
 //        String[]  numbs = {"561061615001005900", "391039717001005900", "391038944201005900", "249024167801005900", "201012965601501100",
 //        "235027216301005900", "395035603701005900", "221085084001005900", "248029048901005900", "504074614601005900"};

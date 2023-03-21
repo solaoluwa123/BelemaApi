@@ -238,6 +238,34 @@ public class CardsTransactionsController {
         );
     }
     
+    @RequestMapping(value = "/cards/transactions/disputes/log", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity CreateDisputeExternal(@RequestHeader(value = "auth") String header, 
+            @RequestHeader(value = "Authorization") String token, 
+            @RequestHeader(value = "username") String username,
+            @RequestBody CardsDisputeModel dispute) {
+        if (!validators.validHeaderExternal().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        else if (!validators.ValidateJSONWebToken(token, username)) {
+            return responseManager.ResponseUnathorized();
+        }
+        return CardsTransactionsInterface.LogDispute(token, dispute.getTerminal_id(), dispute.getRetrieval_ref_number(), dispute.getSystem_trace_number(), dispute.getLogged_by());
+    }
+    
+    @RequestMapping(value = "/cards/transactions/disputes/{uniqueid}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetOneDisputeExternal(@RequestHeader(value = "auth") String header, 
+            @RequestHeader(value = "Authorization") String token,
+            @RequestHeader(value = "username") String username,
+            @PathVariable ("uniqueid") String uniqueid) {
+        if (!validators.validHeaderExternal().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        else if (!validators.ValidateJSONWebToken(token, username)) {
+            return responseManager.ResponseUnathorized();
+        }
+        return CardsTransactionsInterface.GetOneDispute(uniqueid);
+    }
+    
     @RequestMapping(value = "/cards/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
     public ResponseEntity CreateDispute(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestBody CardsDisputeModel dispute) {

@@ -64,6 +64,73 @@ public class TransactionsController {
         return transactionsInterface.GetTransactionsVolume(startDate, endDate);
     }
         
+    @RequestMapping(value = "/successful-transaction-count", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSuccessTNXVolume(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetSuccessTNXVolume(startDate, endDate);
+    }
+        
+    @RequestMapping(value = "/successful-transaction-count/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSuccessTNXVolumeInstitution(@RequestHeader(value = "Authorization") String header,
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetSuccessTNXVolume(institutioncode, startDate, endDate);
+    }
+        
+    @RequestMapping(value = "/ft-average-time", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetFTTimeAverage(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetFTTimeAverage(startDate, endDate, isCurrent);
+    }
+        
+    @RequestMapping(value = "/ft-average-time/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetFTTimeAverageInstitution(@RequestHeader(value = "Authorization") String header,
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetFTTimeAverage(institutioncode, startDate, endDate, isCurrent);
+    }
+        
+    @RequestMapping(value = "/top-failed-response-codes", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTop6ResponseCodesTNX(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTop6ResponseCodesTNX(startDate, endDate, isCurrent);
+    }
+        
+    @RequestMapping(value = "/top-failed-response-codes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTop6ResponseCodesTNXInstitution(@RequestHeader(value = "Authorization") String header,
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTop6ResponseCodesTNX(institutioncode, startDate, endDate, isCurrent);
+    }
+        
     @RequestMapping(value = "/transactions-summary/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTransactionsVolumeInstitution(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken, 

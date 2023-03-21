@@ -10,6 +10,7 @@ import com.transgate.api.interfaces.UnlockAccountsInterface;
 import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.models.LoginRequest;
 import com.transgate.api.models.LoginResponse;
+import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
@@ -58,6 +59,20 @@ public class UsersController {
     public ResponseEntity AutoPassDisputesForSettlement() {
         unlockAccountsInterface.AutoPassDisputesForSettlement();
         return responseManager.ResponseAccepted();
+    }
+    
+    @RequestMapping(value = "/user/generate-token", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity SignUser(@RequestHeader(value = "auth") String header,
+            @RequestBody LoginRequest login) {
+        if (!validators.validHeaderExternal().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        NetworkResponse response = new NetworkResponse();
+        String token = validators.GenerateJSONWebToken(login.getUsername());
+        response.setMessage(token);
+        response.setCode(200);
+        response.setStatus("success");
+        return responseManager.ResponseOk(response);
     }
     
     @RequestMapping(value = "/users/login", method = RequestMethod.POST, headers = "Accept=application/json")

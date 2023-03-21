@@ -12,7 +12,7 @@ import java.util.ArrayList;
  * @author Makintola
  */
 public class TNXModel {
-    ArrayList inflows, outflows, successVolumes, failedVolumes, totalVolumes;
+    ArrayList inflows, outflows, successVolumes, failedVolumes, totalVolumes, summary;
     String total;
 
     public ArrayList getInflows() {
@@ -61,6 +61,14 @@ public class TNXModel {
 
     public void setTotalVolumes(ArrayList totalVolumes) {
         this.totalVolumes = totalVolumes;
+    }
+
+    public ArrayList getSummary() {
+        return summary;
+    }
+
+    public void setSummary(ArrayList summary) {
+        this.summary = summary;
     }
     
 }

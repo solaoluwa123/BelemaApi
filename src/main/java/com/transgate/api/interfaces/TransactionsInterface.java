@@ -22,6 +22,18 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetTransactionsVolume(String startDate, String endDate);
     
+    public ResponseEntity GetFTTimeAverage(String startDate, String endDate, boolean isCurrent);
+    
+    public ResponseEntity GetFTTimeAverage(String institutioncode, String startDate, String endDate, boolean isCurrent);
+    
+    public ResponseEntity GetSuccessTNXVolume(String startDate, String endDate);
+    
+    public ResponseEntity GetSuccessTNXVolume(String institutioncode, String startDate, String endDate);
+    
+    public ResponseEntity GetTop6ResponseCodesTNX(String startDate, String endDate, boolean isCurrent);
+    
+    public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent);
+    
     public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate);
     
     public ResponseEntity GetTransactionsRates(String startDate, String endDate, boolean inward);

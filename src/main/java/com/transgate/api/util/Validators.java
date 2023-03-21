@@ -4,14 +4,60 @@
  * and open the template in the editor.
  */
 package com.transgate.api.util;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
+import io.jsonwebtoken.SignatureAlgorithm;
+import java.security.Key;
+import java.util.Base64;
+import java.util.Date;
+import java.util.UUID;
+import javax.crypto.spec.SecretKeySpec;
 
 /**
  *
  * @author Makintola
  */
 public class Validators {
+    
+    String secret = "sparkpayxbearerfactorajijetjwtscrete2023habari";
+
+    Key hmacKey = new SecretKeySpec(Base64.getDecoder().decode(secret), 
+                            SignatureAlgorithm.HS256.getJcaName());
+    
+    public final String GenerateJSONWebToken(String email) {
+        try {
+            Date date = new Date();
+            long time = date.getTime();
+            Date expirationDate = new Date(time + 300000l); //5mins
+            String token = Jwts.builder()
+                    .setIssuer("Ajijet-x-Habari")
+                    .setExpiration(expirationDate)
+                    .setIssuedAt(date)
+                    .setId(UUID.randomUUID().toString())
+                    .setSubject(email)
+                    .signWith(hmacKey)
+                    .compact();
+            return token;
+        } catch (JwtException e) {
+            System.out.println("JwtException: " + e);
+            return "";
+        }
+    }
+    
+    public final boolean ValidateJSONWebToken(String token, String email) {
+        try {
+            return Jwts.parserBuilder().setSigningKey(hmacKey).build().parseClaimsJws(token).getBody().getSubject().equals(email);
+        } catch (JwtException e) {
+            System.out.println("JwtException: " + e);
+            return false;
+        }
+    }
+    
     public final String validHeader() {
         return "Bearer 958455015C7DB0F3CEDD56F8F3E50E94568905B636A4954A478030E2603E8A7758F8843B7A6EDC837CA5C6B57B262FDF3B44C7FF706DC3EB991EECFC7840FEC7";
+    }
+    public final String validHeaderExternal() {
+        return "x-bearer-factor";
     }
     
     public int removeLeadingZero(String str) {

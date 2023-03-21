@@ -70,7 +70,7 @@ public class WalletsService implements WalletsInterface {
             while (totalRows > 0) {
                 String SQL;
                 walletnumber = Randomizer.GenerateWalletNumber();
-                SQL = "SELECT COUNT(*) FROM tbl_wallets WHERE walletnumber = ?";
+                SQL = "SELECT COUNT(*) FROM ajiswitch_db.tbl_wallets WHERE walletnumber = ?";
                 totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{walletnumber}, int.class);
             }
             return walletnumber;
@@ -132,15 +132,15 @@ public class WalletsService implements WalletsInterface {
     }
     
     @Override
-    public ResponseEntity Create(String sessiontoken, String walletname, String institutionCode, String creator) {
+    public ResponseEntity Create(String sessiontoken, String walletname, String institutionCode, String creator, int type) {
         try {
-            String SQL = null;
+            String SQL;
             int retval = 0;
             String walletnumber = GetNewWalletNumber();
             int userrole = GetUserRole(creator, sessiontoken);
             if (userrole == 1) {
-                SQL = "INSERT INTO tbl_wallets(walletnumber, walletname, creator, financialInstitutionCode, date_created) VALUES(?, ?, ?, ?, now())";
-                retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, walletname, creator, institutionCode});
+                SQL = "INSERT INTO ajiswitch_db.tbl_wallets(walletnumber, walletname, creator, financialinstitutioncode, creationdate, balance, lien, wallettype, is_active) VALUES(?, ?, ?, ?, now(), 0.00, 0.00, ?, 1)";
+                retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, walletname, creator, institutionCode, type});
             }
             else if (userrole == 2) {
                 SQL = "INSERT INTO tbl_wallets_operations(walletnumber, walletname, creator, financialInstitutionCode, actionType, date_created) VALUES(?, ?, ?, ?, 'create', now())";
@@ -163,11 +163,11 @@ public class WalletsService implements WalletsInterface {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.financialInstitutionCode, a.wallettype, a.balance, a.lien, a.date_created, "
-                    + "b.name as financialInstitutionName "
-                    + "FROM tbl_wallets a "
+            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
+                    + "b.name as financialInstitutionname "
+                    + "FROM ajiswitch_db.tbl_wallets a "
                     + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialInstitutionCode = b.code "
+                    + "ON a.financialinstitutioncode = b.code "
                     + "ORDER BY a.id DESC";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new WalletMapper());
             networkResponse.setCode(200);
@@ -187,11 +187,11 @@ public class WalletsService implements WalletsInterface {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.financialInstitutionCode, a.wallettype, a.balance, a.lien, a.date_created, "
-                    + "b.name as financialInstitutionName "
-                    + "FROM tbl_wallets a "
+            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
+                    + "b.name as financialInstitutionname "
+                    + "FROM ajiswitch_db.tbl_wallets a "
                     + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialInstitutionCode = b.code "
+                    + "ON a.financialinstitutioncode = b.code "
                     + "WHERE a.walletnumber = ?";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[]{walletnumber}, new WalletMapper());
             networkResponse.setCode(200);
@@ -235,25 +235,34 @@ public class WalletsService implements WalletsInterface {
         try {
             String SQL;
             if (actionType.equals("dr")) {
-                SQL = "SELECT balance from tbl_wallets WHERE walletnumber = ?";
+                SQL = "SELECT balance from ajiswitch_db.tbl_wallets WHERE walletnumber = ?";
                 float balance = jdbcTemplate.queryForObject(SQL, new Object[]{walletnumber}, float.class);
                 if (balance < 100) {
                     return responseManager.ResponseUnathorized();
                 }
             }
+            SQL = "SELECT is_active FROM ajiswitch_db.tbl_wallets WHERE walletnumber = ?";
+            int isActive = jdbcTemplate.queryForObject(SQL, new Object[]{walletnumber}, int.class);
+            if (isActive == 0) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setMessage("Wallet is Inactive");
+                networkResponse.setStatus("error");
+                return responseManager.ResponseOk(networkResponse);
+            }
             int userrole = GetUserRole(fundby, sessiontoken);
-            SQL = "INSERT into tbl_wallet_fundings(walletnumber, amount, fundby, debit_or_credit, action_date) VALUES(?, ?, ?, ?, now())";
-            int retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, amount, fundby, actionType});
+            SQL = "INSERT into ajiswitch_db.tbl_wallet_activities(walletnumber, amount, credit_or_debit, actor, activity_date_time) VALUES(?, ?, ?, ?, now())";
+            int retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, amount, actionType, fundby});
             if (retval > 0) {
                 switch (userrole) {
                     case 1:
                         if (actionType.equals("cr")){
-                            SQL = "UPDATE tbl_wallets SET balance = (balance + " + amount + ") WHERE walletnumber = ?";
+                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = (balance + ?) WHERE walletnumber = ?";
                         }
                         else {
-                            SQL = "UPDATE tbl_wallets SET balance = (balance - " + amount + ") WHERE walletnumber = ?";
+                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = (balance - ?) WHERE walletnumber = ?";
                         }
-                        jdbcTemplate.update(SQL, new Object[]{walletnumber});
+                        jdbcTemplate.update(SQL, new Object[]{amount, walletnumber});
                         return responseManager.ResponseAccepted();
                     case 2:
                         ResponseEntity responseEntity = GetWalletByNumber(walletnumber);
@@ -402,10 +411,13 @@ public class WalletsService implements WalletsInterface {
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE tbl_wallets SET walletname = ?, financialInstitutionCode = ? WHERE walletnumber = ?";
+                    SQL = "UPDATE ajiswitch_db.tbl_wallets SET walletname = ?, financialInstitutioncode = ? WHERE walletnumber = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{walletname, institutionCode, walletnumber});
-                    if (retVal > 0)
+                    if (retVal > 0) {
+                        SQL = "INSERT into ajiswitch_db.tbl_wallet_activities(walletnumber, amount, credit_or_debit, actor, activity_date_time) VALUES(?, ?, ?, ?, now())";
+                        int retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, 0, "ne", editor});
                         return responseManager.ResponseAccepted();
+                    }
                     else
                         return responseManager.ResponseInternalServerError();
                 case 2:
@@ -438,6 +450,23 @@ public class WalletsService implements WalletsInterface {
                 default:
                     return responseManager.ResponseUnathorized();
             }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetWalletActivity(String walletnumber) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try{
+            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities WHERE walletnumber = ? ORDER BY id DESC";
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber});
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Wallet Activity");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
@@ -538,13 +567,44 @@ public class WalletsService implements WalletsInterface {
             response.setWalletnumber(rs.getString("walletnumber"));
             response.setWalletname(rs.getString("walletname"));
             response.setCreator(rs.getString("creator"));
-            response.setFinancialInstitutionCode(rs.getString("financialInstitutionCode") != null ? rs.getString("financialInstitutionCode") : "");
-            response.setFinancialInstitutionName(rs.getString("financialInstitutionName") != null ? rs.getString("financialInstitutionName") : "");
+            response.setFinancialInstitutionCode(rs.getString("financialinstitutioncode") != null ? rs.getString("financialinstitutioncode") : "");
+            response.setFinancialInstitutionName(rs.getString("financialInstitutionname") != null ? rs.getString("financialInstitutionname") : "");
             response.setWallettype(rs.getInt("wallettype"));
             response.setBalance(rs.getFloat("balance"));
             response.setLien(rs.getFloat("lien"));
-            response.setDate_created(rs.getString("date_created"));
+            response.setDate_created(rs.getString("creationdate"));
             response.setDate_updated(null);
+            switch (rs.getInt("wallettype")) {
+                case 1:
+                    response.setWalletTypeName("Merchant");
+                    break;
+                case 2:
+                    response.setWalletTypeName("PSSP");
+                    break;
+                case 3:
+                    response.setWalletTypeName("PTSP");
+                    break;
+                case 4:
+                    response.setWalletTypeName("Super Agent");
+                    break;
+                case 5:
+                    response.setWalletTypeName("Switch");
+                    break;
+                default:
+                    response.setWalletTypeName("Others");
+                    break;
+            }
+            switch (rs.getInt("is_active")) {
+                case 0:
+                    response.setStatus("Inactive");
+                    break;
+                case 1:
+                    response.setStatus("Active");
+                    break;
+                default:
+                    response.setStatus("Unknown");
+                    break;
+            }
             return response;
         }
     }
