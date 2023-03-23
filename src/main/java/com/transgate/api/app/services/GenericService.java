@@ -9,13 +9,13 @@ import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.models.GenericModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.TerminalTypeModel;
+import com.transgate.api.util.Constants;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Calendar;
 import java.util.List;
 import java.util.Map;
 import javax.sql.DataSource;
@@ -203,12 +203,22 @@ public class GenericService implements GenericInterface {
         try {
             String SQL;
             List<Map<String, Object>> rows;
-            SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
+            if (institution.equals(Constants.SYESTEMFICODE)) {
+                SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.institution_code = b.code "
-                    + "WHERE a.institution_code = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
-            rows = jdbcTemplate.queryForList(SQL, new Object[]{institution});
+                    + "WHERE (a.institution_code = ? || a.institution_code = ?) AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
+                rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, Constants.SYESTEMFICODE});
+            } else {
+                SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
+                        + "FROM ajiswitch_db.tbl_settlement_details a "
+                        + "LEFT JOIN tbl_financial_institutions b "
+                        + "ON a.institution_code = b.code "
+                        + "WHERE a.institution_code = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
+                rows = jdbcTemplate.queryForList(SQL, new Object[]{institution});
+
+            }
             
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
