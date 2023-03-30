@@ -213,8 +213,33 @@ public class CardsTransactionsController {
             limit,isCurrent);
     }
     
+//    @RequestMapping(value = "/cards/transactions/disputes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+//    public ResponseEntity SearchTransactionsDisputes(
+//            @RequestHeader(value = "Authorization") String header, 
+//            @RequestHeader(value = "auth-token") Optional<String> sessiontoken,  
+//            @RequestParam("system_trace_number") Optional<String> system_trace_number, 
+//            @RequestParam("retrieval_ref_number") Optional<String> retrieval_ref_number, 
+//            @RequestParam("terminal_id") String terminal_id,
+//            @RequestParam("transaction_response_code") Optional<String> transaction_response_code,
+//            @RequestParam("date_logged_range") Optional<String> date_logged_range,
+//            @RequestParam("date_resolved_range") Optional<String> date_resolved_range,
+//            @RequestParam("dispute_status") Optional<String> dispute_status
+//    ) {
+//        if (!validators.validHeader().equals(header)) {
+//            return responseManager.InvalidAuthorizationHeader();
+//        }
+//        return CardsTransactionsInterface.SearchDisputes(terminal_id,
+//            system_trace_number.orElse(""),
+//            retrieval_ref_number.orElse(""),
+//            transaction_response_code.orElse(""),
+//            dispute_status.orElse(""),
+//            date_logged_range.orElse(""),
+//            date_resolved_range.orElse("")
+//        );
+//    }
+    
     @RequestMapping(value = "/cards/transactions/disputes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity SearchTransactionsDisputes(
+    public ResponseEntity SearchTransactionsDisputesForMerchants(
             @RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") Optional<String> sessiontoken,  
             @RequestParam("system_trace_number") Optional<String> system_trace_number, 
@@ -223,7 +248,8 @@ public class CardsTransactionsController {
             @RequestParam("transaction_response_code") Optional<String> transaction_response_code,
             @RequestParam("date_logged_range") Optional<String> date_logged_range,
             @RequestParam("date_resolved_range") Optional<String> date_resolved_range,
-            @RequestParam("dispute_status") Optional<String> dispute_status
+            @RequestParam("dispute_status") Optional<String> dispute_status,
+            @RequestParam("merchantsasIds") Optional<String> merchantsasIds
     ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
@@ -234,7 +260,8 @@ public class CardsTransactionsController {
             transaction_response_code.orElse(""),
             dispute_status.orElse(""),
             date_logged_range.orElse(""),
-            date_resolved_range.orElse("")
+            date_resolved_range.orElse(""),
+            merchantsasIds.orElse("")
         );
     }
     

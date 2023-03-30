@@ -1124,7 +1124,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String transaction_response_code,
             String dispute_status,
             String date_logged,
-            String date_resolved
+            String date_resolved,
+            String merchantsasIds
         ) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -1145,8 +1146,23 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !end_date_logged.equals("")
                     || !start_date_resolved.equals("")
                     || !end_date_resolved.equals("")
+                    || !merchantsasIds.equals("")
                     ? "WHERE" : "";
             
+            if (!merchantsasIds.equals("")) {
+                List<String> merchantIds = new ArrayList<>(Arrays.asList(merchantsasIds.split(",")));
+                StringBuilder inString = new StringBuilder("(");
+                for (int i = 0; i < merchantIds.size(); i++) {
+                    inString.append("'").append(merchantIds.get(i)).append("'");
+                    inString.append(",");
+                }
+                inString = inString.deleteCharAt(inString.length() - 1);
+                if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+                if (inString.toString().equals(""))
+                    inString = inString.append("(-1");
+                inString = inString.append(")");
+                whereQuery+=" a.merchant_id IN " + inString;
+            }
             if (!terminal_id.equals("")) {
                 whereQuery+=" a.terminal_id = '" + terminal_id + "'";
             }

@@ -51,7 +51,8 @@ public interface CardsTransactionsInterface {
             String transaction_response_code,
             String dispute_status,
             String date_logged,
-            String date_resolved
+            String date_resolved,
+            String merchantsasIds
         );
     
     public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String username);

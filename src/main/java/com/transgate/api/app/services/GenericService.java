@@ -204,12 +204,25 @@ public class GenericService implements GenericInterface {
             String SQL;
             List<Map<String, Object>> rows;
             if (institution.equals(Constants.SYESTEMFICODE)) {
+                List<Map<String, Object>> _rows;
+                SQL = "SELECT a.institution_code FROM ajiswitch_db.tbl_nodes a WHERE a.issettlementbank = 0";
+                _rows = jdbcTemplate.queryForList(SQL);
+                
+                StringBuilder inString = new StringBuilder("(");
+                inString.append("'").append(institution).append("',");
+                for (final Map<String, Object> row : _rows) {
+                    inString.append("'").append(row.get("institution_code")).append("'");
+                    inString.append(",");
+                }
+                inString = inString.deleteCharAt(inString.length() - 1);
+                inString = inString.append(")");
+                
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.institution_code = b.code "
-                    + "WHERE (a.institution_code = ? || a.institution_code = ?) AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
-                rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, Constants.SYESTEMFICODE});
+                    + "WHERE a.institution_code IN "+inString.toString()+" AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
+                rows = jdbcTemplate.queryForList(SQL);
             } else {
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
