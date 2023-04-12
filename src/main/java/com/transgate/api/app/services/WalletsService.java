@@ -460,7 +460,9 @@ public class WalletsService implements WalletsInterface {
     public ResponseEntity GetWalletActivity(String walletnumber) {
         NetworkResponse networkResponse = new NetworkResponse();
         try{
-            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities WHERE walletnumber = ? ORDER BY id DESC";
+            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
+                    + "WHERE walletnumber = ? AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
+                    + "ORDER BY id DESC";
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber});
             networkResponse.setCode(200);
             networkResponse.setStatus("success");

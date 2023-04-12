@@ -13,7 +13,7 @@ public class TransactionModel {
     int id;
     String srcSessionid, srcAccountNumber, srcAccountName, srcKycLevel, srcBvn, srcAmount, srcInstitutioncode, destSessionId, srcResponsecode, destAccountNumber;
     String destAccountName, destKycLevel, destBvn, destAmount, destInstitutioncode, destResponseCode, narration, transactiondate, username;
-    String responseCodeDefinition, txnDuration, responsedatetime;
+    String responseCodeDefinition, txnDuration, responsedatetime, channelCode;
     
     public int getId() {
         return id;
@@ -197,6 +197,14 @@ public class TransactionModel {
 
     public void setResponsedatetime(String responsedatetime) {
         this.responsedatetime = responsedatetime;
+    }
+
+    public String getChannelCode() {
+        return channelCode;
+    }
+
+    public void setChannelCode(String channelCode) {
+        this.channelCode = channelCode;
     }
     
 }

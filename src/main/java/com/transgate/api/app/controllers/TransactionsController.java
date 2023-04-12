@@ -131,6 +131,29 @@ public class TransactionsController {
         return transactionsInterface.GetTop6ResponseCodesTNX(institutioncode, startDate, endDate, isCurrent);
     }
         
+    @RequestMapping(value = "/transactions-by-channels", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTransactionsVolumeByChannels(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTransactionsVolumeByChannels(startDate, endDate, isCurrent);
+    }
+        
+    @RequestMapping(value = "/transactions-by-channels/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTransactionsVolumeByChannelsInstitution(@RequestHeader(value = "Authorization") String header,
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTransactionsVolumeByChannels(institutioncode, startDate, endDate, isCurrent);
+    }
+        
     @RequestMapping(value = "/transactions-summary/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTransactionsVolumeInstitution(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken, 
@@ -322,6 +345,7 @@ public class TransactionsController {
             @RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken,  
             @RequestParam("srcSessionid") String srcSessionid, 
+            @RequestParam("channelCode") String channelCode, 
             @RequestParam("responseCode") String responseCode, 
             @RequestParam("srcAccountName") String srcAccountName, 
             @RequestParam("destAccountName") String destAccountName, 
@@ -339,6 +363,7 @@ public class TransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return transactionsInterface.SearchTransactions(srcSessionid,
+            channelCode,
             responseCode,
             srcInstitutioncode,
             destInstitutioncode,

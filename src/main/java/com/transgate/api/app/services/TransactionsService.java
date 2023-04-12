@@ -6,6 +6,7 @@
 package com.transgate.api.app.services;
 
 import com.transgate.api.interfaces.TransactionsInterface;
+import com.transgate.api.models.ChannelsTnxValueModel;
 import com.transgate.api.models.DisputeModel;
 import com.transgate.api.models.DisputeTypeModel;
 import com.transgate.api.models.FullTransactionModel;
@@ -97,7 +98,7 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String source) {
-        String SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+        String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -111,7 +112,7 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String source, String responsecode) {
-        String SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+        String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -137,7 +138,7 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
-            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                 + "FROM " + table + " a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -185,7 +186,7 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
-            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                 + "FROM "+table+" a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -231,6 +232,7 @@ public class TransactionsService implements TransactionsInterface {
     
     @Override
     public ResponseEntity SearchTransactions(String session_id,
+            String channel_code,
             String response_code,
             String source_institution_code,
             String destination_institution_code,
@@ -247,6 +249,7 @@ public class TransactionsService implements TransactionsInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String whereQuery = !session_id.equals("") 
+                    || !channel_code.equals("") 
                     || !response_code.equals("") 
                     || !source_institution_code.equals("")
                     || !destination_institution_code.equals("")
@@ -260,6 +263,9 @@ public class TransactionsService implements TransactionsInterface {
             
             if (!session_id.equals("")) {
                 whereQuery+=" a.session_id = '" + session_id + "'";
+            }
+            if (!channel_code.equals("")) {
+                whereQuery+=" a.channel_code = '" + channel_code + "'";
             }
             if (!response_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -306,7 +312,7 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             if (isCurrent) {
-                SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -324,7 +330,7 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.destination_institution_code = c.code " + whereQuery
                     + " ORDER BY a.id DESC";
             } else {
-                SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -546,6 +552,58 @@ public class TransactionsService implements TransactionsInterface {
             
             networkResponse.setCode(200);
             networkResponse.setMessage("Top 6 Response Codes Summary");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetTransactionsVolumeByChannels(String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
+                    + "FROM "+table+" a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ?"
+                    + "GROUP BY a.channel_code "
+                    + "LIMIT 6";
+            
+            List<ChannelsTnxValueModel> summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionChannelsSummaryMapper());
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions Volumes by Channel");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetTransactionsVolumeByChannels(String institutioncode, String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
+                    + "FROM "+table+" a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
+                    + "GROUP BY a.channel_code "
+                    + "LIMIT 6";
+            
+            List<ChannelsTnxValueModel> summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode}, new TransactionChannelsSummaryMapper());
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions Volumes by Channel");
             TNXModel tnxModel = new TNXModel();
             tnxModel.setSummary((ArrayList) summary);
             networkResponse.setTnxModel(tnxModel);
@@ -839,7 +897,7 @@ public class TransactionsService implements TransactionsInterface {
         try {
             String SQL;
             List<FullTransactionModel> transactions;
-            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -880,7 +938,7 @@ public class TransactionsService implements TransactionsInterface {
             String SQL;
             List<FullTransactionModel> transactions;
             if (id > 0) {
-                SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -891,7 +949,7 @@ public class TransactionsService implements TransactionsInterface {
                 transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
             }
             else {
-                SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -935,7 +993,7 @@ public class TransactionsService implements TransactionsInterface {
         try {
             String SQL;
             List<FullTransactionModel> transactions;
-            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -963,7 +1021,7 @@ public class TransactionsService implements TransactionsInterface {
             String SQL;
             List<FullTransactionModel> transactions;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers a " : "ajiswitch_db.tbl_creditfundtransfer_hist_s a ";
-            SQL = "SELECT a.id, a.session_id, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM "+table
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1274,6 +1332,57 @@ public class TransactionsService implements TransactionsInterface {
         }
     }
     
+    class TransactionChannelsSummaryMapper implements RowMapper<ChannelsTnxValueModel> {
+        @Override
+        public ChannelsTnxValueModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            ChannelsTnxValueModel response = new ChannelsTnxValueModel();
+            response.setVolume(rs.getInt("volume"));
+            response.setChannel(rs.getString("label"));
+            switch (rs.getString("label")) {
+                case "1":
+                    response.setChannelCode("Bank Teller");
+                    break;
+                case "2":
+                    response.setChannelCode("Internet Banking");
+                    break;
+                case "3":
+                    response.setChannelCode("Mobile Phone");
+                    break;
+                case "4":
+                    response.setChannelCode("POS Terminals");
+                    break;
+                case "5":
+                    response.setChannelCode("ATM");
+                    break;
+                case "6":
+                    response.setChannelCode("Vendor/Merchant Portal");
+                    break;
+                case "7":
+                    response.setChannelCode("3rd Party Platform");
+                    break;
+                case "8":
+                    response.setChannelCode("USSD");
+                    break;
+                case "9":
+                    response.setChannelCode("Other Channel");
+                    break;
+                case "10":
+                    response.setChannelCode("Social Media");
+                    break;
+                case "11":
+                    response.setChannelCode("Agency Banking");
+                    break;
+                case "12":
+                    response.setChannelCode("NQR");
+                    break;
+                default:
+                    response.setChannelCode("");
+                    break;
+            }
+            return response;
+        }
+    }
+    
     class FullTransactionMapper implements RowMapper<FullTransactionModel> {
         @Override
         public FullTransactionModel mapRow(ResultSet rs, int arg1) throws SQLException {
@@ -1304,6 +1413,47 @@ public class TransactionsService implements TransactionsInterface {
             response.setDestInstitutionName(rs.getString("destInstitutionName"));
             response.setTxnDuration(rs.getString("txn_duration"));
             response.setResponsedatetime(rs.getString("response_date_time"));
+            switch (rs.getString("channel_code")) {
+                case "1":
+                    response.setChannelCode("Bank Teller");
+                    break;
+                case "2":
+                    response.setChannelCode("Internet Banking");
+                    break;
+                case "3":
+                    response.setChannelCode("Mobile Phone");
+                    break;
+                case "4":
+                    response.setChannelCode("POS Terminals");
+                    break;
+                case "5":
+                    response.setChannelCode("ATM");
+                    break;
+                case "6":
+                    response.setChannelCode("Vendor/Merchant Portal");
+                    break;
+                case "7":
+                    response.setChannelCode("3rd Party Platform");
+                    break;
+                case "8":
+                    response.setChannelCode("USSD");
+                    break;
+                case "9":
+                    response.setChannelCode("Other Channel");
+                    break;
+                case "10":
+                    response.setChannelCode("Social Media");
+                    break;
+                case "11":
+                    response.setChannelCode("Agency Banking");
+                    break;
+                case "12":
+                    response.setChannelCode("NQR");
+                    break;
+                default:
+                    response.setChannelCode("");
+                    break;
+            }
             return response;
         }
     }

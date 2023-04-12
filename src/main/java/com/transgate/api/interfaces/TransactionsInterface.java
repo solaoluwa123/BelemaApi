@@ -34,6 +34,10 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent);
     
+    public ResponseEntity GetTransactionsVolumeByChannels(String startDate, String endDate, boolean isCurrent);
+    
+    public ResponseEntity GetTransactionsVolumeByChannels(String institutioncode, String startDate, String endDate, boolean isCurrent);
+    
     public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate);
     
     public ResponseEntity GetTransactionsRates(String startDate, String endDate, boolean inward);
@@ -69,6 +73,7 @@ public interface TransactionsInterface {
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids);
     
     public ResponseEntity SearchTransactions(String srcSessionid,
+            String channelCode,
             String responseCode,
             String srcInstitutioncode,
             String destInstitutioncode,
