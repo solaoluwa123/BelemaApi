@@ -16,6 +16,8 @@ public interface WalletsInterface {
     public ResponseEntity Create(String sessiontoken, String walletname, String institutionCode, String creator, int type);
 
     public ResponseEntity GetWallets();
+
+    public ResponseEntity GetWallets(String institutioncode);
     
     public ResponseEntity GetWalletActivity(String walletnumber);
 

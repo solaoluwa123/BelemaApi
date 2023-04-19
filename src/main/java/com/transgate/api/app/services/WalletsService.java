@@ -159,6 +159,31 @@ public class WalletsService implements WalletsInterface {
     }
     
     @Override
+    public ResponseEntity GetWallets(String institutioncode){
+        try {
+            NetworkResponse networkResponse = new NetworkResponse();
+            String SQL;
+            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
+                    + "b.name as financialInstitutionname "
+                    + "FROM ajiswitch_db.tbl_wallets a "
+                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "ON a.financialinstitutioncode = b.code "
+                    + "WHERE a.financialinstitutioncode = ? "
+                    + "ORDER BY a.id DESC";
+            List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[]{institutioncode}, new WalletMapper());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All wallets");
+            networkResponse.setData((ArrayList) wallets);
+            return responseManager.ResponseOk(networkResponse);
+            
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetWallets() {
         try {
             NetworkResponse networkResponse = new NetworkResponse();

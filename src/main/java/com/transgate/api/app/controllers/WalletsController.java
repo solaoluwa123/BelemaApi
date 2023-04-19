@@ -49,6 +49,14 @@ public class WalletsController {
         return walletInterface.GetWallets();
     }
     
+    @RequestMapping(value = "/wallets/get/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetAll(@RequestHeader(value = "Authorization") String header, @PathVariable ("institutioncode") String institutioncode) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return walletInterface.GetWallets(institutioncode);
+    }
+    
     @RequestMapping(value = "/wallet/{walletnumber}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetWalletByNumber(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("walletnumber") String walletnumber) {
         if (!validators.validHeader().equals(header)) {
