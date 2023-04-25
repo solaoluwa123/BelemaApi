@@ -244,27 +244,37 @@ public class TransactionsService implements TransactionsInterface {
             String endDate, 
             int page, 
             int limit,
-            boolean isCurrent
+            boolean isCurrent,
+            String userInstitutionCode
     ) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String whereQuery = !session_id.equals("") 
-                    || !channel_code.equals("") 
-                    || !response_code.equals("") 
-                    || !source_institution_code.equals("")
-                    || !destination_institution_code.equals("")
-                    || !originator_account_name.equals("")
-                    || !beneficiary_account_name.equals("")
-                    || !startDate.equals("")
-                    || !endDate.equals("")
-                    || (!minAmount.equals("") && Double.parseDouble(minAmount) > 0)
-                    || (!maxAmount.equals("") && Double.parseDouble(maxAmount) > 0)
-                    ? "WHERE" : "";
+            String whereQuery = "";
+            if (userInstitutionCode.equals("-1")) {
+                whereQuery = "WHERE";
+            } else if (source_institution_code.equals("") && destination_institution_code.equals("")) {
+                whereQuery = "WHERE (a.source_institution_code = "+userInstitutionCode+" OR a.destination_institution_code = "+userInstitutionCode+")";
+            } else {
+                whereQuery = "WHERE";
+            }
+//            String whereQuery = !session_id.equals("") 
+//                    || !channel_code.equals("") 
+//                    || !response_code.equals("") 
+//                    || !source_institution_code.equals("")
+//                    || !destination_institution_code.equals("")
+//                    || !originator_account_name.equals("")
+//                    || !beneficiary_account_name.equals("")
+//                    || !startDate.equals("")
+//                    || !endDate.equals("")
+//                    || (!minAmount.equals("") && Double.parseDouble(minAmount) > 0)
+//                    || (!maxAmount.equals("") && Double.parseDouble(maxAmount) > 0)
+//                    ? "WHERE" : "";
             
             if (!session_id.equals("")) {
                 whereQuery+=" a.session_id = '" + session_id + "'";
             }
             if (!channel_code.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" a.channel_code = '" + channel_code + "'";
             }
             if (!response_code.equals("")) {

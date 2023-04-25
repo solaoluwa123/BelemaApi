@@ -85,5 +85,6 @@ public interface TransactionsInterface {
             String endDate, 
             int page, 
             int limit,
-            boolean isCurrent);
+            boolean isCurrent,
+            String userInstitutionCode);
 }

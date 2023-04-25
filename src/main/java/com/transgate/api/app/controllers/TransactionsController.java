@@ -357,7 +357,8 @@ public class TransactionsController {
             @RequestParam("endDate") String endDate,
             @RequestParam("page") int page,
             @RequestParam("limit") int limit,
-            @RequestParam("isCurrent") boolean isCurrent
+            @RequestParam("isCurrent") boolean isCurrent,
+            @RequestParam("userInstitutionCode") String userInstitutionCode
     ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
@@ -375,6 +376,7 @@ public class TransactionsController {
             endDate,
             page,
             limit,
-            isCurrent);
+            isCurrent,
+            userInstitutionCode);
     }
 }
