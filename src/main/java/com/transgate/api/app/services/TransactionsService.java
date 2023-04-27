@@ -271,6 +271,7 @@ public class TransactionsService implements TransactionsInterface {
 //                    ? "WHERE" : "";
             
             if (!session_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" a.session_id = '" + session_id + "'";
             }
             if (!channel_code.equals("")) {
