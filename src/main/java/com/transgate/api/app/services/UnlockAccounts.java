@@ -27,7 +27,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
     @Override
     public void AutoPassDisputesForSettlement() {
         try {
-            String SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = 'Auto Resolved', status = 0, resolved = 0, date_modified = now() WHERE timeline_date <= now() AND status = -1 AND resolved = 0";
+            String SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = 'Auto Resolved', status = 0, resolved = 0, date_modified = now() WHERE timeline_date <= now() AND status = -1 AND resolved = 0 AND type != 'habari'";
             jdbcTemplate.update(SQL);
         } catch (DataAccessException e) {
             System.out.println("auto pass disputes for settlements exception " + e.getMessage());
