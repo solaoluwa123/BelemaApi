@@ -1084,8 +1084,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE ((a.status = 1 AND a.resolved = 1) || a.resolved = 0) AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) ORDER BY a.date_created DESC";
-                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode}, new CardsTransactionsDisputesMapper());
+                            + "WHERE ((a.status = 1 AND a.resolved = 1) || a.resolved = 0) AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) ORDER BY a.date_created DESC LIMIT ? OFFSET ?";
+                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode, limit, offset}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
                             + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
