@@ -1125,7 +1125,9 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String dispute_status,
             String date_logged,
             String date_resolved,
-            String merchantsasIds
+            String merchantsasIds,
+            int page,
+            int limit
         ) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
@@ -1137,6 +1139,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             Double totalValue;
             List<Map<String, Object>> agg;
             List<CardsDisputeModel> transactions;
+            int offset = page > 1 ? (page - 1) * limit : 0;
             String whereQuery = !terminal_id.equals("")
                     || !system_trace_number.equals("")
                     || !retrieval_ref_number.equals("")
@@ -1204,7 +1207,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!start_date_resolved.equals("") && !end_date_resolved.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.date_modified BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+                whereQuery+=" a.timeline_date BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
             }
             SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                     + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
@@ -1213,8 +1216,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                    + "ON a.id = b.id " 
                     + whereQuery
-                    + " ORDER BY a.date_created DESC";
-            transactions = jdbcTemplate.query(SQL, new CardsTransactionsDisputesMapper());
+                    + " ORDER BY a.date_created DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
 
             SQL = "SELECT "
                     + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "

@@ -249,7 +249,9 @@ public class CardsTransactionsController {
             @RequestParam("date_logged_range") Optional<String> date_logged_range,
             @RequestParam("date_resolved_range") Optional<String> date_resolved_range,
             @RequestParam("dispute_status") Optional<String> dispute_status,
-            @RequestParam("merchantsasIds") Optional<String> merchantsasIds
+            @RequestParam("merchantsasIds") Optional<String> merchantsasIds,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit
     ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
@@ -261,7 +263,9 @@ public class CardsTransactionsController {
             dispute_status.orElse(""),
             date_logged_range.orElse(""),
             date_resolved_range.orElse(""),
-            merchantsasIds.orElse("")
+            merchantsasIds.orElse(""),
+            page,
+            limit
         );
     }
     
