@@ -57,7 +57,7 @@ public interface CardsTransactionsInterface {
             int limit
         );
     
-    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String username);
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username);
     
     public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String username);
     

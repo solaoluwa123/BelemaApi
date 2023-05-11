@@ -846,7 +846,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     
     
     @Override
-    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String username){
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username){
         try {
             
             boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
@@ -867,8 +867,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 //                        ? "" : 
 //                        restCall.getNuban(validators.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
                 String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
-                SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
+                SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, proof_of_debit_uri, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
                 if (retval > 0) 
                     return responseManager.ResponseAccepted();
                 else 
@@ -905,7 +905,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             if (inString.toString().equals(""))
                 inString = inString.append("(-1");
             inString = inString.append(")");
-            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                     + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                     + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                     + "FROM sparkpayweb_db.tbl_disputes a "
@@ -952,7 +952,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             switch(institutioncode) {
                 case "":
                 case "-1":
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -970,7 +970,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
                     break;
                 default:
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1010,7 +1010,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1042,7 +1042,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             switch(institutioncode) {
                 case "":
                 case "-1":
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1060,7 +1060,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     agg = jdbcTemplate.queryForList(SQL);
                     break;
                 case "000000":
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1078,7 +1078,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     agg = jdbcTemplate.queryForList(SQL);
                     break;
                 default:
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1209,7 +1209,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" a.timeline_date BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
             }
-            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
+            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.cardholder_acct_nuban, "
                     + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                     + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                     + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1289,6 +1289,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setMerchant_id(rs.getString("merchant_id"));
             tnx.setBin(rs.getString("bin"));
             tnx.setNcs_date_time(rs.getString("ncs_date_time"));
+            tnx.setProof_of_debit_uri(rs.getString("proof_of_debit_uri"));
             tnx.setProof_of_reject_uri(rs.getString("proof_of_reject_uri"));
             tnx.setCardholder_acct_nuban(rs.getString("cardholder_acct_nuban"));
             tnx.setResponse_code(rs.getString("response_code"));

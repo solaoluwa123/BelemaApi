@@ -12,7 +12,7 @@ package com.transgate.api.models;
 public class CardsDisputeModel extends CardsTransactionModel {
     String logged_by, date_modified, date_created, type;
     int transaction_id, status, resolved;
-    String resolved_by, records, timeline_date, proof_of_reject_uri, cardholder_acct_nuban, cardholder_acct_number;
+    String resolved_by, records, timeline_date, proof_of_reject_uri, proof_of_debit_uri, cardholder_acct_nuban, cardholder_acct_number;
     String result;
 
     public String getLogged_by() {
@@ -117,6 +117,14 @@ public class CardsDisputeModel extends CardsTransactionModel {
 
     public void setResult(String result) {
         this.result = result;
+    }
+
+    public String getProof_of_debit_uri() {
+        return proof_of_debit_uri;
+    }
+
+    public void setProof_of_debit_uri(String proof_of_debit_uri) {
+        this.proof_of_debit_uri = proof_of_debit_uri;
     }
     
 }
