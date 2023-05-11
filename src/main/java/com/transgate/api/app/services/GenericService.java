@@ -268,6 +268,28 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
+    public ResponseEntity GetCardsSmartDets(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.settlement_date, a.report_location "
+                    + "FROM sparkpay.tbl_smartdet_details a "
+                    + "ORDER BY a.settlement_date DESC";
+            rows = jdbcTemplate.queryForList(SQL);
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Smartdet");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetSettlementsByMerchant(String merchant, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {

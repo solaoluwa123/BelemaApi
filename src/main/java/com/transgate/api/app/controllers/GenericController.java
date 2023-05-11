@@ -87,6 +87,15 @@ public class GenericController {
         return GenericInterface.GetSettlements(start, end);
     }
     
+    @RequestMapping(value = "/cards/smartdets", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardsSmartDets(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardsSmartDets(start, end);
+    }
+    
     @RequestMapping(value = "/settlements/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
             @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("institution") String institution) {
