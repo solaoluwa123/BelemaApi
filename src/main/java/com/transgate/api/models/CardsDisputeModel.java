@@ -13,7 +13,7 @@ public class CardsDisputeModel extends CardsTransactionModel {
     String logged_by, date_modified, date_created, type;
     int transaction_id, status, resolved;
     String resolved_by, records, timeline_date, proof_of_reject_uri, proof_of_debit_uri, cardholder_acct_nuban, cardholder_acct_number;
-    String result;
+    String result, arbitrated_by, date_arbitrated;
 
     public String getLogged_by() {
         return logged_by;
@@ -125,6 +125,22 @@ public class CardsDisputeModel extends CardsTransactionModel {
 
     public void setProof_of_debit_uri(String proof_of_debit_uri) {
         this.proof_of_debit_uri = proof_of_debit_uri;
+    }
+
+    public String getArbitrated_by() {
+        return arbitrated_by;
+    }
+
+    public void setArbitrated_by(String arbitrated_by) {
+        this.arbitrated_by = arbitrated_by;
+    }
+
+    public String getDate_arbitrated() {
+        return date_arbitrated;
+    }
+
+    public void setDate_arbitrated(String date_arbitrated) {
+        this.date_arbitrated = date_arbitrated;
     }
     
 }
