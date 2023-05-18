@@ -89,9 +89,9 @@ public class WalletsController {
         }
         String walletnumber = wallet.getWalletnumber();
         String actionType = wallet.getActionType();
-        float amount = wallet.getAmount();
+        double amount = wallet.getAmount();
         String fundby = wallet.getCreator();
-        float walletbalance = wallet.getBalance();
+        double walletbalance = wallet.getBalance();
         if (!actionType.equals("cr") && !actionType.equals("dr"))
             return responseManager.ResponseBadRequest();
         if (amount < 100 || (actionType.equals("dr") && walletbalance < 100))

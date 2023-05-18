@@ -21,7 +21,7 @@ public interface WalletsInterface {
     
     public ResponseEntity GetWalletActivity(String walletnumber);
 
-    public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, float amount, String fundby);
+    public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, double amount, String fundby);
     
     public ResponseEntity MapWalletToUser(String sessiontoken, String walletnumber, String assignee, String username);
     

@@ -555,6 +555,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String end_date,
             String retrieval_ref_number,
             String acquirer_institution_id,
+            String destination_acquiring_institution_id,
             String pan,
             String terminal_id,
             String merchant_id,
@@ -575,6 +576,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !start_date.equals("")
                     || !end_date.equals("")
                     || !acquirer_institution_id.equals("")
+                    || !destination_acquiring_institution_id.equals("")
                     || !pan.equals("")
                     || !terminal_id.equals("")
                     || !merchant_id.equals("")
@@ -608,8 +610,13 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 whereQuery+=" retrieval_ref_number LIKE '%" + retrieval_ref_number+"%'";
             }
             if (!acquirer_institution_id.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" acquirer_institution_id LIKE '%" + acquirer_institution_id+"%'";
+                if (acquirer_institution_id.equals(destination_acquiring_institution_id)) {
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" (acquirer_institution_id = '" + acquirer_institution_id+"' OR destination_acquiring_institution_id = '" + destination_acquiring_institution_id+"')";
+                } else {
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" acquirer_institution_id LIKE '%" + acquirer_institution_id+"%'";
+                }
             }
             if (!pan.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -958,7 +965,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE a.status = -2 ORDER BY a.date_created DESC";
+                            + "WHERE a.status < -1 ORDER BY a.date_created DESC";
                     transactions = jdbcTemplate.query(SQL, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
@@ -966,7 +973,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE a.status = -2";
+                            + "WHERE a.status < -1";
                     totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
                     break;
                 default:
@@ -976,7 +983,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE a.status = -2 AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) ORDER BY a.date_created DESC";
+                            + "WHERE a.status < -1 AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) ORDER BY a.date_created DESC";
                     transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
@@ -984,7 +991,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
                             + "LEFT JOIN sparkpay.transaction_hist_s b "
                             + "ON a.id = b.id "
-                            + "WHERE a.status = -2 AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?)";
+                            + "WHERE a.status < -1 AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?)";
                     totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
                     break;
             }

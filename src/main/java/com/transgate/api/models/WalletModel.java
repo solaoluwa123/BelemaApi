@@ -12,7 +12,7 @@ package com.transgate.api.models;
 public class WalletModel {
     String creator, walletname, walletnumber, date_created, date_updated, financialInstitutionCode, financialInstitutionName;
     int id, wallettype;
-    float balance, lien, amount;
+    double balance, lien, amount;
     String actionType, assignnee, note;
     String walletTypeName, status;
 
@@ -88,7 +88,7 @@ public class WalletModel {
         this.wallettype = wallettype;
     }
 
-    public float getBalance() {
+    public double getBalance() {
         return balance;
     }
 
@@ -96,7 +96,7 @@ public class WalletModel {
         this.balance = balance;
     }
 
-    public float getLien() {
+    public double getLien() {
         return lien;
     }
 
@@ -104,7 +104,7 @@ public class WalletModel {
         this.lien = lien;
     }
 
-    public float getAmount() {
+    public double getAmount() {
         return amount;
     }
 

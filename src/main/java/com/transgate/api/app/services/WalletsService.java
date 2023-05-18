@@ -256,7 +256,7 @@ public class WalletsService implements WalletsInterface {
     }
     
     @Override
-    public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, float amount, String fundby) {
+    public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, double amount, String fundby) {
         try {
             String SQL;
             if (actionType.equals("dr")) {
@@ -282,10 +282,10 @@ public class WalletsService implements WalletsInterface {
                 switch (userrole) {
                     case 1:
                         if (actionType.equals("cr")){
-                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = (balance + ?) WHERE walletnumber = ?";
+                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance + ? WHERE walletnumber = ?";
                         }
                         else {
-                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = (balance - ?) WHERE walletnumber = ?";
+                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance - ? WHERE walletnumber = ?";
                         }
                         jdbcTemplate.update(SQL, new Object[]{amount, walletnumber});
                         return responseManager.ResponseAccepted();
@@ -381,7 +381,7 @@ public class WalletsService implements WalletsInterface {
                     + "ON a.financialInstitutionCode = b.code "
                     + "WHERE a.walletnumber = ?";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[] {walletnumber}, new WalletMapper());
-            float balance = 0;
+            double balance = 0;
             if (wallets.size() > 0) {
                 balance = wallets.get(0).getBalance();
             }

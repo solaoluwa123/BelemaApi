@@ -35,6 +35,7 @@ public interface CardsTransactionsInterface {
             String end_date,
             String retrieval_ref_number,
             String acquirer_institution_id,
+            String destination_acquiring_institution_id,
             String pan,
             String terminal_id,
             String merchant_id,
