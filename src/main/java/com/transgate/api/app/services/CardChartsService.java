@@ -73,13 +73,13 @@ public class CardChartsService implements CardChartInterface {
                     + "ORDER BY a.ncs_date_time DESC";
 
             List<Map<String, Object>> summary1 = jdbcTemplate.queryForList(SQL, today1, today2);
-            if (summary1.size() > 0)
-                summary.addAll(summary1);
+//            if (summary1.size() > 0)
+                summary1.addAll(summary);
             
             networkResponse.setCode(200);
             networkResponse.setMessage("Successful Transactions Summary");
             TNXModel tnxModel = new TNXModel();
-            tnxModel.setSummary((ArrayList) summary);
+            tnxModel.setSummary((ArrayList) summary1);
             networkResponse.setTnxModel(tnxModel);
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
