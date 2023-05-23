@@ -276,7 +276,6 @@ public class WalletsService implements WalletsInterface {
                 networkResponse.setStatus("error");
                 return responseManager.ResponseOk(networkResponse);
             }
-            System.out.println("amount: " + amount);
             int userrole = GetUserRole(fundby, sessiontoken);
             SQL = "INSERT into ajiswitch_db.tbl_wallet_activities(walletnumber, amount, credit_or_debit, actor, activity_date_time) VALUES(?, ?, ?, ?, now())";
             int retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, amount, actionType, fundby});
