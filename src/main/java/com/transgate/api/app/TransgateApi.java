@@ -190,14 +190,13 @@ public class TransgateApi //extends SpringBootServletInitializer
     public static void main(String[] args) throws JSONException {
         Timer timer1 = new Timer();
         Timer timer2 = new Timer();
-//        Timer timer3 = new Timer();
+        Timer timer3 = new Timer();
         timer1.schedule(new TimerTask() {
             @Override
             public void run() {
                 // code to be executed repeatedly
                 executeGet("users/crons/reducelocktime");
                 executeGet("users/crons/unlock");
-                executeGet("app/crons/cards/disputes/update-nuban");
             }
         }, 0, 60000);
         
@@ -209,13 +208,13 @@ public class TransgateApi //extends SpringBootServletInitializer
             }
         }, 0, 3600000);
         
-//        timer3.schedule(new TimerTask() {
-//            @Override
-//            public void run() {
-//                // code to be executed repeatedly
-//                executeGet("app/crons/cards/disputes/update-nuban");
-//            }
-//        }, 0, 15000);
+        timer3.schedule(new TimerTask() {
+            @Override
+            public void run() {
+                // code to be executed repeatedly
+                executeGet("app/crons/cards/disputes/update-nuban");
+            }
+        }, 0, 10000);
         
 //    Validators validators = new Validators();
 //    RestCall restCall = new RestCall();

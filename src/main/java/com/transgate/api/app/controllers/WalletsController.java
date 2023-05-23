@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import com.transgate.api.interfaces.WalletsInterface;
 import com.transgate.api.util.Validators;
+import java.math.BigDecimal;
 
 /**
  *
@@ -89,14 +90,14 @@ public class WalletsController {
         }
         String walletnumber = wallet.getWalletnumber();
         String actionType = wallet.getActionType();
-        double amount = wallet.getAmount();
+        BigDecimal amount = wallet.getAmount();
         String fundby = wallet.getCreator();
-        double walletbalance = wallet.getBalance();
+        double walletbalance = wallet.getBalance().doubleValue();
         if (!actionType.equals("cr") && !actionType.equals("dr"))
             return responseManager.ResponseBadRequest();
-        if (amount < 100 || (actionType.equals("dr") && walletbalance < 100))
+        if (amount.doubleValue() < 100 || (actionType.equals("dr") && walletbalance < 100))
             return responseManager.ResponseUnathorized();
-        if (amount > walletbalance && actionType.equals("dr"))
+        if (amount.doubleValue() > walletbalance && actionType.equals("dr"))
             return responseManager.ResponseBadRequest();
         return walletInterface.InitiateDebitCreditWallet(sessiontoken, walletnumber, actionType, amount, fundby);
     }

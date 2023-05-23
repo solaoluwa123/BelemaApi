@@ -31,5 +31,5 @@ public interface GenericInterface {
     public ResponseEntity ApprovalHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType);
     public ResponseEntity RejectHelper(String sessiontoken, int id, String table, String entity, String approvalType);
     public ResponseEntity RejectHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType);
-    public ResponseEntity GetCardsSmartDets(String startDate, String endDate);
+    public ResponseEntity GetSmartDets(String startDate, String endDate);
 }

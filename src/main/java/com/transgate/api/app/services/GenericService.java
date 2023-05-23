@@ -268,13 +268,13 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
-    public ResponseEntity GetCardsSmartDets(String startDate, String endDate) {
+    public ResponseEntity GetSmartDets(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
             List<Map<String, Object>> rows;
             SQL = "SELECT a.id, a.settlement_date, a.report_location "
-                    + "FROM sparkpay.tbl_smartdet_details a "
+                    + "FROM ajiswitch_db.tbl_smartdet_details a "
                     + "ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
             

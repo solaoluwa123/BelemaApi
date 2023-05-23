@@ -615,12 +615,12 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     whereQuery+=" (acquirer_institution_id = '" + acquirer_institution_id+"' OR destination_acquiring_institution_id = '" + destination_acquiring_institution_id+"')";
                 } else {
                     whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                    whereQuery+=" acquirer_institution_id LIKE '%" + acquirer_institution_id+"%'";
+                    whereQuery+=" destination_acquiring_institution_id = '" + acquirer_institution_id+"'";
                 }
             }
             if (!pan.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" pan LIKE '%" + pan+"%'";
+                whereQuery+=" pan = '" + pan+"'";
             }
             if (!terminal_id.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -766,9 +766,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     @Override
     public ResponseEntity UpdateCardsDisputesNUBAN(){
         try {
-            String SQL = "SELECT a.id, b.cardholder_acct_number, a.date_created FROM sparkpayweb_db.tbl_disputes a "
-                    + "LEFT JOIN sparkpay.transaction_hist_s b ON "
-                    + "a.id = b.id "
+            String SQL = "SELECT a.id, a.cardholder_acct_number, a.date_created FROM sparkpayweb_db.tbl_disputes a "
                     + "WHERE a.date_created > ? AND (a.cardholder_acct_nuban IS NULL || a.cardholder_acct_nuban = '') "
                     + "ORDER BY date_created ASC "
                     + "LIMIT 1";
@@ -983,16 +981,16 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE a.status < -1 AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) ORDER BY a.date_created DESC";
-                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode}, new CardsTransactionsDisputesMapper());
+                            + "WHERE a.status < -1 AND a.destination_acquiring_institution_id = ? ORDER BY a.date_created DESC";
+                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
                             + "SUM(a.amount) as totalValue "
                             + "FROM sparkpayweb_db.tbl_disputes a "
-                            + "LEFT JOIN sparkpay.transaction_hist_s b "
-                            + "ON a.id = b.id "
-                            + "WHERE a.status < -1 AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?)";
-                    totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
+//                            + "LEFT JOIN sparkpay.transaction_hist_s b "
+//                            + "ON a.id = b.id "
+                            + "WHERE a.status < -1 AND a.destination_acquiring_institution_id = ?";
+                    totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode}, Double.class);
                     break;
             }
             
@@ -1091,16 +1089,16 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE ((a.status = 1 AND a.resolved = 1) || a.resolved = 0) AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) ORDER BY a.date_created DESC LIMIT ? OFFSET ?";
-                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, institutioncode, limit, offset}, new CardsTransactionsDisputesMapper());
+                            + "WHERE ((a.status = 1 AND a.resolved = 1) || a.resolved = 0) AND a.destination_acquiring_institution_id = ? ORDER BY a.date_created DESC LIMIT ? OFFSET ?";
+                    transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, limit, offset}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
                             + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
-                            + "WHERE ((a.status = 1 AND a.resolved = 1) || a.resolved = 0) AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?)";
-                    agg = jdbcTemplate.queryForList(SQL, new Object[]{institutioncode, institutioncode});
+                            + "WHERE ((a.status = 1 AND a.resolved = 1) || a.resolved = 0) AND a.destination_acquiring_institution_id = ?";
+                    agg = jdbcTemplate.queryForList(SQL, new Object[]{institutioncode});
                     break;
             }
             Map<String, Object> row = agg.get(0);

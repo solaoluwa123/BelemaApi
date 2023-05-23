@@ -30,6 +30,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import com.transgate.api.interfaces.WalletsInterface;
+import java.math.BigDecimal;
 
 /**
  *
@@ -256,7 +257,7 @@ public class WalletsService implements WalletsInterface {
     }
     
     @Override
-    public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, double amount, String fundby) {
+    public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, BigDecimal amount, String fundby) {
         try {
             String SQL;
             if (actionType.equals("dr")) {
@@ -275,6 +276,7 @@ public class WalletsService implements WalletsInterface {
                 networkResponse.setStatus("error");
                 return responseManager.ResponseOk(networkResponse);
             }
+            System.out.println("amount: " + amount);
             int userrole = GetUserRole(fundby, sessiontoken);
             SQL = "INSERT into ajiswitch_db.tbl_wallet_activities(walletnumber, amount, credit_or_debit, actor, activity_date_time) VALUES(?, ?, ?, ?, now())";
             int retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, amount, actionType, fundby});
@@ -283,11 +285,13 @@ public class WalletsService implements WalletsInterface {
                     case 1:
                         if (actionType.equals("cr")){
                             SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance + ? WHERE walletnumber = ?";
+                            jdbcTemplate.update(SQL, new Object[]{amount, walletnumber});
                         }
                         else {
-                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance - ? WHERE walletnumber = ?";
+                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance - lien - ? WHERE walletnumber = ? AND balance - lien - ? > -1 AND is_active = 1";                            
+                            jdbcTemplate.update(SQL, new Object[]{amount, walletnumber, amount});
+//                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance - ? WHERE walletnumber = ?";
                         }
-                        jdbcTemplate.update(SQL, new Object[]{amount, walletnumber});
                         return responseManager.ResponseAccepted();
                     case 2:
                         ResponseEntity responseEntity = GetWalletByNumber(walletnumber);
@@ -383,7 +387,7 @@ public class WalletsService implements WalletsInterface {
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[] {walletnumber}, new WalletMapper());
             double balance = 0;
             if (wallets.size() > 0) {
-                balance = wallets.get(0).getBalance();
+                balance = wallets.get(0).getBalance().doubleValue();
             }
             if (balance > 0 || balance < 0){
                 response.setCode(200);
@@ -597,8 +601,11 @@ public class WalletsService implements WalletsInterface {
             response.setFinancialInstitutionCode(rs.getString("financialinstitutioncode") != null ? rs.getString("financialinstitutioncode") : "");
             response.setFinancialInstitutionName(rs.getString("financialInstitutionname") != null ? rs.getString("financialInstitutionname") : "");
             response.setWallettype(rs.getInt("wallettype"));
-            response.setBalance(rs.getFloat("balance"));
-            response.setLien(rs.getFloat("lien"));
+            BigDecimal _balance = new BigDecimal(rs.getString("balance"));
+            BigDecimal _lien = new BigDecimal(rs.getString("lien"));
+            BigDecimal balance = _balance.subtract(_lien);
+            response.setBalance(balance);
+            response.setLien(_lien);
             response.setDate_created(rs.getString("creationdate"));
             response.setDate_updated(null);
             switch (rs.getInt("wallettype")) {
@@ -668,8 +675,11 @@ public class WalletsService implements WalletsInterface {
 //            response.setFinancialInstitutionCode(rs.getString("financialInstitutionCode") != null ? rs.getString("financialInstitutionCode") : "");
 //            response.setFinancialInstitutionName(rs.getString("financialInstitutionName") != null ? rs.getString("financialInstitutionName") : "");
             response.setWallettype(rs.getInt("wallettype"));
-            response.setBalance(rs.getFloat("balance"));
-            response.setLien(rs.getFloat("lien"));
+            BigDecimal _balance = new BigDecimal(rs.getString("balance"));
+            BigDecimal _lien = new BigDecimal(rs.getString("lien"));
+            BigDecimal balance = _balance.subtract(_lien);
+            response.setBalance(balance);
+            response.setLien(_lien);
             response.setDate_created(rs.getString("date_created"));
             response.setAssignnee(rs.getString("assignee"));
             response.setActionType(rs.getString("actionType"));

@@ -5,6 +5,8 @@
  */
 package com.transgate.api.models;
 
+import java.math.BigDecimal;
+
 /**
  *
  * @author Makintola
@@ -12,9 +14,11 @@ package com.transgate.api.models;
 public class WalletModel {
     String creator, walletname, walletnumber, date_created, date_updated, financialInstitutionCode, financialInstitutionName;
     int id, wallettype;
-    double balance, lien, amount;
+    BigDecimal amount;
+    BigDecimal balance, lien;
     String actionType, assignnee, note;
     String walletTypeName, status;
+    String balanceAsString;
 
     public String getCreator() {
         return creator;
@@ -88,27 +92,11 @@ public class WalletModel {
         this.wallettype = wallettype;
     }
 
-    public double getBalance() {
-        return balance;
-    }
-
-    public void setBalance(float balance) {
-        this.balance = balance;
-    }
-
-    public double getLien() {
-        return lien;
-    }
-
-    public void setLien(float lien) {
-        this.lien = lien;
-    }
-
-    public double getAmount() {
+    public BigDecimal getAmount() {
         return amount;
     }
 
-    public void setAmount(float amount) {
+    public void setAmount(BigDecimal amount) {
         this.amount = amount;
     }
 
@@ -150,6 +138,22 @@ public class WalletModel {
 
     public void setStatus(String status) {
         this.status = status;
+    }
+
+    public BigDecimal getBalance() {
+        return balance;
+    }
+
+    public void setBalance(BigDecimal balance) {
+        this.balance = balance;
+    }
+
+    public BigDecimal getLien() {
+        return lien;
+    }
+
+    public void setLien(BigDecimal lien) {
+        this.lien = lien;
     }
     
 }
