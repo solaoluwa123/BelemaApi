@@ -10,8 +10,8 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class NodeModel {
-    int id, local_port, acquiring_institution_id, remote_port, delete_flag, edit_flag, create_flag;
-    String station_name, kek, send_key_request, cbn_bank_code;
+    int id, local_port, remote_port, delete_flag, edit_flag, create_flag;
+    String station_name, kek, send_key_request, cbn_bank_code, acquiring_institution_id;
     String date_time, key_check_value, transaction_direction;
     String remoteIP;
 
@@ -31,11 +31,11 @@ public class NodeModel {
         this.local_port = local_port;
     }
 
-    public int getAcquiring_institution_id() {
+    public String getAcquiring_institution_id() {
         return acquiring_institution_id;
     }
 
-    public void setAcquiring_institution_id(int acquiring_institution_id) {
+    public void setAcquiring_institution_id(String acquiring_institution_id) {
         this.acquiring_institution_id = acquiring_institution_id;
     }
 
