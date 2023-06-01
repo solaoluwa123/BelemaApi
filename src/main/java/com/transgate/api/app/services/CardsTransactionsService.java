@@ -15,6 +15,7 @@ import com.transgate.api.util.RestCall;
 import com.transgate.api.util.TransactionsCodeInterpreter;
 import com.transgate.api.util.Validators;
 import java.sql.ResultSet;
+import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,14 +61,15 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<CardsTransactionModel> transactions;
-            String table = isCurrent ? "sparkpay.transactions " : "sparkpay.transaction_hist_s ";
-            SQL = "SELECT * FROM "+table
-                    + "WHERE ncs_date_time >= ? AND ncs_date_time <= ? "
-                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+            String table = isCurrent ? "sparkpay.transactions a " : "sparkpay.transaction_hist_s a ";
+            SQL = "SELECT a.*, b.station_name FROM "+table
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.ncs_date_time >= ? AND a.ncs_date_time <= ? "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
             
             SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                    + "FROM "+table+"a "
+                    + "FROM "+table
                     + "WHERE a.ncs_date_time >= ? AND a.ncs_date_time <= ?";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             Map<String, Object> row = agg.get(0);
@@ -175,14 +177,16 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             inString = inString.append(")");
             List<CardsTransactionModel> transactions;
             int offset = page > 1 ? (page - 1) * limit : 0;
-            String table = isCurrent ? "sparkpay.transactions " : "sparkpay.transaction_hist_s ";
-            SQL = "SELECT * FROM "+table+" WHERE terminal_id IN "+inString.toString()+" "
-                    + "AND ncs_date_time >= ? AND ncs_date_time <= ? "
-                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+            String table = isCurrent ? "sparkpay.transactions a " : "sparkpay.transaction_hist_s a ";
+            SQL = "SELECT a.*, b.station_name FROM "+table+" "
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.terminal_id IN "+inString.toString()+" "
+                    + "AND a.ncs_date_time >= ? AND a.ncs_date_time <= ? "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
             
             SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                + "FROM "+table+" a WHERE a.terminal_id IN "+inString.toString()+" "
+                + "FROM "+table+" WHERE a.terminal_id IN "+inString.toString()+" "
                     + "AND ncs_date_time >= ? AND ncs_date_time <= ? ";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             Map<String, Object> row = agg.get(0);
@@ -271,15 +275,16 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             inString = inString.append(")");
             List<CardsTransactionModel> transactions;
             int offset = page > 1 ? (page - 1) * limit : 0;
-            String table = isCurrent ? "sparkpay.transactions " : "sparkpay.transaction_hist_s ";
-            SQL = "SELECT * FROM " + table
-                    + "WHERE merchant_id IN "+inString.toString()+" "
-                    + "AND ncs_date_time >= ? AND ncs_date_time <= ? "
-                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+            String table = isCurrent ? "sparkpay.transactions a " : "sparkpay.transaction_hist_s a ";
+            SQL = "SELECT a.*, b.station_name FROM " + table
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.merchant_id IN "+inString.toString()+" "
+                    + "AND a.ncs_date_time >= ? AND a.ncs_date_time <= ? "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
             
             SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                + "FROM "+table+"a WHERE a.merchant_id IN "+inString.toString()+" "
+                + "FROM "+table+" WHERE a.merchant_id IN "+inString.toString()+" "
                     + "AND ncs_date_time >= ? AND ncs_date_time <= ? ";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             Map<String, Object> row = agg.get(0);
@@ -399,14 +404,15 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 inString = inString.append("(-1");
             inString = inString.append(")");
             int offset = page > 1 ? (page - 1) * limit : 0;
-            String table = isCurrent ? "sparkpay.transactions " : "sparkpay.transaction_hist_s ";
-            SQL = "SELECT * FROM "+table+" WHERE merchant_id IN "+inString.toString()+" "
-                    + "AND ncs_date_time >= ? AND ncs_date_time <= ? "
-                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+            String table = isCurrent ? "sparkpay.transactions a " : "sparkpay.transaction_hist_s a ";
+            SQL = "SELECT a.*, b.station_name FROM "+table+" LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE merchant_id IN "+inString.toString()+" "
+                    + "AND a.ncs_date_time >= ? AND a.ncs_date_time <= ? "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
             
             SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                + "FROM "+table+" a WHERE a.merchant_id IN "+inString.toString()+" "
+                + "FROM "+table+" WHERE a.merchant_id IN "+inString.toString()+" "
                     + "AND ncs_date_time >= ? AND ncs_date_time <= ? ";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             Map<String, Object> row = agg.get(0);
@@ -480,14 +486,15 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String SQL;
             List<CardsTransactionModel> transactions;
             int offset = page > 1 ? (page - 1) * limit : 0;
-            String table = isCurrent ? "sparkpay.transactions " : "sparkpay.transaction_hist_s ";
-            SQL = "SELECT * FROM "+table
-                    + "WHERE (ncs_date_time >= ? AND ncs_date_time <= ?) AND (acquirer_institution_id = ? OR destination_acquiring_institution_id = ?) "
-                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+            String table = isCurrent ? "sparkpay.transactions a " : "sparkpay.transaction_hist_s a ";
+            SQL = "SELECT a.*, b.station_name FROM "+table
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE (a.ncs_date_time >= ? AND a.ncs_date_time <= ?) AND (a.acquirer_institution_id = ? OR a.destination_acquiring_institution_id = ?) "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institution, institution, limit, offset}, new CardsTransactionsMapper());
             
             SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                + "FROM "+table+" a "
+                + "FROM "+table
                     + "WHERE (ncs_date_time >= ? AND ncs_date_time <= ?) AND (a.acquirer_institution_id = ? OR destination_acquiring_institution_id = ?)";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution, institution});
             Map<String, Object> row = agg.get(0);
@@ -587,90 +594,97 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     ? "WHERE" : "";
             
             if (!message_type.equals("")) {
-                whereQuery+=" message_type = '" + message_type + "'";
+                whereQuery+=" a.message_type = '" + message_type + "'";
             }
             if (!bin.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" bin = " + bin;
+                whereQuery+=" a.bin = " + bin;
             }
             if (!processing_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" processing_code = " + processing_code;
+                whereQuery+=" a.processing_code = " + processing_code;
             }
             if (!system_trace_number.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" system_trace_number LIKE '%" + system_trace_number+"%'";
+                whereQuery+=" a.system_trace_number LIKE '%" + system_trace_number+"%'";
             }
             if (!response_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" response_code = " + response_code+"";
+                whereQuery+=" a.response_code = " + response_code+"";
             }
             if (!retrieval_ref_number.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" retrieval_ref_number LIKE '%" + retrieval_ref_number+"%'";
+                whereQuery+=" a.retrieval_ref_number LIKE '%" + retrieval_ref_number+"%'";
             }
             if (!acquirer_institution_id.equals("")) {
                 if (acquirer_institution_id.equals(destination_acquiring_institution_id)) {
                     whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                    whereQuery+=" (acquirer_institution_id = '" + acquirer_institution_id+"' OR destination_acquiring_institution_id = '" + destination_acquiring_institution_id+"')";
+                    whereQuery+=" (a.acquirer_institution_id = '" + acquirer_institution_id+"' OR a.destination_acquiring_institution_id = '" + destination_acquiring_institution_id+"')";
                 } else {
                     whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                    whereQuery+=" destination_acquiring_institution_id = '" + acquirer_institution_id+"'";
+                    whereQuery+=" a.destination_acquiring_institution_id = '" + acquirer_institution_id+"'";
+                }
+            } else {
+                if (!destination_acquiring_institution_id.equals("")) {
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.destination_acquiring_institution_id = '" + destination_acquiring_institution_id+"'";
                 }
             }
             if (!pan.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" pan = '" + pan+"'";
+                whereQuery+=" a.pan LIKE '%" + pan+"%'";
             }
             if (!terminal_id.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" terminal_id IN (" + terminal_id+")";
+                whereQuery+=" a.terminal_id IN (" + terminal_id+")";
             }
             if (!merchant_id.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" merchant_id IN (" + merchant_id+")";
+                whereQuery+=" a.merchant_id IN (" + merchant_id+")";
             }
             if (!location_name_address.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" location_name_address LIKE '%" + location_name_address+"%'";
+                whereQuery+=" a.location_name_address LIKE '%" + location_name_address+"%'";
             }
             if (!approval_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" approval_code LIKE '%" + approval_code+"%'";
+                whereQuery+=" a.approval_code LIKE '%" + approval_code+"%'";
             }
             if ((!min_amount.equals("") && Double.parseDouble(min_amount) > 0)) {
                 String minAmount = min_amount + "00";
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" amount LIKE '%" + minAmount+"'";
+                whereQuery+=" a.amount LIKE '%" + minAmount+"'";
             }
             if ((!max_amount.equals("") && Double.parseDouble(max_amount) > 0)) {
                 String maxAmount = max_amount + "00";
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" amount LIKE '%" + maxAmount+"'";
+                whereQuery+=" a.amount LIKE '%" + maxAmount+"'";
             }
             if (!start_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" ncs_date_time >= '" + start_date + "'";
+                whereQuery+=" a.ncs_date_time >= '" + start_date + "'";
             }
             if (!end_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" ncs_date_time < '" + end_date + "'";
+                whereQuery+=" a.ncs_date_time < '" + end_date + "'";
             }
             String SQL;
             List<CardsTransactionModel> transactions;
             int offset = page > 1 ? (page - 1) * limit : 0;
             if (isCurrent) {
-                SQL = "SELECT * FROM sparkpay.transactions "
+                SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a "
+                        + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                     +whereQuery
-                    + " ORDER BY id DESC LIMIT ? OFFSET ?";
+                    + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
                 SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                     + "FROM sparkpay.transactions a " + whereQuery;
             } else {
-                SQL = "SELECT * FROM sparkpay.transaction_hist_s "
+                SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
+                        + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                     +whereQuery
-                    + " ORDER BY id DESC LIMIT ? OFFSET ?";
+                    + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
                 SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
@@ -1345,7 +1359,20 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setApproval_code(rs.getString("approval_code"));
             tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number"));
             tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
+            tnx.setDestination_acquiring_institution_name(rs.getString("station_name") != null ? rs.getString("station_name") : "");
+//            tnx.setDestination_acquiring_institution_name(hasColumn(rs, "station_name") ? rs.getString("station_name") : "");
             return tnx;
         }
+    }
+    
+    public static boolean hasColumn(ResultSet rs, String columnName) throws SQLException {
+        ResultSetMetaData rsmd = rs.getMetaData();
+        int columns = rsmd.getColumnCount();
+        for (int x = 1; x <= columns; x++) {
+            if (columnName.equals(rsmd.getColumnName(x))) {
+                return true;
+            }
+        }
+        return false;
     }
 }

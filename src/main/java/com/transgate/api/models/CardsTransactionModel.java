@@ -18,6 +18,7 @@ public class CardsTransactionModel{
     String encrypted_pan, encrypted_expiry_date, approval_code, status_code_message;
     String isTnxReversed, cardholder_acct_number;
     String rawAmount;
+    String destination_acquiring_institution_name;
 
     public int getId() {
         return id;
@@ -210,6 +211,13 @@ public class CardsTransactionModel{
     public void setRawAmount(String rawAmount) {
         this.rawAmount = rawAmount;
     }
-    
+
+    public String getDestination_acquiring_institution_name() {
+        return destination_acquiring_institution_name;
+    }
+
+    public void setDestination_acquiring_institution_name(String destination_acquiring_institution_name) {
+        this.destination_acquiring_institution_name = destination_acquiring_institution_name;
+    }
     
 }   
