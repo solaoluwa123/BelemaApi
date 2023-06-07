@@ -252,6 +252,7 @@ public class CardsTransactionsController {
             @RequestParam("date_resolved_range") Optional<String> date_resolved_range,
             @RequestParam("dispute_status") Optional<String> dispute_status,
             @RequestParam("merchantsasIds") Optional<String> merchantsasIds,
+            @RequestParam("pan") Optional<String> pan,
             @RequestParam("page") int page,
             @RequestParam("limit") int limit
     ) {
@@ -266,6 +267,7 @@ public class CardsTransactionsController {
             date_logged_range.orElse(""),
             date_resolved_range.orElse(""),
             merchantsasIds.orElse(""),
+            pan.orElse(""),
             page,
             limit
         );

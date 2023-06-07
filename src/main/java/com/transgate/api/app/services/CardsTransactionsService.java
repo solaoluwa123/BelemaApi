@@ -150,9 +150,9 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         String SQL;
         List<CardsTransactionModel> transactions;
         if (isCurrent)
-            SQL = "SELECT * FROM sparkpay.transactions WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ? ORDER BY id DESC";
+            SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? ORDER BY a.id DESC";
         else
-            SQL = "SELECT * FROM sparkpay.transaction_hist_s WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ? ORDER BY id DESC";
+            SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? ORDER BY a.id DESC";
         transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapper());
         return transactions;
     }
@@ -1145,6 +1145,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String date_logged,
             String date_resolved,
             String merchantsasIds,
+            String pan,
             int page,
             int limit
         ) {
@@ -1169,6 +1170,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !start_date_resolved.equals("")
                     || !end_date_resolved.equals("")
                     || !merchantsasIds.equals("")
+                    || !pan.equals("")
                     ? "WHERE" : "";
             
             if (!merchantsasIds.equals("")) {
@@ -1187,6 +1189,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!terminal_id.equals("")) {
                 whereQuery+=" a.terminal_id = '" + terminal_id + "'";
+            }
+            if (!pan.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.pan = '" + pan + "'";
             }
             if (!system_trace_number.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
