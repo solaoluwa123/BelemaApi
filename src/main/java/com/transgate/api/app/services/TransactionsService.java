@@ -111,6 +111,20 @@ public class TransactionsService implements TransactionsInterface {
         return transactions;
     }
     
+    public List<FullTransactionModel> GetTransactionFromHistory(String sessionId, String source) {
+        String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code "
+                    + "WHERE a.session_id = ? AND a.source_institution_code = ?";
+        
+        List<FullTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{sessionId, source}, new FullTransactionMapper());
+        return transactions;
+    }
+    
     public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String source, String responsecode) {
         String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
@@ -1192,7 +1206,7 @@ public class TransactionsService implements TransactionsInterface {
                 String sessionId = jsonRecords.getJSONObject(i).getString("sessionid");
                 boolean sessionIdExist = CheckSessionId(sessionId);
                 if (!sessionIdExist) {
-                    List<FullTransactionModel> getTransaction = GetTransaction(sessionId, "0.00", sourceInstitution);
+                    List<FullTransactionModel> getTransaction = GetTransactionFromHistory(sessionId, sourceInstitution);
                     if (getTransaction.size() > 0) {
                         found++;
                         if (getTransaction.get(0).getSrcResponsecode().equals("00")) {
@@ -1236,7 +1250,7 @@ public class TransactionsService implements TransactionsInterface {
             }
             
 //            List<FullTransactionModel> getTransaction = GetTransaction(sessionId, amount, sourceInstitution);
-            List<FullTransactionModel> getTransaction = GetTransaction(sessionId, amount, sourceInstitution);
+            List<FullTransactionModel> getTransaction = GetTransactionFromHistory(sessionId, sourceInstitution);
             if (getTransaction.size() > 0) {
                 if (!getTransaction.get(0).getSrcResponsecode().equals("00")) {
                     NetworkResponse networkResponse = new NetworkResponse();
