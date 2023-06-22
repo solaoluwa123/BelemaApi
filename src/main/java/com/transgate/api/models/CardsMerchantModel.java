@@ -16,6 +16,7 @@ public class CardsMerchantModel {
     private int id, delete_flag, edit_flag, create_flag;
     private ArrayList ptsps;
     private String ptsps_as_string;
+    private double merchant_service_charge, msc_cap;
     
     public String getMerchant_id() {
         return merchant_id;
@@ -111,6 +112,22 @@ public class CardsMerchantModel {
 
     public void setPtsps_as_string(String ptsps_as_string) {
         this.ptsps_as_string = ptsps_as_string;
+    }
+
+    public double getMerchant_service_charge() {
+        return merchant_service_charge;
+    }
+
+    public void setMerchant_service_charge(double merchant_service_charge) {
+        this.merchant_service_charge = merchant_service_charge;
+    }
+
+    public double getMsc_cap() {
+        return msc_cap;
+    }
+
+    public void setMsc_cap(double msc_cap) {
+        this.msc_cap = msc_cap;
     }
     
 }

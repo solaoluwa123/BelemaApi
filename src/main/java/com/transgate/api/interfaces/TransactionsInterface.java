@@ -87,4 +87,6 @@ public interface TransactionsInterface {
             int limit,
             boolean isCurrent,
             String userInstitutionCode);
+    
+    public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate);
 }

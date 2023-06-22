@@ -1581,4 +1581,66 @@ public class TransactionsService implements TransactionsInterface {
         }
         return false;
     }
+    
+    @Override
+    public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> commissions;
+            if (institutionCode.equals("-1")) {
+                SQL = "SELECT a.*, b.institution_name "
+                    + "FROM ajiswitch_db.tbl_commission_paid a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
+                    + "ON a.institution_code = b.institution_code "
+                    + "WHERE a.generation_date >= ? AND a.generation_date < ? "
+                    + "ORDER BY a.generation_date DESC";
+                commissions = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
+                    + "FROM ajiswitch_db.tbl_commission_paid "
+                    + "WHERE generation_date >= ? AND generation_date < ?";
+                
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                Map<String, Object> row = agg.get(0);
+                BigDecimal tValue = (BigDecimal) row.get("totalValue");
+                Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+                Long tRecords = (Long) row.get("totalRecords");
+                int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+                String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +"}";
+                networkResponse.setMeta(meta);
+            } else {
+                SQL = "SELECT a.*, b.institution_name "
+                    + "FROM ajiswitch_db.tbl_commission_paid a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
+                    + "ON a.institution_code = b.institution_code "
+                    + "WHERE a.institution_code = ?"
+                    + "AND a.generation_date >= ? AND a.generation_date < ? "
+                    + "ORDER BY a.generation_date DESC";
+                commissions = jdbcTemplate.queryForList(SQL, new Object[]{institutionCode, startDate, endDate});
+                SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
+                    + "FROM ajiswitch_db.tbl_commission_paid "
+                    + "WHERE institution_code = ?"
+                    + "AND generation_date >= ? AND generation_date < ?";
+                
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institutionCode, startDate, endDate});
+                Map<String, Object> row = agg.get(0);
+                BigDecimal tValue = (BigDecimal) row.get("totalValue");
+                Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+                Long tRecords = (Long) row.get("totalRecords");
+                int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+                String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +"}";
+                networkResponse.setMeta(meta);
+            }
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All commission");
+            networkResponse.setData((ArrayList) commissions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
 }

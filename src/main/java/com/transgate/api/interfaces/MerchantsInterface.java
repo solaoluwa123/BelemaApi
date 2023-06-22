@@ -20,8 +20,8 @@ public interface MerchantsInterface {
     public ResponseEntity GetByTerminalOwner(String owner);
     public ResponseEntity Get(int id);
     public ResponseEntity GetApprovals();
-    public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, ArrayList ptsps, String sessiontoken);
-    public ResponseEntity Edit(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, ArrayList ptsps, String sessiontoken);
+    public ResponseEntity Create(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, double merchant_service_charge, double msc_cap, ArrayList ptsps, String sessiontoken);
+    public ResponseEntity Edit(String merchant_id, String merchant_name, String merchant_state, String merchant_country, String merchant_category_code, double merchant_service_charge, double msc_cap, ArrayList ptsps, String sessiontoken);
     public ResponseEntity SearchMerchants(
             String start_date,
             String end_date,

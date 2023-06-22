@@ -610,7 +610,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!response_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.response_code = " + response_code+"";
+                if (response_code.equals("111"))
+                    whereQuery+=" a.response_code != 00";
+                else                    
+                    whereQuery+=" a.response_code = " + response_code+"";
             }
             if (!retrieval_ref_number.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";

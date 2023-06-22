@@ -379,4 +379,16 @@ public class TransactionsController {
             isCurrent,
             userInstitutionCode);
     }
+    
+    @RequestMapping(value = "/commissions/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCommissions(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetCommissions(institutioncode, startDate, endDate);
+    }
 }
