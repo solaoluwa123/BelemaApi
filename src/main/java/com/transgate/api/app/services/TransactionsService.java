@@ -1588,7 +1588,7 @@ public class TransactionsService implements TransactionsInterface {
         try {
             String SQL;
             List<Map<String, Object>> commissions;
-            if (institutionCode.equals("-1")) {
+            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
                 SQL = "SELECT a.*, b.institution_name "
                     + "FROM ajiswitch_db.tbl_commission_paid a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
