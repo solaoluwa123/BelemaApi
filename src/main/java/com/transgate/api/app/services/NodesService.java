@@ -86,12 +86,22 @@ public class NodesService implements NodesInterface {
             String SQL;
             List<NodeModel> nodes;
             if (!pending) {
-                SQL = "SELECT * FROM sparkpay.station_pcis "
+                SQL = "SELECT a.*, b.name as send_key_request_label, c.name as transaction_direction_label "
+                        + "FROM sparkpay.station_pcis a "
+                        + "LEFT JOIN sparkpayweb_db.tbl_send_key_request b "
+                        + "ON a.send_key_request = b.code "
+                        + "LEFT JOIN sparkpayweb_db.tbl_trasaction_direction c "
+                        + "ON a.transaction_direction = c.code "
                     + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
                     + "ORDER BY id DESC";
             }
             else {
-                SQL = "SELECT * FROM sparkpay.station_pcis "
+                SQL = "SELECT a.*, b.name as send_key_request_label, c.name as transaction_direction_label "
+                        + "FROM sparkpay.station_pcis a "
+                        + "LEFT JOIN sparkpayweb_db.tbl_send_key_request b "
+                        + "ON a.send_key_request = b.code "
+                        + "LEFT JOIN sparkpayweb_db.tbl_trasaction_direction c "
+                        + "ON a.transaction_direction = c.code "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY id DESC";
             }
@@ -119,7 +129,12 @@ public class NodesService implements NodesInterface {
         try {
             String SQL;
             List<NodeModel> nodes;
-            SQL = "SELECT * FROM sparkpay.station_pcis "
+            SQL = "SELECT a.*, b.name as send_key_request_label, c.name as transaction_direction_label "
+                        + "FROM sparkpay.station_pcis a "
+                        + "LEFT JOIN sparkpayweb_db.tbl_send_key_request b "
+                        + "ON a.send_key_request = b.code "
+                        + "LEFT JOIN sparkpayweb_db.tbl_trasaction_direction c "
+                        + "ON a.transaction_direction = c.code "
                 + "WHERE "+column+" = ?";
             nodes = jdbcTemplate.query(SQL, new Object[]{id}, new NodesMapper());
             networkResponse.setCode(200);
@@ -140,7 +155,12 @@ public class NodesService implements NodesInterface {
         try {
             String SQL;
             List<NodeModel> nodes;
-            SQL = "SELECT * FROM sparkpay.station_pcis "
+            SQL = "SELECT a.*, b.name as send_key_request_label, c.name as transaction_direction_label "
+                        + "FROM sparkpay.station_pcis a "
+                        + "LEFT JOIN sparkpayweb_db.tbl_send_key_request b "
+                        + "ON a.send_key_request = b.code "
+                        + "LEFT JOIN sparkpayweb_db.tbl_trasaction_direction c "
+                        + "ON a.transaction_direction = c.code "
                 + "WHERE id = ?";
             nodes = jdbcTemplate.query(SQL, new Object[]{id}, new NodesMapper());
             networkResponse.setCode(200);
@@ -334,7 +354,12 @@ public class NodesService implements NodesInterface {
             String SQL;
             String allowedRows = " AND delete_flag = ? AND edit_flag = ? AND create_flag = ? ";
             List<NodeModel> nodes;
-            SQL = "SELECT * FROM sparkpay.station_pcis "
+            SQL = "SELECT a.*, b.name as send_key_request_label, c.name as transaction_direction_label "
+                        + "FROM sparkpay.station_pcis a "
+                        + "LEFT JOIN sparkpayweb_db.tbl_send_key_request b "
+                        + "ON a.send_key_request = b.code "
+                        + "LEFT JOIN sparkpayweb_db.tbl_trasaction_direction c "
+                        + "ON a.transaction_direction = c.code "
                 +whereQuery + allowedRows 
                 + " ORDER BY date_time DESC";
             nodes = jdbcTemplate.query(SQL, new Object[]{"0", "0", "1"}, new NodesMapper());
@@ -369,10 +394,12 @@ public class NodesService implements NodesInterface {
             node.setAcquiring_institution_id(rs.getString("acquiring_institution_id"));
             node.setKek(rs.getString("kek"));
             node.setSend_key_request(rs.getString("send_key_request"));
+            node.setSend_key_request_label(rs.getString("send_key_request_label"));
             node.setCbn_bank_code(rs.getString("cbn_bank_code"));
             node.setDate_time(rs.getString("date_time"));
             node.setKey_check_value(rs.getString("key_check_value"));
             node.setTransaction_direction(rs.getString("transaction_direction"));
+            node.setTransaction_direction_label(rs.getString("transaction_direction_label"));
             node.setRemoteIP(rs.getString("remoteIP"));
             node.setRemote_port(rs.getInt("remote_port"));
             node.setDelete_flag(rs.getInt("delete_flag"));

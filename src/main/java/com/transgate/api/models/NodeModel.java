@@ -11,8 +11,8 @@ package com.transgate.api.models;
  */
 public class NodeModel {
     int id, local_port, remote_port, delete_flag, edit_flag, create_flag;
-    String station_name, kek, send_key_request, cbn_bank_code, acquiring_institution_id;
-    String date_time, key_check_value, transaction_direction;
+    String station_name, kek, send_key_request, send_key_request_label, cbn_bank_code, acquiring_institution_id;
+    String date_time, key_check_value, transaction_direction, transaction_direction_label;
     String remoteIP;
 
     public int getId() {
@@ -133,6 +133,22 @@ public class NodeModel {
 
     public void setRemoteIP(String remoteIP) {
         this.remoteIP = remoteIP;
+    }
+
+    public String getSend_key_request_label() {
+        return send_key_request_label;
+    }
+
+    public void setSend_key_request_label(String send_key_request_label) {
+        this.send_key_request_label = send_key_request_label;
+    }
+
+    public String getTransaction_direction_label() {
+        return transaction_direction_label;
+    }
+
+    public void setTransaction_direction_label(String transaction_direction_label) {
+        this.transaction_direction_label = transaction_direction_label;
     }
     
 }   
