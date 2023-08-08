@@ -16,7 +16,7 @@ public class CardsTransactionModel{
     String retrieval_ref_number, acquirer_institution_id, pan, terminal_id;
     String merchant_id, location_name_address, ncs_date_time, destination_acquiring_institution_id;
     String encrypted_pan, encrypted_expiry_date, approval_code, status_code_message;
-    String isTnxReversed, cardholder_acct_number;
+    String isTxnReversed, cardholder_acct_number;
     String rawAmount;
     String destination_acquiring_institution_name;
 
@@ -188,12 +188,12 @@ public class CardsTransactionModel{
         this.status_code_message = status_code_message;
     }
 
-    public String getIsTnxReversed() {
-        return isTnxReversed;
+    public String getIsTxnReversed() {
+        return isTxnReversed;
     }
 
-    public void setIsTnxReversed(String isTnxReversed) {
-        this.isTnxReversed = isTnxReversed;
+    public void setIsTxnReversed(String isTxnReversed) {
+        this.isTxnReversed = isTxnReversed;
     }
 
     public String getCardholder_acct_number() {

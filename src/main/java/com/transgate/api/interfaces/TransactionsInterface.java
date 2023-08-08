@@ -56,11 +56,23 @@ public interface TransactionsInterface {
     
     public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String sourceInstitution, String username);
     
-    public ResponseEntity GetDisputes(String institutioncode);
+    public ResponseEntity GetDisputes(String institutioncode, int page, int limit);
     
     public ResponseEntity GetDisputes(int id);
     
-    public ResponseEntity GetDisputes(int id, int status, String institutioncode);
+    public ResponseEntity GetDisputes(int id, int status, String institutioncode, int page, int limit);
+    
+    public ResponseEntity SearchDisputes(
+            String sessionid,
+            String response_code,
+            String source_bank,
+            String beneficiary_bank,
+            String dispute_status,
+            String date_logged,
+            String date_resolved,
+            int page,
+            int limit
+        );
     
     public ResponseEntity GetSettlements(int id);
     

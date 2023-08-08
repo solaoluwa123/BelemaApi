@@ -119,9 +119,9 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.source_institution_code = b.code "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                     + "ON a.destination_institution_code = c.code "
-                    + "WHERE a.session_id = ? AND a.source_institution_code = ?";
+                    + "WHERE a.session_id = ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)";
         
-        List<FullTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{sessionId, source}, new FullTransactionMapper());
+        List<FullTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{sessionId, source, source}, new FullTransactionMapper());
         return transactions;
     }
     
@@ -1068,36 +1068,40 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
-    public ResponseEntity GetDisputes(String institution) {
-        return GetDisputes(0, 0, institution);
+    public ResponseEntity GetDisputes(String institution, int page, int limit) {
+        return GetDisputes(0, 0, institution, page, limit);
     }
     
     @Override
     public ResponseEntity GetDisputes(int id) {
-        return GetDisputes(id, 0, null);
+        return GetDisputes(id, 0, null, 0, 0);
     }
     
     @Override
     public ResponseEntity GetSettlements(int id) {
-        return GetDisputes(id, 1, null);
+        return GetDisputes(id, 1, null, 0, 0);
     }
     
     @Override
     public ResponseEntity GetSettlements(String institution) {
-        return GetDisputes(0, 1, institution);
+        return GetDisputes(0, 1, institution, 0, 0);
     }
     
     @Override
-    public ResponseEntity GetDisputes(int id, int status, String institutioncode) {
+    public ResponseEntity GetDisputes(int id, int status, String institutioncode, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String code = institutioncode != null ? institutioncode : "";
-            String SQL;
+            String SQL, SQL2;
             List<DisputeModel> transactions;
-            Double totalValue = 0.00;
+            Double totalValue;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<Map<String, Object>> agg = null;
             if (id > 0) {
-                    SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri "
+                    SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri, a.financial_institution_code "
                         + "FROM tbl_disputes dispute "
+                            + "LEFT JOIN tbl_financial_institution_contacts a "
+                            + "ON dispute.loggedBy = a.email_address "
                     + "WHERE dispute.id = ?";
                 transactions = jdbcTemplate.query(SQL, new Object[]{id}, new DisputeTransactionMapper());
             }
@@ -1106,57 +1110,66 @@ public class TransactionsService implements TransactionsInterface {
                     case "":
                     case "-1":
                         if (status == 0){
-                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri "
+                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri, a.financial_institution_code "
                                 + "FROM tbl_disputes dispute "
+                                + "LEFT JOIN tbl_financial_institution_contacts a "
+                                + "ON dispute.loggedBy = a.email_address "
                                 + "WHERE dispute.resolved = 0 || (dispute.status = 1 AND dispute.resolved = 1) "
-                                + "ORDER BY dispute.id DESC ";
+                                + "ORDER BY dispute.id DESC LIMIT ? OFFSET ?";
                             
-                            String SQL2 = "SELECT SUM(dispute.amount) as totalValue "
+                            SQL2 = "SELECT SUM(dispute.amount) as totalValue, COUNT(dispute.id) as totalRecords "
                                 + "FROM tbl_disputes dispute "
                                 + "WHERE dispute.resolved = 0 || (dispute.status = 1 AND dispute.resolved = 1)";
-                            totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         else {
-                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri "
+                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri, a.financial_institution_code "
                                 + "FROM tbl_disputes dispute "
+                                + "LEFT JOIN tbl_financial_institution_contacts a "
+                                + "ON dispute.loggedBy = a.email_address "
                                 + "WHERE dispute.resolved = 1 "
-                                + "ORDER BY dispute.id DESC ";
+                                + "ORDER BY dispute.id DESC LIMIT ? OFFSET ?";
                             
-                            String SQL2 = "SELECT SUM(dispute.amount) as totalValue "
+                            SQL2 = "SELECT SUM(dispute.amount) as totalValue, COUNT(dispute.id) as totalRecords "
                                 + "FROM tbl_disputes dispute "
                                 + "WHERE dispute.resolved = 1";
-                            totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         break;
                     default:
                         if (status == 0){
-                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri "
+                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri, a.financial_institution_code "
                                 + "FROM tbl_disputes dispute "
+                                + "LEFT JOIN tbl_financial_institution_contacts a "
+                                + "ON dispute.loggedBy = a.email_address "
                                 + "WHERE ((dispute.status = 1 AND dispute.resolved = 1) || dispute.resolved = 0) AND (dispute.ownerInstitution = " + code + " OR dispute.destInstitution = " + code+") "
-                                + "ORDER BY dispute.id DESC ";
+                                + "ORDER BY dispute.id DESC LIMIT ? OFFSET ?";
                             
-                            String SQL2 = "SELECT SUM(dispute.amount) as totalValue "
+                            SQL2 = "SELECT SUM(dispute.amount) as totalValue, COUNT(dispute.id) as totalRecords "
                                 + "FROM tbl_disputes dispute "
                                 + "WHERE ((dispute.status = 1 AND dispute.resolved = 1) || dispute.resolved = 0) AND (dispute.ownerInstitution = " + code + " OR dispute.destInstitution = " + code+")";
-                            totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         else {
-                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri "
+                            SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri, a.financial_institution_code "
                                 + "FROM tbl_disputes dispute "
+                                + "LEFT JOIN tbl_financial_institution_contacts a "
+                                + "ON dispute.loggedBy = a.email_address "
                                 + "WHERE dispute.ownerInstitution = " + code + " OR dispute.destInstitution = " + code+""
-                                + " ORDER BY dispute.id DESC ";
+                                + " ORDER BY dispute.id DESC LIMIT ? OFFSET ?";
                             
-                            String SQL2 = "SELECT SUM(dispute.amount) as totalValue "
+                            SQL2 = "SELECT SUM(dispute.amount) as totalValue, COUNT(dispute.id) as totalRecords "
                                 + "FROM tbl_disputes dispute "
                                 + "WHERE dispute.ownerInstitution = " + code + " OR dispute.destInstitution = " + code+"";
-                            totalValue = jdbcTemplate.queryForObject(SQL2, Double.class);
                         }
                         break;
                 }
-                transactions = jdbcTemplate.query(SQL, new DisputeTransactionMapper());
+                transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new DisputeTransactionMapper());
+                agg = jdbcTemplate.queryForList(SQL2);
             }
-            totalValue = totalValue != null ? totalValue : 0;
-            String meta = "{\"totalValue\": " +totalValue+ "}";
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -1164,6 +1177,118 @@ public class TransactionsService implements TransactionsInterface {
                 networkResponse.setMessage(id > 0 ? "Dispute" : "All disputes");
             else if (status == 1)
                 networkResponse.setMessage(id > 0 ? "Settlement" : "All settlements");
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity SearchDisputes(
+            String sessionid,
+            String response_code,
+            String source_bank,
+            String beneficiary_bank,
+            String dispute_status,
+            String date_logged,
+            String date_resolved,
+            int page,
+            int limit
+        ) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String start_date_logged = !date_logged.equals("") ? date_logged.substring(0, 10) : "";
+            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, 21) : "";
+            String start_date_resolved = !date_resolved.equals("") ? date_resolved.substring(0, 10) : "";
+            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, 21) : "";
+            String SQL;
+            Double totalValue;
+            List<Map<String, Object>> agg;
+            List<DisputeModel> transactions;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            String whereQuery = !sessionid.equals("")
+                    || !response_code.equals("")
+                    || !source_bank.equals("")
+                    || !beneficiary_bank.equals("")
+                    || !dispute_status.equals("")
+                    || !start_date_logged.equals("")
+                    || !end_date_logged.equals("")
+                    || !start_date_resolved.equals("")
+                    || !end_date_resolved.equals("")
+                    ? "WHERE" : "";
+            
+            if (!sessionid.equals("")) {
+                whereQuery+=" a.transactionSessionid = '" + sessionid + "'";
+            }
+            if (!source_bank.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.ownerInstitution = '" + source_bank + "'";
+            }
+            if (!beneficiary_bank.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.destInstitution = '" + beneficiary_bank + "'";
+            }
+            switch(dispute_status){
+                case "-1":
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.status = -1 AND a.resolved = 0";
+                break;
+                case "0":
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.status = 0 AND a.resolved = 0";
+                break;
+                case "1":
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.status = 1 AND a.resolved = 1";
+                break;
+                case "2":
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.status = 0 AND a.resolved = 1";
+                break;
+//                case "":
+//                    whereQuery = whereQuery.equals("") ? "WHERE" : !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+//                    whereQuery+=" a.status != -1 AND a.resolved != 1";
+//                    break;
+                default:
+                    break;
+            }
+            if (!start_date_logged.equals("") && !end_date_logged.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.date_created BETWEEN '" + start_date_logged + "' AND '" + end_date_logged + "'";
+            }
+            if (!start_date_resolved.equals("") && !end_date_resolved.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.timeline_date BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+            }
+            SQL = "SELECT a.id, a.transactionSessionid as session_id, a.transactionid, a.amount, a.originator_account_name, a.beneficiary_account_name, a.transaction_date_time, a.ownerInstitutionName as srcInstitutionName, a.destInstitutionName, a.loggedBy, a.resolvedBy, a.ownerInstitution, a.destInstitution, a.type, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, b.financial_institution_code "
+                                + "FROM tbl_disputes a "
+                                + "LEFT JOIN tbl_financial_institution_contacts b "
+                                + "ON a.loggedBy = b.email_address "
+                                + whereQuery
+                                + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new DisputeTransactionMapper());
+
+            SQL = "SELECT "
+                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                    + "FROM tbl_disputes a "
+//                    + "LEFT JOIN sparkpay.transaction_hist_s b "
+//                    + "ON a.id = b.id " 
+                    + whereQuery;
+            agg = jdbcTemplate.queryForList(SQL);
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + 1 +", \"limit\": " + null +"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched Disputes Results");
             networkResponse.setData((ArrayList) transactions);
             networkResponse.setMeta(meta);
             
@@ -1337,6 +1462,7 @@ public class TransactionsService implements TransactionsInterface {
             response.setSrcInstitutionName(rs.getString("srcInstitutionName"));
             response.setDestInstitutionName(rs.getString("destInstitutionName"));
             response.setProof_of_reject_uri(rs.getString("proof_of_reject_uri"));
+            response.setLoggingInstitution(rs.getString("financial_institution_code"));
             return response;
         }
     }

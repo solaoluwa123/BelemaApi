@@ -10,6 +10,7 @@ import com.transgate.api.models.DisputeModel;
 import com.transgate.api.models.TransactionModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
+import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -304,11 +305,14 @@ public class TransactionsController {
     }
     
     @RequestMapping(value = "/transactions/disputes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetDisputes(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("institutioncode") String institutioncode) {
+    public ResponseEntity GetDisputes(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetDisputes(institutioncode);
+        return transactionsInterface.GetDisputes(institutioncode, page, limit);
     }
     
     @RequestMapping(value = "/transactions/disputes/get/{id}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -378,6 +382,35 @@ public class TransactionsController {
             limit,
             isCurrent,
             userInstitutionCode);
+    }
+    @RequestMapping(value = "/transactions/disputes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchTransactionsDisputes(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken,  
+            @RequestParam("sessionid") Optional<String> sessionid, 
+            @RequestParam("response_code") Optional<String> response_code, 
+            @RequestParam("source_bank") Optional<String> source_bank,
+            @RequestParam("beneficiary_bank") Optional<String> beneficiary_bank,
+            @RequestParam("date_logged_range") Optional<String> date_logged_range,
+            @RequestParam("date_resolved_range") Optional<String> date_resolved_range,
+            @RequestParam("dispute_status") Optional<String> dispute_status,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.SearchDisputes(
+            sessionid.orElse(""),
+            response_code.orElse(""),
+            source_bank.orElse(""),
+            beneficiary_bank.orElse(""),
+            dispute_status.orElse(""),
+            date_logged_range.orElse(""),
+            date_resolved_range.orElse(""),
+            page,
+            limit
+        );
     }
     
     @RequestMapping(value = "/commissions/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")

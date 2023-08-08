@@ -13,6 +13,7 @@ public class DisputeModel extends FullTransactionModel {
     String type, loggedBy, dateModified, dateCreated;
     int transactionId, status, resolved;
     String resolvedBy, records, timeline_date, proof_of_reject_uri;
+    String loggingInstitution;
     
     public String getType() {
         return type;
@@ -100,6 +101,14 @@ public class DisputeModel extends FullTransactionModel {
 
     public void setProof_of_reject_uri(String proof_of_reject_uri) {
         this.proof_of_reject_uri = proof_of_reject_uri;
+    }
+
+    public String getLoggingInstitution() {
+        return loggingInstitution;
+    }
+
+    public void setLoggingInstitution(String loggingInstitution) {
+        this.loggingInstitution = loggingInstitution;
     }
     
 }

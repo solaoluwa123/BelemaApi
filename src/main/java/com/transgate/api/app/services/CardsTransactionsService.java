@@ -54,6 +54,19 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     
     String _temp_date = "2023-01-01 00:00:00";
     
+    private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+    
     @Override
     public ResponseEntity Get(String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -153,7 +166,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? ORDER BY a.id DESC";
         else
             SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? ORDER BY a.id DESC";
-        transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapper());
+        transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapperDefault());
         return transactions;
     }
     
@@ -737,6 +750,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             JSONArray jsonRecords = new JSONArray(records);
             int found = 0;
             int recorded = 0;
+            int userrole = GetUserRole(sessiontoken);
             
             for (int i = 0; i < jsonRecords.length(); i++) {
                 String terminalid = jsonRecords.getJSONObject(i).getString("terminalid");
@@ -759,6 +773,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                         int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
 //                        SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?)";
 //                        int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban});
+                        if (userrole == 8) {
+                            SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                            jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
+                        }
                         if (retval > 0) 
                             recorded++;
                     }
@@ -872,18 +890,19 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         try {
             
             boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
+            String unique_log_code = terminalid + stan + rrn;
             if (sessionIdExist) {
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
                 networkResponse.setStatus("failed");
-                networkResponse.setMessage("Cannot log dispute with same details twice");
+                networkResponse.setMessage("Cannot log dispute with same details twice\nID: "+unique_log_code);
                 return responseManager.ResponseOk(networkResponse);
             }
             List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan, false);
             if (getTransaction.size() > 0) {
+                int userrole = GetUserRole(sessiontoken);
                 String SQL;
                 int additionalDays = dateUtil.getDisputeTimeLineDate();
-                String unique_log_code = terminalid + stan + rrn;
                 String nuban = "";
 //                String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
 //                        ? "" : 
@@ -891,6 +910,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
                 SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, proof_of_debit_uri, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
+                if (userrole == 8) {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                    jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
+                }
                 if (retval > 0) 
                     return responseManager.ResponseAccepted();
                 else 
@@ -1149,6 +1172,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String date_resolved,
             String merchantsasIds,
             String pan,
+            String uniquelogid,
             int page,
             int limit
         ) {
@@ -1174,6 +1198,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !end_date_resolved.equals("")
                     || !merchantsasIds.equals("")
                     || !pan.equals("")
+                    || !uniquelogid.equals("")
                     ? "WHERE" : "";
             
             if (!merchantsasIds.equals("")) {
@@ -1192,6 +1217,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!terminal_id.equals("")) {
                 whereQuery+=" a.terminal_id = '" + terminal_id + "'";
+            }
+            if (!uniquelogid.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.unique_log_code = '" + uniquelogid + "'";
             }
             if (!pan.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -1366,9 +1395,46 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setEncrypted_expiry_date(rs.getString("encrypted_expiry_date"));
             tnx.setEncrypted_pan(rs.getString("encrypted_pan"));
             tnx.setApproval_code(rs.getString("approval_code"));
+            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? validators.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : rs.getString("cardholder_acct_number"));
+            tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
+            tnx.setDestination_acquiring_institution_name(rs.getString("station_name") != null ? rs.getString("station_name") : "");
+            tnx.setIsTxnReversed(rs.getString("isTxnReversed"));
+//            tnx.setDestination_acquiring_institution_name(hasColumn(rs, "station_name") ? rs.getString("station_name") : "");
+            return tnx;
+        }
+    }
+    
+    class CardsTransactionsMapperDefault implements RowMapper<CardsTransactionModel> {
+
+        @Override
+        public CardsTransactionModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            CardsTransactionModel tnx = new CardsTransactionModel();
+            tnx.setId(rs.getInt("id"));
+            tnx.setMessage_type(rs.getString("message_type"));
+            tnx.setBin(rs.getString("bin"));
+            tnx.setProcessing_code(rs.getString("processing_code"));
+            tnx.setSystem_trace_number(rs.getString("system_trace_number"));
+            tnx.setResponse_code(rs.getString("response_code"));
+            tnx.setTransaction_date(rs.getString("transaction_date"));
+            tnx.setTransaction_time(rs.getString("transaction_time"));
+            tnx.setRawAmount(rs.getString("amount"));
+            Double amount = rs.getString("amount") != null && rs.getString("amount") != "" ? Double.parseDouble(rs.getString("amount")) / 100 : 0.00;
+            tnx.setAmount(amount.toString());
+            tnx.setRetrieval_ref_number(rs.getString("retrieval_ref_number"));
+            tnx.setAcquirer_institution_id(rs.getString("acquirer_institution_id"));
+            tnx.setPan(rs.getString("pan"));
+            tnx.setTerminal_id(rs.getString("terminal_id"));
+            tnx.setMerchant_id(rs.getString("merchant_id"));
+            tnx.setLocation_name_address(rs.getString("location_name_address"));
+            tnx.setNcs_date_time(rs.getString("ncs_date_time"));
+            tnx.setDestination_acquiring_institution_id(rs.getString("destination_acquiring_institution_id"));
+            tnx.setEncrypted_expiry_date(rs.getString("encrypted_expiry_date"));
+            tnx.setEncrypted_pan(rs.getString("encrypted_pan"));
+            tnx.setApproval_code(rs.getString("approval_code"));
             tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number"));
             tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
             tnx.setDestination_acquiring_institution_name(rs.getString("station_name") != null ? rs.getString("station_name") : "");
+            tnx.setIsTxnReversed(rs.getString("isTxnReversed"));
 //            tnx.setDestination_acquiring_institution_name(hasColumn(rs, "station_name") ? rs.getString("station_name") : "");
             return tnx;
         }

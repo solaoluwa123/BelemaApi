@@ -69,12 +69,18 @@ public class Validators {
     }
     
     public String FormatCardHolderAcctNum(String cardHolderAcctNum){
-        String path_1 = cardHolderAcctNum.substring(0, 3);
-        String path_2 = cardHolderAcctNum.substring(3, 10);
-        String path_3 = cardHolderAcctNum.substring(10, 12);
-        String path_4 = cardHolderAcctNum.substring(12, 16);
-        String path_5 = cardHolderAcctNum.substring(16, cardHolderAcctNum.length());
-        String formatCardHolderAcctNum = removeLeadingZero(path_1) + "/" + removeLeadingZero(path_2) + "/" + removeLeadingZero(path_3) + "/" + removeLeadingZero(path_4) + "/" + removeLeadingZero(path_5);
+        String formatCardHolderAcctNum = cardHolderAcctNum;
+        try {
+            String path_1 = cardHolderAcctNum.substring(0, 3);
+            String path_2 = cardHolderAcctNum.substring(3, 10);
+            String path_3 = cardHolderAcctNum.substring(10, 12);
+            String path_4 = cardHolderAcctNum.substring(12, 16);
+            String path_5 = cardHolderAcctNum.substring(16, cardHolderAcctNum.length());
+            formatCardHolderAcctNum = removeLeadingZero(path_1) + "/" + removeLeadingZero(path_2) + "/" + removeLeadingZero(path_3) + "/" + removeLeadingZero(path_4) + "/" + removeLeadingZero(path_5);
+//            return formatCardHolderAcctNum;
+        } catch (Exception ex) {
+            System.out.println("formatter: " + ex);
+        }
         return formatCardHolderAcctNum;
     }
 }

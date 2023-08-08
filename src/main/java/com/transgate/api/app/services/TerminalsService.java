@@ -8,6 +8,7 @@ package com.transgate.api.app.services;
 import com.transgate.api.interfaces.TerminalsInterface;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.TerminalModel;
+import com.transgate.api.util.Constants;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -81,28 +82,102 @@ public class TerminalsService implements TerminalsInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            List<TerminalModel> terminals;
+            List<Map<String, Object>> rows;
             if (!pending) {
-                SQL = "SELECT * FROM postxnprocessor.terminals "
-                    + "WHERE create_flag = 1 AND delete_flag = 0 AND edit_flag = 0 "
-                    + "ORDER BY date_time DESC";
+                SQL = "SELECT * FROM postxnprocessor.terminal_parameters "
+                    + "WHERE delete_flag = 0 "
+                    + "ORDER BY creation_date DESC";
             }
             else {
                 SQL = "SELECT * FROM postxnprocessor.terminals "
                     + "WHERE create_flag = 0 OR delete_flag = 1 OR edit_flag = 1 "
                     + "ORDER BY date_time DESC";
             }
-            terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
-            SQL = "SELECT MIN(date_time) from postxnprocessor.terminals";
+            rows = jdbcTemplate.queryForList(SQL);
+//            terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
+            SQL = "SELECT MIN(creation_date) from postxnprocessor.terminal_parameters";
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
-            SQL = "SELECT MAX(date_time) from postxnprocessor.terminals";
+            SQL = "SELECT MAX(creation_date) from postxnprocessor.terminal_parameters";
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
            
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Terminals");
-            networkResponse.setData((ArrayList) terminals);
+            networkResponse.setData((ArrayList) rows);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetForMerchant(String merchantid) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT * FROM postxnprocessor.terminal_parameters "
+                + "WHERE delete_flag = 0 AND merchant_id = ?"
+                + "ORDER BY creation_date DESC";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{merchantid});
+//            terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
+            SQL = "SELECT MIN(creation_date) from postxnprocessor.terminal_parameters WHERE merchant_id = ?";
+            String minDate = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, String.class);
+            SQL = "SELECT MAX(creation_date) from postxnprocessor.terminal_parameters WHERE merchant_id = ? ";
+            String maxDate = jdbcTemplate.queryForObject(SQL, new Object[]{merchantid}, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Terminals");
+            networkResponse.setData((ArrayList) rows);
+            networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetForPTSP(String ptsp) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.merchant_id FROM sparkpayweb_db.tbl_map_merchants_ptsps a WHERE a.ptsp_id = ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{ptsp});
+            StringBuilder inString = new StringBuilder("(");
+            for (final Map<String, Object> row : rows) {
+                inString.append("'").append(row.get("merchant_id")).append("'");
+                inString.append(",");
+            }
+            inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
+            if (inString.toString().equals(""))
+                inString = inString.append("(-1");
+            inString = inString.append(")");
+
+            SQL = "SELECT * FROM postxnprocessor.terminal_parameters "
+                + "WHERE delete_flag = 0 AND merchant_id IN "+inString.toString()
+                + "ORDER BY creation_date DESC";
+            rows = jdbcTemplate.queryForList(SQL);
+//            terminals = jdbcTemplate.query(SQL, new TerminalsMapper());
+            SQL = "SELECT MIN(creation_date) from postxnprocessor.terminal_parameters WHERE merchant_id IN "+inString.toString();
+            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            SQL = "SELECT MAX(creation_date) from postxnprocessor.terminal_parameters WHERE merchant_id IN "+inString.toString();
+            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
+            String meta = "{\"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+           
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Terminals");
+            networkResponse.setData((ArrayList) rows);
             networkResponse.setMeta(meta);
             
             return responseManager.ResponseOk(networkResponse);
@@ -229,32 +304,37 @@ public class TerminalsService implements TerminalsInterface {
     }
     
     @Override
-    public ResponseEntity Create(String terminal_id, String owner_id, String owner_name, String merchant_id, String merchant_name, 
-            String route_mode, String acquiring_institution_id, String acquiring_institution_name,
-            String cbn_bank_code, String terminal_type,
-            String sessiontoken) {
+    public ResponseEntity Create(String terminal_id, String merchant_id, String merchant_name, String sessiontoken) {
             NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
             int retval;
-            int terminalIDExit = CheckTerminalExit(terminal_id, "postxnprocessor.terminals", "terminal_id");
+            int terminalIDExit = CheckTerminalExit(terminal_id, "postxnprocessor.terminal_parameters", "terminal_id");
             if (terminalIDExit == 0) {
                 int userrole = GetUserRole(sessiontoken);
                 int create_flag = 0;
-                if (userrole != 1 && userrole != 2) {
+                if (userrole != 1 && userrole != 2 && userrole != 8) {
                     return responseManager.ResponseUnathorized();
                 }
-                if (userrole == 1) 
-                    create_flag = 1;
-
-                SQL = "INSERT into postxnprocessor.terminals"
-                        + "(terminal_id, owner_id, owner_name, merchant_id, merchant_name, route_mode,"
-                        + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, create_flag, date_time) "
-                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
-                retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, owner_id, owner_name, merchant_id, merchant_name, route_mode, acquiring_institution_id,
-                        acquiring_institution_name, cbn_bank_code, terminal_type, create_flag});
-                if (retval > 0) 
-                    return responseManager.ResponseAccepted();
+//                if (userrole == 1) 
+//                    create_flag = 1;
+                SQL = "INSERT INTO postxnprocessor.terminal_parameters (terminal_id, merchant_id, transaction_timeout, currency_code, country_code, call_home_time, merchant_category_code, merchant_location_name_address, creation_date) "
+                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, now())";
+                retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, merchant_id, Constants.TXNTIMEOUT, Constants.CURRENCYCODE, Constants.CURRENCYCODE, Constants.CALLHOMETIME, Constants.MERCHANTCATEGORYCODE, merchant_name});
+                if (retval > 0) {
+                    SQL = "INSERT INTO postxnprocessor.parameter_download_log VALUES(?, 0, now(), 0, now(), 0, now(), 0, now(), 0, now(), 0, now())";
+                    retval = jdbcTemplate.update(SQL, new Object[]{terminal_id});
+                    if (retval > 0) {
+                        SQL = "INSERT INTO postxnprocessor.transaction_keys VALUES(8603, ?, '', '', '', '', 0, 0, now(), now(), '', '', 0, now(), ?, ?, ?, '', 0)";
+                        retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, Constants.SESSIONMASTERKEY, Constants.SESSIONMASTERKEYCHECKVALUE, Constants.SESSIONMASTERKEY_2});
+                        if (retval > 0) 
+                            return responseManager.ResponseAccepted();
+                        else 
+                            return responseManager.ResponseInternalServerError();
+                    }
+                    else 
+                        return responseManager.ResponseInternalServerError();
+                }
                 else 
                     return responseManager.ResponseInternalServerError();
             }
@@ -271,47 +351,20 @@ public class TerminalsService implements TerminalsInterface {
     }
     
     @Override
-    public ResponseEntity Edit(String terminal_id, String owner_id, String owner_name, String merchant_id, String merchant_name, 
-            String route_mode, String acquiring_institution_id, String acquiring_institution_name,
-            String cbn_bank_code, String terminal_type,
-            String sessiontoken) {
+    public ResponseEntity Edit(String terminal_id, String merchant_id, String merchant_name, String sessiontoken) {
         try {
             String SQL;
             int userrole = GetUserRole(sessiontoken);
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE postxnprocessor.terminals SET owner_id = ?, owner_name = ?, merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
-                            + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE terminal_id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{owner_id, owner_name, merchant_id, merchant_name, route_mode, acquiring_institution_id,
-                        acquiring_institution_name, cbn_bank_code, terminal_type, terminal_id});
+                case 2:
+                case 8:
+                    SQL = "UPDATE postxnprocessor.terminal_parameters SET merchant_id = ?, merchant_location_name_address = ? WHERE terminal_id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{merchant_id, merchant_name, terminal_id});
                     if (retVal > 0)
                         return responseManager.ResponseAccepted();
                     else
-                        return responseManager.ResponseBadRequest();
-                case 2:
-                    boolean checkPendingAction = CheckItemPendingEdit(terminal_id);
-                    if (checkPendingAction) {
-                        NetworkResponse networkResponse = new NetworkResponse();
-                        networkResponse.setCode(200);
-                        networkResponse.setStatus("failed");
-                        networkResponse.setMessage("Terminal already pending edit");
-                        return responseManager.ResponseOk(networkResponse);
-                    }
-                    ResponseEntity responseEntity = Get(terminal_id);
-                    NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
-                    TerminalModel model = networkResponse != null ? (TerminalModel) networkResponse.getData().get(0) : new TerminalModel();
-                    SQL = "INSERT into sparkpayweb_db.terminals_bkp"
-                        + "(id, owner_id, owner_name, terminal_id, merchant_id, merchant_name, route_mode,"
-                        + "acquiring_institution_id, acquiring_institution_name, cbn_bank_code, terminal_type, date_time) "
-                        + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
-                    jdbcTemplate.update(SQL, new Object[]{model.getId(), model.getOwner_id(), model.getOwner_name(), terminal_id, merchant_id, merchant_name, route_mode, acquiring_institution_id,
-                        acquiring_institution_name, cbn_bank_code, terminal_type});
-                    SQL = "UPDATE postxnprocessor.terminals SET edit_flag = 1 WHERE terminal_id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{terminal_id});
-                    if (retVal > 0) 
-                        return responseManager.ResponseAccepted();
-                    else 
                         return responseManager.ResponseBadRequest();
                 default:
                     return responseManager.ResponseUnathorized();

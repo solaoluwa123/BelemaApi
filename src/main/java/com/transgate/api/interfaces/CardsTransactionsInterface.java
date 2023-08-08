@@ -55,6 +55,7 @@ public interface CardsTransactionsInterface {
             String date_resolved,
             String merchantsasIds,
             String pan,
+            String uniquelogid,
             int page,
             int limit
         );

@@ -50,7 +50,7 @@ public class TerminalsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return TerminalsInterface.Get(merchantid, "merchant_id");
+        return TerminalsInterface.GetForMerchant(merchantid);
     }
     
     @RequestMapping(value = "/cards/terminals/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -68,7 +68,7 @@ public class TerminalsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return TerminalsInterface.Get(ptsp, "ptsp_id");
+        return TerminalsInterface.GetForPTSP(ptsp);
     }
     
     @RequestMapping(value = "/cards/terminals/terminal-owner/{owner_id}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -96,9 +96,7 @@ public class TerminalsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return TerminalsInterface.Create(
-                terminalModel.getTerminal_id(), terminalModel.getOwner_id(), terminalModel.getOwner_name(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
-                terminalModel.getRoute_mode(), terminalModel.getAcquiring_institution_id(), terminalModel.getAcquiring_institution_name(), 
-                terminalModel.getCbn_bank_code(), terminalModel.getTerminal_type(), sessiontoken
+                terminalModel.getTerminal_id(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(), sessiontoken
             );
     }
     
@@ -110,9 +108,7 @@ public class TerminalsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return TerminalsInterface.Edit(
-                terminal_id, terminalModel.getOwner_id(), terminalModel.getOwner_name(), terminalModel.getMerchant_id(), terminalModel.getMerchant_name(),
-                terminalModel.getRoute_mode(), terminalModel.getAcquiring_institution_id(), terminalModel.getAcquiring_institution_name(), 
-                terminalModel.getCbn_bank_code(), terminalModel.getTerminal_type(), sessiontoken
+                terminal_id, terminalModel.getMerchant_id(), terminalModel.getMerchant_name(), sessiontoken
             );
     }
     
@@ -122,7 +118,7 @@ public class TerminalsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.DeleteHelper(sessiontoken, id, "terminal_id", "postxnprocessor.terminals", "Terminal");
+        return GenericInterface.DeleteHelper(sessiontoken, id, "terminal_id", "postxnprocessor.terminal_parameters", "Terminal");
     }
     
     @RequestMapping(value = "/cards/terminals/{type}/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")
