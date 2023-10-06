@@ -619,7 +619,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!system_trace_number.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.system_trace_number LIKE '%" + system_trace_number+"%'";
+                whereQuery+=" a.system_trace_number = '" + system_trace_number+"'";
             }
             if (!response_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -630,7 +630,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!retrieval_ref_number.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.retrieval_ref_number LIKE '%" + retrieval_ref_number+"%'";
+                whereQuery+=" a.retrieval_ref_number = '" + retrieval_ref_number+"'";
             }
             if (!acquirer_institution_id.equals("")) {
                 if (acquirer_institution_id.equals(destination_acquiring_institution_id)) {
@@ -648,7 +648,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!pan.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.pan LIKE '%" + pan+"%'";
+                whereQuery+=" a.pan = '" + pan+"'";
             }
             if (!terminal_id.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -660,11 +660,11 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!location_name_address.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.location_name_address LIKE '%" + location_name_address+"%'";
+                whereQuery+=" a.location_name_address = '" + location_name_address+"'";
             }
             if (!approval_code.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.approval_code LIKE '%" + approval_code+"%'";
+                whereQuery+=" a.approval_code = '" + approval_code+"'";
             }
             if ((!min_amount.equals("") && Double.parseDouble(min_amount) > 0)) {
                 String minAmount = min_amount + "00";
@@ -1168,6 +1168,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String retrieval_ref_number,
             String transaction_response_code,
             String dispute_status,
+            String dispute_type,
             String date_logged,
             String date_resolved,
             String merchantsasIds,
@@ -1192,6 +1193,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !retrieval_ref_number.equals("")
                     || !transaction_response_code.equals("")
                     || !dispute_status.equals("")
+                    || !dispute_type.equals("")
                     || !start_date_logged.equals("")
                     || !end_date_logged.equals("")
                     || !start_date_resolved.equals("")
@@ -1255,6 +1257,18 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                     whereQuery+=" a.status = 0 AND a.resolved = 1";
                 break;
+                default:
+                    break;
+            }
+            switch(dispute_type) {
+                case "charge-back":
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.logged_by != a.resolved_by";
+                    break;
+                case "air":
+                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                    whereQuery+=" a.logged_by = a.resolved_by";
+                    break;
                 default:
                     break;
             }

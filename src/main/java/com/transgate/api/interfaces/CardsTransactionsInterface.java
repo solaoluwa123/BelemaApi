@@ -51,6 +51,7 @@ public interface CardsTransactionsInterface {
             String retrieval_ref_number,
             String transaction_response_code,
             String dispute_status,
+            String dispute_type,
             String date_logged,
             String date_resolved,
             String merchantsasIds,
