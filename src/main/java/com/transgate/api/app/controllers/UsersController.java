@@ -61,6 +61,12 @@ public class UsersController {
         return responseManager.ResponseAccepted();
     }
     
+    @RequestMapping(value = "/app/crons/sendaccepteddisputes", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SendAllAcceptedDisputes() {
+        unlockAccountsInterface.SendAllAcceptedDisputes();
+        return responseManager.ResponseAccepted();
+    }
+    
     @RequestMapping(value = "/user/generate-token", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity SignUser(@RequestHeader(value = "auth") String header,
             @RequestBody LoginRequest login) {

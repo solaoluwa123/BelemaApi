@@ -13,4 +13,5 @@ public interface UnlockAccountsInterface {
     public void Unlock();
     public void ReduceLockTime();
     public void AutoPassDisputesForSettlement();
+    public void SendAllAcceptedDisputes();
 }

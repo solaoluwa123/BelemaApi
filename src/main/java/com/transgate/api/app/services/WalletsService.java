@@ -289,7 +289,6 @@ public class WalletsService implements WalletsInterface {
                         else {
                             SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance - lien - ? WHERE walletnumber = ? AND balance - lien - ? > -1 AND is_active = 1";                            
                             jdbcTemplate.update(SQL, new Object[]{amount, walletnumber, amount});
-//                            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = balance - ? WHERE walletnumber = ?";
                         }
                         return responseManager.ResponseAccepted();
                     case 2:

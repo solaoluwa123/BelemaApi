@@ -13,7 +13,7 @@
     <version>0.0.1-SNAPSHOT</version>
     <name>sparkpayapi</name>
     <description>Demo project for Spring Boot</description>
-    <!--<packaging>war</packaging>-->
+    <packaging>war</packaging>
     <properties>
         <java.version>1.8</java.version>
     </properties>
@@ -122,6 +122,28 @@
             <artifactId>jjwt-jackson</artifactId> <!-- or jjwt-gson if Gson is preferred -->
             <version>0.11.5</version>
             <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>javax.mail</groupId>
+            <artifactId>mail</artifactId>
+            <version>1.5.0-b01</version>
+        </dependency>
+        <dependency>
+            <groupId>com.survivingwithandroid</groupId>
+            <artifactId>weatherlib_okhttpclient</artifactId>
+            <version>1.6.0</version>
+            <type>aar</type>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.survivingwithandroid</groupId>
+                    <artifactId>weatherlib</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.squareup.okhttp</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>2.2.0</version>
         </dependency>
     </dependencies>
     

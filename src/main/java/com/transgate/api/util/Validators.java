@@ -8,9 +8,13 @@ import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import java.security.Key;
+import java.text.NumberFormat;
 import java.util.Base64;
 import java.util.Date;
+import java.util.Locale;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.crypto.spec.SecretKeySpec;
 
 /**
@@ -18,7 +22,7 @@ import javax.crypto.spec.SecretKeySpec;
  * @author Makintola
  */
 public class Validators {
-    
+       
     String secret = "sparkpayxbearerfactorajijetjwtscrete2023habari";
 
     Key hmacKey = new SecretKeySpec(Base64.getDecoder().decode(secret), 
@@ -82,5 +86,31 @@ public class Validators {
             System.out.println("formatter: " + ex);
         }
         return formatCardHolderAcctNum;
+    }
+    
+    public String RemoveSpecialCharacters(String input) {
+        // Define a regular expression pattern to match special characters
+        Pattern pattern = Pattern.compile("[^a-zA-Z0-9\\s]");
+        // Create a Matcher object
+        Matcher matcher = pattern.matcher(input);
+        // Replace all special characters with an empty string
+        String result = matcher.replaceAll("");
+        
+        Pattern pattern2 = Pattern.compile("\\s");
+        Matcher matcher2 = pattern2.matcher(result);
+        result = matcher2.replaceAll("");
+        
+        return result;
+    }
+    
+    public static String DoubleToCurrency(double amount) {
+        // Create a NumberFormat instance with the desired locale
+        Locale locale = new Locale("en", "US"); // For example, en_US represents the United States locale
+        NumberFormat currencyFormatter = NumberFormat.getCurrencyInstance(locale);
+
+        // Format the double value as currency
+        String formattedCurrency = currencyFormatter.format(amount);
+        formattedCurrency = formattedCurrency.replace("$", "");
+        return formattedCurrency;
     }
 }
