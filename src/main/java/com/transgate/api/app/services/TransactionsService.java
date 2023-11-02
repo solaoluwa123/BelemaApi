@@ -98,7 +98,7 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String source) {
-        String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+        String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -112,7 +112,7 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     public List<FullTransactionModel> GetTransactionFromHistory(String sessionId, String source) {
-        String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+        String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -126,7 +126,7 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     public List<FullTransactionModel> GetTransaction(String sessionId, String amount, String source, String responsecode) {
-        String SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+        String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -152,7 +152,7 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
-            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                 + "FROM " + table + " a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -200,7 +200,7 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
-            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                 + "FROM "+table+" a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -337,7 +337,7 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             if (isCurrent) {
-                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -355,7 +355,7 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.destination_institution_code = c.code " + whereQuery
                     + " ORDER BY a.id DESC";
             } else {
-                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -922,7 +922,7 @@ public class TransactionsService implements TransactionsInterface {
         try {
             String SQL;
             List<FullTransactionModel> transactions;
-            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -963,7 +963,7 @@ public class TransactionsService implements TransactionsInterface {
             String SQL;
             List<FullTransactionModel> transactions;
             if (id > 0) {
-                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -974,7 +974,7 @@ public class TransactionsService implements TransactionsInterface {
                 transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
             }
             else {
-                SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1018,7 +1018,7 @@ public class TransactionsService implements TransactionsInterface {
         try {
             String SQL;
             List<FullTransactionModel> transactions;
-            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1046,7 +1046,7 @@ public class TransactionsService implements TransactionsInterface {
             String SQL;
             List<FullTransactionModel> transactions;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers a " : "ajiswitch_db.tbl_creditfundtransfer_hist_s a ";
-            SQL = "SELECT a.id, a.session_id, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM "+table
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1541,6 +1541,7 @@ public class TransactionsService implements TransactionsInterface {
             ResponseCodeInterpreter responseCodeInterpreter = new ResponseCodeInterpreter();
             response.setId(rs.getInt("id"));
             response.setSrcSessionid(rs.getString("session_id"));
+            response.setPaymentReference(rs.getString("payment_reference"));
             response.setSrcAccountNumber(rs.getString("originator_account_number"));
             response.setSrcAccountName(rs.getString("originator_account_name"));
             response.setSrcKycLevel(rs.getString("originator_kyc"));

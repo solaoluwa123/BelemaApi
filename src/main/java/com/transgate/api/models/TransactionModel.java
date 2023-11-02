@@ -11,7 +11,7 @@ package com.transgate.api.models;
  */
 public class TransactionModel {
     int id;
-    String srcSessionid, srcAccountNumber, srcAccountName, srcKycLevel, srcBvn, srcAmount, srcInstitutioncode, destSessionId, srcResponsecode, destAccountNumber;
+    String srcSessionid, paymentReference, srcAccountNumber, srcAccountName, srcKycLevel, srcBvn, srcAmount, srcInstitutioncode, destSessionId, srcResponsecode, destAccountNumber;
     String destAccountName, destKycLevel, destBvn, destAmount, destInstitutioncode, destResponseCode, narration, transactiondate, username;
     String responseCodeDefinition, txnDuration, responsedatetime, channelCode;
     
@@ -206,5 +206,14 @@ public class TransactionModel {
     public void setChannelCode(String channelCode) {
         this.channelCode = channelCode;
     }
+
+    public String getPaymentReference() {
+        return paymentReference;
+    }
+
+    public void setPaymentReference(String paymentReference) {
+        this.paymentReference = paymentReference;
+    }
+    
     
 }

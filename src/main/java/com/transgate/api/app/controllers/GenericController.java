@@ -80,11 +80,15 @@ public class GenericController {
     
     @RequestMapping(value = "/settlements", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
-            @RequestParam("start") String start, @RequestParam("end") String end) {
+            @RequestParam("start") String start, 
+            @RequestParam("end") String end,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit
+    ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.GetSettlements(start, end);
+        return GenericInterface.GetSettlements(start, end, page, limit);
     }
     
     @RequestMapping(value = "/smartdets", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -96,13 +100,39 @@ public class GenericController {
         return GenericInterface.GetSmartDets(start, end);
     }
     
-    @RequestMapping(value = "/settlements/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
-            @RequestParam("start") String start, @RequestParam("end") String end, @PathVariable("institution") String institution) {
+    @RequestMapping(value = "/settlementsummary", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSettlementSummary(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return GenericInterface.GetSettlements(institution, start, end);
+        return GenericInterface.GetSettlementSummary(start, end);
+    }
+    
+    @RequestMapping(value = "/settlements/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, 
+            @RequestParam("end") String end, 
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetSettlements(institution, start, end, page, limit);
+    }
+    
+    @RequestMapping(value = "/settlements/institution/search/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SearchSettlementsByInstitution(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, 
+            @RequestParam("end") String end, 
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @PathVariable("institution") String institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.SearchSettlementsByInstitution(institution, start, end, page, limit);
     }
     
     @RequestMapping(value = "/cards/settlements", method = RequestMethod.GET, headers = "Accept=application/json")

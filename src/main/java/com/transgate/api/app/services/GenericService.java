@@ -198,11 +198,13 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
-    public ResponseEntity GetSettlements(String institution, String startDate, String endDate) {
+    public ResponseEntity GetSettlements(String institution, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
             List<Map<String, Object>> rows;
+            String meta;
             if (institution.equals(Constants.SYESTEMFICODE)) {
                 List<Map<String, Object>> _rows;
                 SQL = "SELECT a.institution_code FROM ajiswitch_db.tbl_nodes a WHERE a.issettlementbank = 0";
@@ -218,21 +220,44 @@ public class GenericService implements GenericInterface {
                 inString = inString.append(")");
                 
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
+                        + "FROM ajiswitch_db.tbl_settlement_details a "
+                        + "LEFT JOIN tbl_financial_institutions b "
+                        + "ON a.institution_code = b.code "
+                        + "WHERE a.institution_code IN "+inString.toString()+" AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
+                        + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
+                rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, limit, offset});
+                
+                SQL = "SELECT COUNT(a.id) as totalRecords "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
-                    + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.institution_code = b.code "
-                    + "WHERE a.institution_code IN "+inString.toString()+" AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
-                rows = jdbcTemplate.queryForList(SQL);
+                        + "WHERE a.institution_code IN "+inString.toString()+" AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+            
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                Map<String, Object> row = agg.get(0);
+                Long tRecords = (Long) row.get("totalRecords");
+                int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+                meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+
             } else {
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
                         + "LEFT JOIN tbl_financial_institutions b "
                         + "ON a.institution_code = b.code "
-                        + "WHERE a.institution_code = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
-                rows = jdbcTemplate.queryForList(SQL, new Object[]{institution});
-
+                        + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
+                        + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
+                rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate, limit, offset});
+                
+                SQL = "SELECT COUNT(a.id) as totalRecords "
+                    + "FROM ajiswitch_db.tbl_settlement_details a "
+                        + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+            
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
+                Map<String, Object> row = agg.get(0);
+                Long tRecords = (Long) row.get("totalRecords");
+                int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+                meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             }
             
+            networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements");
@@ -245,17 +270,69 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
-    public ResponseEntity GetSettlements(String startDate, String endDate) {
+    public ResponseEntity SearchSettlementsByInstitution(String institution, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<Map<String, Object>> rows;
+            String meta;
+            SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
+                    + "FROM ajiswitch_db.tbl_settlement_details a "
+                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "ON a.institution_code = b.code "
+                    + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
+                    + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate, limit, offset});
+
+            SQL = "SELECT COUNT(a.id) as totalRecords "
+                + "FROM ajiswitch_db.tbl_settlement_details a "
+                    + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
+            Map<String, Object> row = agg.get(0);
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            
+            networkResponse.setMeta(meta);
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlements");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetSettlements(String startDate, String endDate, int page, int limit) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
             List<Map<String, Object>> rows;
             SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.institution_code = b.code WHERE a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv' ORDER BY a.settlement_date DESC";
-            rows = jdbcTemplate.queryForList(SQL);
+                    + "ON a.institution_code = b.code "
+                    + "WHERE a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
+                    + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
+            rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, limit, offset});
             
+            SQL = "SELECT COUNT(a.id) as totalRecords "
+                    + "FROM ajiswitch_db.tbl_settlement_details a "
+                    + "WHERE a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+            
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            Map<String, Object> row = agg.get(0);
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            
+            networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements");
@@ -281,6 +358,28 @@ public class GenericService implements GenericInterface {
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Smartdet");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetSettlementSummary(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            List<Map<String, Object>> rows;
+            SQL = "SELECT a.id, a.settlement_date, a.report_location "
+                    + "FROM ajiswitch_db.tbl_acct_summary_details a "
+                    + "ORDER BY a.settlement_date DESC";
+            rows = jdbcTemplate.queryForList(SQL);
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All Settlement Summary");
             networkResponse.setData((ArrayList) rows);
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
