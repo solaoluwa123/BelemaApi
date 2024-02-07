@@ -13,8 +13,8 @@ import java.util.List;
  */
 public class LoginResponse {
     
-    int id, roleid, code;
-    String status, role, message, username, firstname, surname, phone_number, email_address, date_created, date_updated, session_token, last_login, financial_institution_code, financial_institution_name;
+    int id, roleid, code, twofaenabled;
+    String status, role, message, username, firstname, surname, phone_number, email_address, date_created, date_updated, session_token, last_login, financial_institution_code, financial_institution_name, twofasecretkey;
     List<MenuModel> transgateMenu, sparkpayMenu;
 
     public int getCode() {
@@ -167,6 +167,22 @@ public class LoginResponse {
 
     public void setSparkpayMenu(List<MenuModel> sparkpayMenu) {
         this.sparkpayMenu = sparkpayMenu;
+    }
+
+    public int getTwofaenabled() {
+        return twofaenabled;
+    }
+
+    public void setTwofaenabled(int twofaenabled) {
+        this.twofaenabled = twofaenabled;
+    }
+
+    public String getTwofasecretkey() {
+        return twofasecretkey;
+    }
+
+    public void setTwofasecretkey(String twofasecretkey) {
+        this.twofasecretkey = twofasecretkey;
     }
     
 }

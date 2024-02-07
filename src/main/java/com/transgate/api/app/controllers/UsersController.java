@@ -90,6 +90,26 @@ public class UsersController {
         return usersInterface.Login(login.getUsername(), login.getPassword());
     }
     
+    @RequestMapping(value = "/users/setup-2fa", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity SetUp2FA(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.SetUp2FA(sessiontoken, user.getUsername(), user.getId());
+    }
+    
+    @RequestMapping(value = "/users/login-2fa", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity Login2FA(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody LoginRequest login) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.Login2FA(sessiontoken, login.getUsername(), login.getPassword());
+    }
+    
     @RequestMapping(value = "/users/resetpassword", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity ResetPassword(@RequestHeader(value = "Authorization") String header,
             @RequestBody LoginResponse login) {

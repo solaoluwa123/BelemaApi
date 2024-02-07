@@ -10,13 +10,16 @@ import com.transgate.api.models.CardsDisputeModel;
 import com.transgate.api.models.CardsTransactionModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.util.DateUtil;
+import com.transgate.api.util.Mailers;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.RestCall;
 import com.transgate.api.util.TransactionsCodeInterpreter;
 import com.transgate.api.util.Validators;
+import java.io.UnsupportedEncodingException;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -51,6 +54,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     DateUtil dateUtil = new DateUtil();
     RestCall restCall = new RestCall();
     Validators validators = new Validators();
+    Mailers mailers = new Mailers();
     
     String _temp_date = "2023-01-01 00:00:00";
     
@@ -577,6 +581,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String acquirer_institution_id,
             String destination_acquiring_institution_id,
             String pan,
+            String rrn,
             String terminal_id,
             String merchant_id,
             String location_name_address,
@@ -598,6 +603,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !acquirer_institution_id.equals("")
                     || !destination_acquiring_institution_id.equals("")
                     || !pan.equals("")
+                    || !rrn.equals("")
                     || !terminal_id.equals("")
                     || !merchant_id.equals("")
                     || !location_name_address.equals("")
@@ -650,6 +656,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" a.pan = '" + pan+"'";
             }
+            if (!rrn.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.retrieval_ref_number = '" + rrn+"'";
+            }
             if (!terminal_id.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
                 whereQuery+=" a.terminal_id IN (" + terminal_id+")";
@@ -697,6 +707,18 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                     + "FROM sparkpay.transactions a " + whereQuery;
             } else {
+                SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
+                        + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    +whereQuery
+                    + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
+                transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
+
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                    + "FROM sparkpay.transaction_hist_s a " + whereQuery;
+            }
+            LocalTime currentTime = LocalTime.now();
+            int hour = currentTime.getHour();
+            if (isCurrent && transactions.size() < 1 && hour >= 12) {
                 SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
                         + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                     +whereQuery
@@ -914,8 +936,31 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
                     jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
                 }
-                if (retval > 0) 
+                if (retval > 0) {
+                    SQL = "SELECT ptsp_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
+                    String ptspid = jdbcTemplate.queryForObject(SQL, new Object[]{getTransaction.get(0).getMerchant_id()}, String.class);
+                    SQL = "SELECT user_email FROM tbl_map_card_users_institution WHERE institution_id = ? LIMIT 3";
+                    
+                    List<Map<String, Object>> ptspUsers = jdbcTemplate.queryForList(SQL, new Object[]{ptspid});
+                    if (ptspUsers.size() > 0) {
+                        try {
+                            ptspUsers.forEach(row -> {
+                                String message = "<html><body>Dear Team, <br/><br/>Please be informed that a new dispute has been logged against your institution. Please login to sparkpay and find the dispute under the unique log code "+unique_log_code
+                                        + "<br/><br/>Sparkpay,"
+                                        + "<br/>Cheers</body><html>";
+                                mailers.SendMailWithHabariOkHttpClient(
+                                        "New Dispute Log",
+                                        "no-reply@habaripay.com",
+                                        (String) row.get("user_email"),
+                                        message
+                                );
+                            });
+                        } catch(Exception e) {
+                            System.out.println("mailer error: " + e.toString());
+                        }
+                    }
                     return responseManager.ResponseAccepted();
+                }
                 else 
                     return responseManager.ResponseInternalServerError();
             } else {
@@ -1171,6 +1216,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String dispute_type,
             String date_logged,
             String date_resolved,
+            String timeline_date,
             String merchantsasIds,
             String pan,
             String uniquelogid,
@@ -1180,9 +1226,11 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String start_date_logged = !date_logged.equals("") ? date_logged.substring(0, 10) : "";
-            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, 21) : "";
+            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, date_logged.length()) : "";
             String start_date_resolved = !date_resolved.equals("") ? date_resolved.substring(0, 10) : "";
-            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, 21) : "";
+            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, date_resolved.length()) : "";
+            String start_timeline_date = !timeline_date.equals("") ? timeline_date.substring(0, 10) : "";
+            String end_timeline_date = !timeline_date.equals("") ? timeline_date.substring(11, timeline_date.length()) : "";
             String SQL;
             Double totalValue;
             List<Map<String, Object>> agg;
@@ -1198,6 +1246,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     || !end_date_logged.equals("")
                     || !start_date_resolved.equals("")
                     || !end_date_resolved.equals("")
+                    || !start_timeline_date.equals("")
+                    || !end_timeline_date.equals("")
                     || !merchantsasIds.equals("")
                     || !pan.equals("")
                     || !uniquelogid.equals("")
@@ -1278,7 +1328,11 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             }
             if (!start_date_resolved.equals("") && !end_date_resolved.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.timeline_date BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+                whereQuery+=" a.date_modified BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+            }
+            if (!start_timeline_date.equals("") && !end_timeline_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.timeline_date BETWEEN '" + start_timeline_date + "' AND '" + end_timeline_date + "'";
             }
             SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                     + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "

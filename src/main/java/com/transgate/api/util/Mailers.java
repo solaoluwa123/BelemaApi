@@ -199,4 +199,41 @@ public class Mailers {
         }
         return "";
     }
+    
+    public String SendMailWithHabariOkHttpClient(String subject, String sender, String recipient, String message) {
+        String location = "https://habaripay.gtbank.com/api/message/email";
+        String bearerToken = "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJuYW1lIjoiMSIsInJvbGUiOiIxIiwibmJmIjoxNjI5OTExMTU5LCJleHAiOjE2Mjk5MjE5NTksImlhdCI6MTYyOTkxMTE1OX0.b4xSxmT8LhL9EueJul3SyRr-46UG62_3XozG6ws_KkY";
+        String encryptSender = habariMailEncrypt.encryptText(sender);
+        String encryptRecipient = habariMailEncrypt.encryptText(recipient);
+        String encryptSubject = habariMailEncrypt.encryptText(subject);
+        String encryptMessage = habariMailEncrypt.encryptText(message);
+//        String encryptAttachmentPath = habariMailEncrypt.encryptText(attachmentPath);
+        String clientId = "9";
+        
+        OkHttpClient client = new OkHttpClient();
+        
+        MediaType mediaType = MediaType.parse("multipart/form-data");
+        RequestBody body = new MultipartBuilder()
+//        RequestBody body = new MultipartBuilder.Builder().setType(MultipartBody.FORM)
+          .addFormDataPart("Recipient", encryptRecipient)
+          .addFormDataPart("EmailMessage", encryptMessage)
+          .addFormDataPart("EmailSubject", encryptSubject)
+          .addFormDataPart("ClientId", clientId)
+          .addFormDataPart("Sender", encryptSender)
+          .type(mediaType)
+          .build();
+        Request request = new Request.Builder()
+          .url(location)
+          .addHeader("Authorization", bearerToken)
+          .addHeader("Content-Type", body.contentType().toString())
+          .method("POST", body)
+          .build();
+        try {
+            Response response = client.newCall(request).execute();
+            return response.toString();
+        } catch (IOException ex) {
+            Logger.getLogger(Mailers.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return "";
+    }
 }

@@ -13,7 +13,9 @@ import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.RoleModel;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.models.WalletModel;
+import com.transgate.api.util.Mailers;
 import com.transgate.api.util.Randomizer;
+import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import static java.lang.Integer.parseInt;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -46,6 +48,7 @@ public class UsersService implements UsersInterface {
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
+    Mailers mailers = new Mailers();
     
     private int GetUserRole(String username, String session_token) {
         try {
@@ -57,6 +60,23 @@ public class UsersService implements UsersInterface {
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return -100;
+        }
+    }
+    
+    private String GetUserSecret(String username, String session_token) {
+        try {
+            String secret;
+
+            String SQL = "SELECT a.two_fa_secret "
+                    + "FROM sparkpayweb_db.tbl_users a "
+                    + "LEFT JOIN tbl_user_details b "
+                    + "ON b.email_address = a.username "
+                    + "WHERE a.username = ? AND b.deleted = 0 AND b.session_token = ?";
+            secret = jdbcTemplate.queryForObject(SQL, new Object[]{username, session_token}, String.class);
+            return secret;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return "";
         }
     }
     
@@ -123,34 +143,19 @@ public class UsersService implements UsersInterface {
     }
             
     @Override
-    public ResponseEntity Login(String username, String password) {
+    public ResponseEntity Login2FA(String _sessiontoken, String username, String password) {
         LoginResponse response = new LoginResponse();
         try {
             String SQL;
-            SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
-            int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
-            if (attemptsLeft == 0) {
-                SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
-                jdbcTemplate.update(SQL, new Object[]{username});
-                response.setCode(404);
-                response.setStatus("failed");
-                response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
-                return responseManager.ResponseOk(response);
-            }
-            SQL = "SELECT a.password from sparkpayweb_db.tbl_users a "
-                    + "LEFT JOIN tbl_user_details b "
-                    + "ON a.username = b.email_address "
-                    + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
-            String security = jdbcTemplate.queryForObject(SQL, new Object[]{username}, String.class);
-            boolean comparePassword = BCrypt.checkpw(password, security);
-            if (comparePassword == true) {
+            String secret = GetUserSecret(username, _sessiontoken);
+//            String code = randomizer.GetTOTPCode(secret);
+
+            if (randomizer.AuthorizeGoogleAuthenticatorCode(secret, Integer.parseInt(password))) {
+                response.setTwofaenabled(1);
+                response.setTwofasecretkey(secret);
                 String sessiontoken = randomizer.GenerateToken(100);
                 SQL = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
                 jdbcTemplate.update(SQL, new Object[]{sessiontoken, username});
-//                String token = randomizer.GenerateToken();
-//                SQL = "INSERT into tbl_user_token(username, token, date_created) VALUES(?, ?, now())";
-//                jdbcTemplate.update(SQL, new Object[]{username, token});
-//                response.setToken(token);
                 SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.session_token, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name "
                         + "from tbl_user_details a "
                         + "LEFT JOIN tbl_role b "
@@ -310,6 +315,227 @@ public class UsersService implements UsersInterface {
                 jdbcTemplate.update(SQL, new Object[]{username});
                 response.setCode(404);
                 response.setStatus("failed");
+                response.setMessage("Invalid 2FA");
+                return responseManager.ResponseOk(response);
+            }
+        } catch (DataAccessException ex) {
+            System.out.println(ex);
+            if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
+                response.setCode(400);
+                response.setStatus("failed");
+                response.setMessage("Invalid username or password");
+                return responseManager.ResponseOk(response);
+            }
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseUnathorized();
+        }
+    }
+    
+    @Override
+    public ResponseEntity Login(String username, String password) {
+        LoginResponse response = new LoginResponse();
+        try {
+            String SQL;
+            SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
+            int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
+            if (attemptsLeft == 0) {
+                SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
+                jdbcTemplate.update(SQL, new Object[]{username});
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
+                return responseManager.ResponseOk(response);
+            }
+            SQL = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret from sparkpayweb_db.tbl_users a "
+                    + "LEFT JOIN tbl_user_details b "
+                    + "ON a.username = b.email_address "
+                    + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
+//            String security = jdbcTemplate.queryForObject(SQL, new Object[]{username}, String.class);
+            String security = "", two_fa_secret = "";
+            int two_fa_enabled = 0;
+            List<Map<String, Object>> users = jdbcTemplate.queryForList(SQL, new Object[]{username});
+            if (users.size() > 0) {
+                security = (String) users.get(0).get("password");
+                two_fa_secret = (String) users.get(0).get("two_fa_secret");
+                two_fa_enabled = (int) users.get(0).get("two_fa_enabled");
+                response.setTwofaenabled(two_fa_enabled);
+//                response.setTwofasecretkey(two_fa_secret);
+            }
+            boolean comparePassword = BCrypt.checkpw(password, security);
+            String sessiontoken = randomizer.GenerateToken(100);
+            response.setSession_token(sessiontoken);
+            response.setUsername(username);
+            if (comparePassword == true) {
+                SQL = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
+                jdbcTemplate.update(SQL, new Object[]{sessiontoken, username});
+                if (two_fa_enabled == 1) {
+                    response.setCode(200);
+                    response.setStatus("success");
+                    response.setMessage("Login successful");
+                    return responseManager.ResponseOk(response);
+                }
+//                String token = randomizer.GenerateToken();
+//                SQL = "INSERT into tbl_user_token(username, token, date_created) VALUES(?, ?, now())";
+//                jdbcTemplate.update(SQL, new Object[]{username, token});
+//                response.setToken(token);
+                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.session_token, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name "
+                        + "from tbl_user_details a "
+                        + "LEFT JOIN tbl_role b "
+                        + "ON a.role = b.id "
+                        + "LEFT JOIN tbl_financial_institution_contacts c "
+                        + "ON a.email_address = c.email_address "
+                        + "LEFT JOIN tbl_financial_institutions d "
+                        + "ON c.financial_institution_code = d.code "
+                        + "WHERE a.email_address = ? || a.username = ? AND a.deleted = 0";
+                
+                List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{username, username}, new UserMapper());
+                response.setCode(200);
+                response.setStatus("success");
+                response.setMessage("Login successful");
+                int userRoleid;
+                if (details.size() > 0) {
+                    userRoleid = details.get(0).getRoleid();
+                    response.setId(details.get(0).getId());
+                    response.setUsername(details.get(0).getUsername());
+                    response.setEmail_address(details.get(0).getEmail_address());
+                    response.setFirstname(details.get(0).getFirstname());
+                    response.setSurname(details.get(0).getSurname());
+                    response.setPhone_number(details.get(0).getPhone_number());
+                    response.setRoleid(userRoleid);
+                    response.setRole(details.get(0).getRole());
+                    response.setDate_created(details.get(0).getDate_created());
+                    response.setFinancial_institution_code(details.get(0).getInstitution());
+                    response.setFinancial_institution_name(details.get(0).getInstitutionName());
+                    response.setLast_login(details.get(0).getLast_login());
+                    response.setDate_updated(details.get(0).getDate_updated());
+                }
+                else {
+                    userRoleid = 4;
+                    response.setId(parseInt(randomizer.GenerateReference(5, "1234567890")));
+                    response.setUsername(username);
+                    response.setEmail_address(username);
+                    response.setFirstname("");
+                    response.setSurname("");
+                    response.setPhone_number("");
+                    response.setRoleid(4);
+                    response.setRole("Third Party Vendor");
+                    response.setDate_created((new Date()).toString());
+                    response.setDate_updated(null);
+                }
+                
+                if (userRoleid == 5) {
+                    SQL = "SELECT a.id, a.institution_id, b.acquirer_id, b.institution_name "
+                            + "FROM tbl_map_card_users_institution a "
+                            + "LEFT JOIN sparkpayweb_db.tbl_financial_institutions b "
+                            + "ON a.institution_id = b.bank_code "
+                            + "WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
+                    if (rows.size() > 0) {
+                        response.setFinancial_institution_code((String) rows.get(0).get("acquirer_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
+                    }
+                }
+                
+                if (userRoleid == 6) {
+                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
+                            + "FROM tbl_map_card_users_institution a "
+                            + "WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
+                    if (rows.size() > 0) {
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
+                    }
+                }
+                
+                if (userRoleid == 7) {
+                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
+                            + "FROM tbl_map_card_users_institution a "
+                            + "WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
+                    if (rows.size() > 0) {
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
+                    }
+                }
+                
+                if (userRoleid == 8) {
+                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
+                            + "FROM tbl_map_card_users_institution a "
+                            + "WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
+                    if (rows.size() > 0) {
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
+                    }
+                }
+                
+                List<MenuModel> menu;
+                if (userRoleid < 5){
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 1 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
+                            + "ORDER BY a.id ASC";
+                    menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
+
+                    if (menu.size() > 0) {
+                        response.setTransgateMenu(menu);
+                    }
+                    else {
+                        List<MenuModel> eM = new ArrayList<>();
+                        response.setTransgateMenu(eM);
+                    }
+                }
+                else if (userRoleid == 8) {
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
+                            + "ORDER BY a.id ASC";
+                    menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
+
+                    if (menu.size() > 0) {
+                        response.setTransgateMenu(menu);
+                    }
+                    else {
+                        List<MenuModel> eM = new ArrayList<>();
+                        response.setTransgateMenu(eM);
+                    }
+                }
+                else
+                    response.setTransgateMenu(new ArrayList<>());
+                if (userRoleid < 4) 
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 2 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
+                            + "ORDER BY a.id ASC";
+                else
+                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM `tbl_menus` a "
+                            + "LEFT JOIN `tbl_menus` b "
+                            + "ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
+                            + "ORDER BY a.id ASC";
+                menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
+                
+                if (menu.size() > 0) {
+                    response.setSparkpayMenu(menu);
+                }
+                else {
+                    List<MenuModel> eM = new ArrayList<>();
+                    response.setSparkpayMenu(eM);
+                }
+                return responseManager.ResponseOk(response);
+            }
+            else {
+                SQL = "UPDATE tbl_user_details SET attempts_left = attempts_left - 1 WHERE email_address = ?";
+                jdbcTemplate.update(SQL, new Object[]{username});
+                response.setCode(404);
+                response.setStatus("failed");
                 response.setMessage("Invalid username or password");
                 return responseManager.ResponseOk(response);
             }
@@ -325,7 +551,45 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseUnathorized();
         }
     }
-
+    
+    @Override
+    public ResponseEntity SetUp2FA(String sessiontoken, String username, int enable) {
+        NetworkResponse response = new NetworkResponse();
+        try {
+            String SQL;
+            int userrole = GetUserRole(username, sessiontoken);
+            if (userrole > 0) {
+                String secret = "";
+                GoogleAuthenticatorKey key = randomizer.GenerateGoogleAuthenticatorSecretKey();
+                String qrCodeUri = "";
+                response.setMessage("2FA disbaled successfully");
+                if (enable == 1) {
+//                    secret = randomizer.GenerateSecretKey();
+                    secret = key.getKey();
+//                    qrCodeUri = randomizer.GetGoogleAuthenticatorBarCode(secret, username, "Sparkpay");
+                    qrCodeUri = randomizer.GetGoogleAuthenticatorQRCode("Sparkpay", username, key);
+                    response.setMessage("2FA enabled successfully");
+                }
+                SQL = "UPDATE sparkpayweb_db.tbl_users SET two_fa_enabled = ?, two_fa_secret = ? "
+                        + "WHERE username = ?";
+                int ret = jdbcTemplate.update(SQL, new Object[]{enable, secret, username});
+                if (ret > 0) {
+                    response.setStatus("success");
+                    String meta = "{\"qrCodeUri\": " + "\"" + qrCodeUri + "\"" +"}";
+                    response.setMeta(meta);
+                } else {
+                    response.setStatus("failed");
+                    response.setMessage("2FA setup failed");
+                }
+            }
+            response.setCode(200);
+            return responseManager.ResponseOk(response);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseUnathorized();
+        }
+    }
+    
     @Override
     public ResponseEntity ResetPassword(String code, String password, String token) {
         LoginResponse response = new LoginResponse();

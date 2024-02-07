@@ -70,6 +70,7 @@ public interface TransactionsInterface {
             String dispute_status,
             String date_logged,
             String date_resolved,
+            String timeline_date,
             int page,
             int limit
         );

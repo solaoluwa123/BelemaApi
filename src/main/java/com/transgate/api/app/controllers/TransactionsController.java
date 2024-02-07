@@ -393,6 +393,7 @@ public class TransactionsController {
             @RequestParam("beneficiary_bank") Optional<String> beneficiary_bank,
             @RequestParam("date_logged_range") Optional<String> date_logged_range,
             @RequestParam("date_resolved_range") Optional<String> date_resolved_range,
+            @RequestParam("timeline_date_range") Optional<String> timeline_date_range,
             @RequestParam("dispute_status") Optional<String> dispute_status,
             @RequestParam("page") int page,
             @RequestParam("limit") int limit
@@ -408,6 +409,7 @@ public class TransactionsController {
             dispute_status.orElse(""),
             date_logged_range.orElse(""),
             date_resolved_range.orElse(""),
+            timeline_date_range.orElse(""),
             page,
             limit
         );

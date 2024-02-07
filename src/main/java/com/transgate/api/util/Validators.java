@@ -50,6 +50,8 @@ public class Validators {
     
     public final boolean ValidateJSONWebToken(String token, String email) {
         try {
+            System.out.println("token: " + token);
+            System.out.println("email: " + email);
             return Jwts.parserBuilder().setSigningKey(hmacKey).build().parseClaimsJws(token).getBody().getSubject().equals(email);
         } catch (JwtException e) {
             System.out.println("JwtException: " + e);

@@ -109,6 +109,15 @@ public class GenericController {
         return GenericInterface.GetSettlementSummary(start, end);
     }
     
+    @RequestMapping(value = "/cards/settlementsummary", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardsSettlementSummary(@RequestHeader(value = "Authorization") String header, 
+            @RequestParam("start") String start, @RequestParam("end") String end) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardsSettlementSummary(start, end);
+    }
+    
     @RequestMapping(value = "/settlements/institution/{institution}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetSettlements(@RequestHeader(value = "Authorization") String header, 
             @RequestParam("start") String start, 

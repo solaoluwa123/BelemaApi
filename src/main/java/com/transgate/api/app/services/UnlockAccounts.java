@@ -51,8 +51,21 @@ public class UnlockAccounts implements UnlockAccountsInterface {
     @Override
     public void AutoPassDisputesForSettlement() {
         try {
-            String SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = 'Auto Resolved', status = 0, resolved = 0, date_modified = now() WHERE timeline_date <= now() AND status = -1 AND resolved = 0 AND type != 'habari'";
-            jdbcTemplate.update(SQL);
+            List<Map<String, Object>> disputes;
+            String SQL = "SELECT * FROM sparkpayweb_db.tbl_disputes WHERE timeline_date <= now() AND status = -1 AND resolved = 0 AND type != 'habari'";
+            disputes = jdbcTemplate.queryForList(SQL);
+            if (disputes.size() > 0) {
+                for (int i = 0; i < disputes.size(); i++) {
+                    SQL = "SELECT * FROM sparkpay.merchants WHERE merchant_id = ?";
+                    String merchant_id = (String) disputes.get(i).get("merchant_id");
+                    int dispute_id = (int) disputes.get(i).get("id");
+                    List<Map<String, Object>> merchants = jdbcTemplate.queryForList(SQL, new Object[]{merchant_id});
+                    if (merchants.size() > 0) {
+                        SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = 'Auto Resolved', status = 0, resolved = 0, date_modified = now() WHERE id = ?";
+                        jdbcTemplate.update(SQL, new Object[]{dispute_id});
+                    }
+                }
+            }
         } catch (DataAccessException e) {
             System.out.println("auto pass disputes for settlements exception " + e.getMessage());
         }
@@ -157,7 +170,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                         + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                         + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                         + "FROM sparkpayweb_db.tbl_disputes a "
-                        + "WHERE a.merchant_id = ? AND a.status = 0 AND a.resolved = 0 AND a.timeline_date >= ? AND a.timeline_date < ?"
+                        + "WHERE a.merchant_id = ? AND a.status = 0 AND a.resolved = 0 AND a.date_modified >= ? AND a.date_modified < ? AND a.type = 'institution'"
                         + " ORDER BY a.date_created DESC";
 
                     transactions = jdbcTemplate.queryForList(SQL, new Object[]{merchantId, startDate, endDate});
@@ -165,13 +178,13 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                     SQL = "SELECT "
                             + "SUM(a.amount) as totalValue "
                             + "FROM sparkpayweb_db.tbl_disputes a "
-                            + "WHERE a.merchant_id = ? AND a.status = 0 AND a.resolved = 0 AND a.timeline_date >= ? AND a.timeline_date < ?";
+                            + "WHERE a.merchant_id = ? AND a.status = 0 AND a.resolved = 0 AND a.date_modified >= ? AND a.date_modified < ? AND a.type = 'institution'";
 
                     agg = jdbcTemplate.queryForList(SQL, new Object[]{merchantId, startDate, endDate});
                     Map<String, Object> row = agg.get(0);
                     Double tValue = (Double) row.get("totalValue");
                     totalValue = tValue != null ? tValue/100 : 0;
-                    String[] headers = {"", "Acct Number", "Amount", "Debit/Credit", "Remark"};
+                    String[] headers = {"", "Acct Number", "", "", "", "", "Amount", "Debit/Credit", "Remark"};
                     List<String[]> data = new ArrayList<>();
                     String merchantAccount = (String) merchant.get("account_account_number");
                     String merchantName = (String) merchant.get("merchant_name");
@@ -209,7 +222,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                             String remark = "RVSL_POS TRANSFER"+formatedDate+"_"+system_trace_number+"_"+retrieval_ref_number;
                             data.add(new String[]{
                                 i == 0 ? "Card holder's Accts" : "",
-                                validators.FormatCardHolderAcctNum(accountNumber),
+                                validators.FormatCardHolderAcctNum(accountNumber).replace('/', ','),
                                 tAmount.toString(),
                                 "2",
                                 remark
@@ -217,9 +230,9 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                         }
 
                         Double tnxTotalMSCHalf = (tnxTotalMSC / 2);
-                        data.add(0, new String[]{"Merchant Acct", merchantAccount, merchantDr.toString(), "1", "Refund for accepted Chargeback _"+startDate+" refunds"});
-                        data.add(1, new String[]{"Bank Income Acct", bankIncomeAccountNumber, tnxTotalMSCHalf.toString(), "1", "Reversal of fee earned for accepted Chargeback -"+merchantName.trim()+" terminals"});
-                        data.add(2, new String[]{"Habaripay Income Account", habaripayAccountNumber, tnxTotalMSCHalf.toString(), "1", "Reversal of fee earned for accepted Chargeback -"+merchantName.trim()+" terminals"});
+                        data.add(0, new String[]{"Merchant Acct", merchantAccount.replace('/', ','), merchantDr.toString(), "1", "Refund for accepted Chargeback _"+startDate+" refunds"});
+                        data.add(1, new String[]{"Bank Income Acct", bankIncomeAccountNumber.replace('/', ','), tnxTotalMSCHalf.toString(), "1", "Reversal of fee earned for accepted Chargeback -"+merchantName.trim()+" terminals"});
+                        data.add(2, new String[]{"Habaripay Income Account", habaripayAccountNumber.replace('/', ','), tnxTotalMSCHalf.toString(), "1", "Reversal of fee earned for accepted Chargeback -"+merchantName.trim()+" terminals"});
                         String filePath = cSVHelper.WriteFile(fileName,
                                 headers,
                                 data

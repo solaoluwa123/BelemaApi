@@ -22,6 +22,7 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.time.LocalTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -373,7 +374,27 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.destination_institution_code = c.code " + whereQuery
                     + " ORDER BY a.id DESC";
             }
-            
+            LocalTime currentTime = LocalTime.now();
+            int hour = currentTime.getHour();
+            if (isCurrent && transactions.size() < 1 && hour >= 12) {
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code " + whereQuery
+                    + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
+                transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code " + whereQuery
+                    + " ORDER BY a.id DESC";
+            }
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
             BigDecimal tValue = (BigDecimal) row.get("totalValue");
@@ -1196,15 +1217,18 @@ public class TransactionsService implements TransactionsInterface {
             String dispute_status,
             String date_logged,
             String date_resolved,
+            String timeline_date,
             int page,
             int limit
         ) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String start_date_logged = !date_logged.equals("") ? date_logged.substring(0, 10) : "";
-            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, 21) : "";
+            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, date_logged.length()) : "";
             String start_date_resolved = !date_resolved.equals("") ? date_resolved.substring(0, 10) : "";
-            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, 21) : "";
+            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, date_resolved.length()) : "";
+            String start_timeline_date = !timeline_date.equals("") ? timeline_date.substring(0, 10) : "";
+            String end_timeline_date = !timeline_date.equals("") ? timeline_date.substring(11, timeline_date.length()) : "";
             String SQL;
             Double totalValue;
             List<Map<String, Object>> agg;
@@ -1219,6 +1243,8 @@ public class TransactionsService implements TransactionsInterface {
                     || !end_date_logged.equals("")
                     || !start_date_resolved.equals("")
                     || !end_date_resolved.equals("")
+                    || !start_timeline_date.equals("")
+                    || !end_timeline_date.equals("")
                     ? "WHERE" : "";
             
             if (!sessionid.equals("")) {
@@ -1262,7 +1288,11 @@ public class TransactionsService implements TransactionsInterface {
             }
             if (!start_date_resolved.equals("") && !end_date_resolved.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.timeline_date BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+                whereQuery+=" a.date_modified BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+            }
+            if (!start_timeline_date.equals("") && !end_timeline_date.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.timeline_date BETWEEN '" + start_timeline_date + "' AND '" + end_timeline_date + "'";
             }
             SQL = "SELECT a.id, a.transactionSessionid as session_id, a.transactionid, a.amount, a.originator_account_name, a.beneficiary_account_name, a.transaction_date_time, a.ownerInstitutionName as srcInstitutionName, a.destInstitutionName, a.loggedBy, a.resolvedBy, a.ownerInstitution, a.destInstitution, a.type, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_reject_uri, b.financial_institution_code "
                                 + "FROM tbl_disputes a "

@@ -14,6 +14,10 @@ import org.springframework.http.ResponseEntity;
 public interface UsersInterface {
     public ResponseEntity Login(String username, String password);
     
+    public ResponseEntity SetUp2FA(String sessiontoken, String username, int enable);
+    
+    public ResponseEntity Login2FA(String sessiontoken, String username, String password);
+    
     public ResponseEntity GetUsers(boolean systemUsers);
     
     public ResponseEntity GetUserById(String sessiontoken, int userid);

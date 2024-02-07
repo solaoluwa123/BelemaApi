@@ -18,6 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import com.transgate.api.interfaces.WalletsInterface;
 import com.transgate.api.util.Validators;
 import java.math.BigDecimal;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  *
@@ -67,11 +68,18 @@ public class WalletsController {
     }
     
     @RequestMapping(value = "/wallet/activity/{walletnumber}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetWalletActivity(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable ("walletnumber") String walletnumber) {
+    public ResponseEntity GetWalletActivity(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("walletnumber") String walletnumber,
+            @RequestParam("startDate") String start, 
+            @RequestParam("endDate") String end,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit
+    ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return walletInterface.GetWalletActivity(walletnumber);
+        return walletInterface.GetWalletActivity(walletnumber, start, end, page, limit);
     }
     
     @RequestMapping(value = "/wallets/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

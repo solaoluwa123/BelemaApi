@@ -484,14 +484,28 @@ public class WalletsService implements WalletsInterface {
     }
     
     @Override
-    public ResponseEntity GetWalletActivity(String walletnumber) {
+    public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try{
+//            String meta;
+//            int offset = page > 1 ? (page - 1) * limit : 0;
             String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
                     + "WHERE walletnumber = ? AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
+                    + "AND activity_date_time >= ? AND activity_date_time < ?"
                     + "ORDER BY id DESC";
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber});
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate});
+           
+//            SQL = "SELECT COUNT(a.id) as totalRecords "
+//                    + "FROM ajiswitch_db.tbl_wallet_activities "
+//                    + "WHERE walletnumber = ? AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
+//                    + "AND activity_date_time >= ? AND activity_date_time < ?";
+//            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate});
+//            Map<String, Object> row = agg.get(0);
+//            Long tRecords = (Long) row.get("totalRecords");
+//            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+//            meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             networkResponse.setCode(200);
+//            networkResponse.setMeta(meta);
             networkResponse.setStatus("success");
             networkResponse.setMessage("Wallet Activity");
             networkResponse.setData((ArrayList) rows);
