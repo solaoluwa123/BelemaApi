@@ -240,14 +240,14 @@ public class UnlockAccounts implements UnlockAccountsInterface {
 
                         String url = FRONTENDURL+"/accepteddisputereports/"+validators.RemoveSpecialCharacters(fileName)+".csv";;
                         String message = "Dear Team,<br/><br/>Please find attached Habaripay entries to be regularized in respective accounts/ledgers.<br/><br/>Thank you for your continuous support";
-                        mailers.SendMailWithHabariOkHttpClient(
-                                "Dispute Report for "+merchantName.trim(), 
-                                "no-reply@habaripay.com", 
-                                "amicheal@supersoft.com.ng", 
-                                message,
-                                fileName,
-                                filePath
-                        );
+//                        mailers.SendMailWithHabariOkHttpClient(
+//                                "Dispute Report for "+merchantName.trim(), 
+//                                "no-reply@habaripay.com", 
+//                                "amicheal@supersoft.com.ng", 
+//                                message,
+//                                fileName,
+//                                filePath
+//                        );
                         mailers.SendMailWithHabariOkHttpClient(
                                 "Dispute Report for "+merchantName.trim(), 
                                 "no-reply@habaripay.com", 
@@ -295,6 +295,56 @@ public class UnlockAccounts implements UnlockAccountsInterface {
             System.out.println("error>>>>" + ex.getMessage());
         } catch (ParseException ex) {
             Logger.getLogger(UnlockAccounts.class.getName()).log(Level.SEVERE, null, ex);
+        }
+    }
+    
+    @Override
+    public void SendDisputesReminders() {
+        try {
+            String SQL;
+            int currentYear = Calendar.getInstance().get(Calendar.YEAR);
+            int currentMonth = Calendar.getInstance().get(Calendar.MONTH) + 1;
+            String paddedMonth = currentMonth < 10 ? "0" + currentMonth : ""+currentMonth;
+            int currentDay = Calendar.getInstance().get(Calendar.DAY_OF_MONTH);
+            String paddedCurrentDay = currentDay < 10 ? "0"+currentDay : "" + currentDay;
+            String todayDate = currentYear+"-"+paddedMonth+"-"+paddedCurrentDay+"T00:00:00";
+            if (!isWeekend(todayDate)) {
+                final List<Map<String, Object>> disputes;
+                SQL = "SELECT COUNT(id) as count, merchant_id FROM sparkpayweb_db.tbl_disputes WHERE status = -1 AND resolved = 0 AND type = 'institution' GROUP BY merchant_id";
+                disputes = jdbcTemplate.queryForList(SQL);
+                if (disputes.size() > 0) {
+                   for (final Map<String, Object> dispute : disputes) {
+                        SQL = "SELECT ptsp_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
+                        String ptspid = jdbcTemplate.queryForObject(SQL, new Object[]{dispute.get("merchant_id")}, String.class);
+                        SQL = "SELECT user_email FROM tbl_map_card_users_institution WHERE institution_id = ? LIMIT 3";
+
+                        List<Map<String, Object>> ptspUsers = jdbcTemplate.queryForList(SQL, new Object[]{ptspid});
+                        if (ptspUsers.size() > 0) {
+                            try {
+                                ptspUsers.forEach(row -> {
+                                    long totalDisputes = (long)dispute.get("count");
+                                    String partMessage = totalDisputes == 1 ? " is a pending dispute for your team to treat on Sparkpay " : " are a total of " + totalDisputes + " disputes left for your team to treat on Sparkpay ";
+                                    String message = "<html><body>Dear Team, <br/><br/>Please be informed that there "+partMessage+". Please login to sparkpay to take action before they are auto-accepted "
+                                            + "<br/><br/>Sparkpay,"
+                                            + "<br/>Cheers</body><html>";
+                                    mailers.SendMailWithHabariOkHttpClient(
+                                            "Dispute Action Reminder",
+                                            "no-reply@habaripay.com",
+                                            (String) row.get("user_email"),
+                                            message
+                                    );
+                                });
+                            } catch(Exception e) {
+                                System.out.println("mailer error: " + e.toString());
+                            }
+                        }
+                   } 
+                }
+                
+            }
+            
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
         }
     }
 }

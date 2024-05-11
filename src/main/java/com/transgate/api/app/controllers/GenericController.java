@@ -189,4 +189,22 @@ public class GenericController {
         return GenericInterface.GetCardsSettlementsByPTSP(ptsp, start, end);
     }
     
+    @RequestMapping(value = "/cardpayments/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardPayments(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @RequestParam("response_code") String response_code, 
+            @RequestParam("transaction_id") String transaction_id, 
+            @RequestParam("merchant_name") String merchant_name
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardPayments(institutioncode, startDate, endDate, page, limit, response_code, transaction_id, merchant_name.replaceAll("space", " "));
+    }
+    
 }

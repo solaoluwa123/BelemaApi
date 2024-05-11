@@ -5,10 +5,11 @@
  */
 package com.transgate.api.util;
 
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.TextStyle;
+import java.time.temporal.ChronoUnit;
 import java.util.Calendar;
 import java.util.Locale;
 
@@ -62,5 +63,28 @@ public class DateUtil {
             timeLineDate++;
         
         return timeLineDate;
+    }
+    
+    public Boolean canSendDisputeReminder() {
+        Calendar calendar = Calendar.getInstance();
+        int dayOfWeek = calendar.get(Calendar.DAY_OF_WEEK);
+        if (dayOfWeek >= 1 && dayOfWeek < 7 && !isDayHoliday(-1))
+            return true;
+        else 
+            return false;
+    }
+    
+    public int daysAgo(String dateString) {
+        // Parse the input date string to LocalDateTime
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        LocalDateTime givenDate = LocalDateTime.parse(dateString, formatter);
+
+        // Get the current date and time
+        LocalDateTime currentDate = LocalDateTime.now();
+
+        // Calculate the difference in days
+        long daysDifference = ChronoUnit.DAYS.between(givenDate.toLocalDate(), currentDate.toLocalDate());
+        
+        return (int) daysDifference;
     }
 }

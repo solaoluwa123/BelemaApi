@@ -421,6 +421,117 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     @Override
+    public ResponseEntity GetTimeoutRetries(String startDate, String endDate, int page, int limit) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<FullTransactionModel> transactions;
+            SQL = "SELECT a.*, "
+                + "b.name as destInstitutionName "
+                + "FROM ajiswitch_db.tbl_timeout_retry a "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                + "ON a.destination_institution_code = b.code "
+                + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
+
+            SQL = "SELECT COUNT(a.id) as totalRecords "
+                + "FROM ajiswitch_db.tbl_timeout_retry a "
+                + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? ";
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            Map<String, Object> row = agg.get(0);
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Transactions Timeout Retries");
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity SearchTimeoutRetries(String session_id,
+            String response_at_reprocess,
+            String destination_institution_code,
+            String startDate,
+            String endDate, 
+            int page, 
+            int limit,
+            String isProcessed
+    ) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String whereQuery = "";
+            
+            if (!session_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.session_id = '" + session_id + "'";
+            }
+            if (!response_at_reprocess.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                if (response_at_reprocess.equals("111")) whereQuery+=" a.response_code != 00";
+                else whereQuery+=" a.response_at_reprocess = " + response_at_reprocess;
+            }
+            if (!destination_institution_code.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.destination_institution_code = " + destination_institution_code;
+            }
+            if (!destination_institution_code.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.destination_institution_code = " + destination_institution_code;
+            }
+            if (!isProcessed.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.isProcessed = " + isProcessed;
+            }
+            if (!startDate.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.transaction_date_time >= '" + startDate + "'";
+            }
+            if (!endDate.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.transaction_date_time < '" + endDate + "'";
+            }
+            String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<FullTransactionModel> transactions;
+            SQL = "SELECT a.*, "
+                + "b.name as destInstitutionName "
+                + "FROM ajiswitch_db.tbl_timeout_retry a "
+                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                + "ON a.destination_institution_code = b.code " + whereQuery
+                + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+
+            SQL = "SELECT COUNT(a.id) as totalRecords "
+                + "FROM ajiswitch_db.tbl_timeout_retry a " + whereQuery;
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
+            Map<String, Object> row = agg.get(0);
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            networkResponse.setMeta(meta);
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Searched timeout retries");
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }@Override
     public ResponseEntity GetFTTimeAverage(String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {    
@@ -564,9 +675,10 @@ public class TransactionsService implements TransactionsInterface {
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
             SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM "+table+" a "
-                    + "WHERE a.transaction_date_time BETWEEN ? AND ?"
+                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.response_code "
-                    + "LIMIT 6";
+                    + "ORDER BY volume DESC "
+                    + "LIMIT 5";
             
             List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             
@@ -590,14 +702,93 @@ public class TransactionsService implements TransactionsInterface {
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
             SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM "+table+" a "
-                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
+                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
                     + "GROUP BY a.response_code "
-                    + "LIMIT 6";
+                    + "ORDER BY volume DESC "
+                    + "LIMIT 5";
             
             List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
             
             networkResponse.setCode(200);
             networkResponse.setMessage("Top 6 Response Codes Summary");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetFailedTnxCountByInstitutions(String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
+                    + "FROM "+table+" a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ?"
+                    + "GROUP BY a.source_institution_code "
+                    + "LIMIT 20";
+            
+            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Top failing institutions");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetAllResponseCodesTNXInstitution(String institutioncode, String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
+                    + "FROM "+table+" a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
+                    + "GROUP BY a.response_code";
+            
+            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("All Response Codes Summary");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetAllResponseCodesTNXInstitution(String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {    
+            String SQL;
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
+                    + "FROM "+table+" a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + "GROUP BY a.response_code";
+            
+            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            
+            networkResponse.setCode(200);
+            networkResponse.setMessage("All Response Codes Summary");
             TNXModel tnxModel = new TNXModel();
             tnxModel.setSummary((ArrayList) summary);
             networkResponse.setTnxModel(tnxModel);
@@ -752,38 +943,78 @@ public class TransactionsService implements TransactionsInterface {
                 endDate = endDate.replace("T", " ");
             String SQL, SQL_;
             if (inward) {
-                SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.destination_institution_code = b.code "
-                    + "WHERE a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ? "
-                    + "GROUP BY a.destination_institution_code "
-                    + "ORDER BY a.destination_institution_code";
+                SQL = "SELECT b.name, b.shortName, b.color, b.code, COALESCE(a.volume, 0) AS volume "
+                        + "FROM transgateweb_db.tbl_financial_institutions b "
+                        + "LEFT JOIN "
+                        + "(SELECT destination_institution_code, COUNT(id) AS volume "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfers "
+                        + "WHERE response_code = '00' AND transaction_date_time BETWEEN ? AND ? "
+                        + "GROUP BY destination_institution_code) a "
+                        + "ON b.code = a.destination_institution_code "
+                        + "ORDER BY b.name ASC";
                 
-                SQL_ = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.destination_institution_code = b.code "
-                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
-                    + "GROUP BY a.destination_institution_code "
-                    + "ORDER BY a.destination_institution_code";
+//                SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+//                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+//                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+//                    + "ON a.destination_institution_code = b.code "
+//                    + "WHERE a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ? "
+//                    + "GROUP BY a.destination_institution_code "
+//                    + "ORDER BY a.destination_institution_code";
+                
+                SQL_ = "SELECT b.name, b.shortName, b.color, b.code, COALESCE(a.volume, 0) AS volume "
+                        + "FROM transgateweb_db.tbl_financial_institutions b "
+                        + "LEFT JOIN "
+                        + "(SELECT destination_institution_code, COUNT(id) AS volume "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfers "
+                        + "WHERE transaction_date_time BETWEEN ? AND ? "
+                        + "GROUP BY destination_institution_code) a "
+                        + "ON b.code = a.destination_institution_code "
+                        + "ORDER BY b.name ASC";
+                
+//                SQL_ = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+//                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+//                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+//                    + "ON a.destination_institution_code = b.code "
+//                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+//                    + "GROUP BY a.destination_institution_code "
+//                    + "ORDER BY a.destination_institution_code";
             }
             else {
-                SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "WHERE a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ? "
-                    + "GROUP BY a.source_institution_code "
-                    + "ORDER BY a.source_institution_code";
+                SQL = "SELECT b.name, b.shortName, b.color, b.code, COALESCE(a.volume, 0) AS volume "
+                        + "FROM transgateweb_db.tbl_financial_institutions b "
+                        + "LEFT JOIN "
+                        + "(SELECT source_institution_code, COUNT(id) AS volume "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfers "
+                        + "WHERE response_code = '00' AND transaction_date_time BETWEEN ? AND ? "
+                        + "GROUP BY source_institution_code) a "
+                        + "ON b.code = a.source_institution_code "
+                        + "ORDER BY b.name ASC";
                 
-                SQL_ = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
-                    + "GROUP BY a.source_institution_code "
-                    + "ORDER BY a.source_institution_code";
+//                SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+//                    + "FROM transgateweb_db.tbl_financial_institutions b "
+//                    + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
+//                    + "ON a.source_institution_code = b.code "
+//                    + "WHERE a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ? "
+//                    + "GROUP BY a.source_institution_code "
+//                    + "ORDER BY a.source_institution_code";
+
+                SQL_ = "SELECT b.name, b.shortName, b.color, b.code, COALESCE(a.volume, 0) AS volume "
+                        + "FROM transgateweb_db.tbl_financial_institutions b "
+                        + "LEFT JOIN "
+                        + "(SELECT source_institution_code, COUNT(id) AS volume "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfers "
+                        + "WHERE transaction_date_time BETWEEN ? AND ? "
+                        + "GROUP BY source_institution_code) a "
+                        + "ON b.code = a.source_institution_code "
+                        + "ORDER BY b.name ASC";
+                
+//                SQL_ = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
+//                    + "FROM transgateweb_db.tbl_financial_institutions b "
+//                    + "LEFT JOIN ajiswitch_db.tbl_creditfundtransfers a "
+//                    + "ON a.source_institution_code = b.code "
+//                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+//                    + "GROUP BY a.source_institution_code "
+//                    + "ORDER BY a.source_institution_code";
             }
 //            SQL = "SELECT COUNT(a.id) as total FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.response_code = '00'";
 //            int totalSuccessFul = jdbcTemplate.queryForObject(SQL, int.class);
@@ -816,26 +1047,26 @@ public class TransactionsService implements TransactionsInterface {
             String SQL, SQL_;
             if (inward) {
                 SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.destination_institution_code = b.code "
                     + "WHERE a.response_code = '00' AND a.destination_institution_code = ? AND a.transaction_date_time BETWEEN ? AND ?";
                 
                 SQL_ = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.destination_institution_code = b.code "
                     + "WHERE a.destination_institution_code = ? AND a.transaction_date_time BETWEEN ? AND ?";
             }
             else {
                 SQL = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.source_institution_code = b.code "
                     + "WHERE a.response_code = '00' AND a.source_institution_code = ? AND a.transaction_date_time BETWEEN ? AND ?";
                 
                 SQL_ = "SELECT COUNT(a.id) as volume, b.name, b.shortName, b.color, b.code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                     + "ON a.source_institution_code = b.code "
                     + "WHERE a.source_institution_code = ? AND a.transaction_date_time BETWEEN ? AND ?";

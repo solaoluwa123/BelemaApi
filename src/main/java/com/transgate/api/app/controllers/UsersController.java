@@ -67,6 +67,12 @@ public class UsersController {
         return responseManager.ResponseAccepted();
     }
     
+    @RequestMapping(value = "/app/crons/senddisputesreminders", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity SendDisputesReminders() {
+        unlockAccountsInterface.SendDisputesReminders();
+        return responseManager.ResponseAccepted();
+    }
+    
     @RequestMapping(value = "/user/generate-token", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity SignUser(@RequestHeader(value = "auth") String header,
             @RequestBody LoginRequest login) {

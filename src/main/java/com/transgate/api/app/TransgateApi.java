@@ -71,4 +71,9 @@ public class TransgateApi //extends SpringBootServletInitializer
         executeGet("app/crons/sendaccepteddisputes");
     }
     
+    @Scheduled(cron = "0 0 8,12,16 * * *") //Run 3 times daily - 8am, 12pm and 4pm
+    public void disputesRemindersTaskHelper() {
+        executeGet("app/crons/senddisputesreminders");
+    }
+    
 }

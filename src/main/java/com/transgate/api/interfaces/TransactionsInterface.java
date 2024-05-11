@@ -32,7 +32,13 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetTop6ResponseCodesTNX(String startDate, String endDate, boolean isCurrent);
     
+    public ResponseEntity GetFailedTnxCountByInstitutions(String startDate, String endDate, boolean isCurrent);
+    
     public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent);
+    
+    public ResponseEntity GetAllResponseCodesTNXInstitution(String institutioncode, String startDate, String endDate, boolean isCurrent);
+    
+    public ResponseEntity GetAllResponseCodesTNXInstitution(String startDate, String endDate, boolean isCurrent);
     
     public ResponseEntity GetTransactionsVolumeByChannels(String startDate, String endDate, boolean isCurrent);
     
@@ -102,4 +108,15 @@ public interface TransactionsInterface {
             String userInstitutionCode);
     
     public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate);
+    
+    public ResponseEntity GetTimeoutRetries(String startDate, String endDate, int page, int limit);
+    
+    public ResponseEntity SearchTimeoutRetries(String session_id,
+            String response_at_reprocess,
+            String destination_institution_code,
+            String startDate,
+            String endDate, 
+            int page, 
+            int limit,
+            String isProcessed);
 }

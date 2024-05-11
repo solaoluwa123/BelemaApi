@@ -35,4 +35,5 @@ public interface GenericInterface {
     public ResponseEntity GetSmartDets(String startDate, String endDate);
     public ResponseEntity GetSettlementSummary(String startDate, String endDate);
     public ResponseEntity GetCardsSettlementSummary(String startDate, String endDate);
+    public ResponseEntity GetCardPayments(String institutionCode, String startDate, String endDate, int page, int limit, String response_code, String transaction_id, String merchant_name);
 }

@@ -487,25 +487,38 @@ public class WalletsService implements WalletsInterface {
     public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
         try{
+            int offset = page > 1 ? (page - 1) * limit : 0;
 //            String meta;
 //            int offset = page > 1 ? (page - 1) * limit : 0;
+            String debitActors = "('eseoghene.onoriode@habaripay@com','omoyosola.afolayan@habaripay.com','valerie.ejegi@habaripay.com')";
             String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
-                    + "WHERE walletnumber = ? AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
-                    + "AND activity_date_time >= ? AND activity_date_time < ?"
-                    + "ORDER BY id DESC";
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate});
+                    + "WHERE walletnumber = ? "
+                    + "AND activity_date_time >= ? AND activity_date_time < ? "
+                    + "AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
+                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+//            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
+//                    + "WHERE walletnumber = ? "
+//                    + "AND activity_date_time >= ? AND activity_date_time < ?"
+//                    + "ORDER BY id DESC LIMIT ? OFFSET ?";
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate, limit, offset});
            
-//            SQL = "SELECT COUNT(a.id) as totalRecords "
+            SQL = "SELECT COUNT(id) as totalRecords "
+                    + "FROM ajiswitch_db.tbl_wallet_activities "
+                    + "WHERE walletnumber = ? "
+                    + "AND activity_date_time >= ? AND activity_date_time < ? "
+                    + "AND credit_or_debit = 'cr' AND actor != 'SYSTEM' ";
+//            SQL = "SELECT COUNT(id) as totalRecords "
 //                    + "FROM ajiswitch_db.tbl_wallet_activities "
-//                    + "WHERE walletnumber = ? AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
+//                    + "WHERE walletnumber = ? "
 //                    + "AND activity_date_time >= ? AND activity_date_time < ?";
-//            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate});
-//            Map<String, Object> row = agg.get(0);
-//            Long tRecords = (Long) row.get("totalRecords");
-//            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate});
+            Map<String, Object> row = agg.get(0);
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
 //            meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            String meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             networkResponse.setCode(200);
-//            networkResponse.setMeta(meta);
+            networkResponse.setMeta(meta);
             networkResponse.setStatus("success");
             networkResponse.setMessage("Wallet Activity");
             networkResponse.setData((ArrayList) rows);

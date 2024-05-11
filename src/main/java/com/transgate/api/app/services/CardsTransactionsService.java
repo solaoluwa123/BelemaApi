@@ -782,25 +782,29 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 if (!sessionIdExist) {
                     List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan, false);
                     if (getTransaction.size() > 0) {
-                        found++;
-                        String SQL;
-                        int additionalDays = dateUtil.getDisputeTimeLineDate();
-                        String unique_log_code = terminalid + stan + rrn;
-                        String nuban = "";
-//                        String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
-//                                ? "" : 
-//                                restCall.getNuban(validators.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
-                        String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
-                        SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
-//                        SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?)";
-//                        int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban});
-                        if (userrole == 8) {
-                            SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
-                            jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
+                        String tnxDate = getTransaction.get(0).getNcs_date_time();
+                        int daysAgo = dateUtil.daysAgo(tnxDate);
+                        if (getTransaction.get(0).getResponse_code().equals("00") && (daysAgo <= 120 || userrole == 8)) {
+                            found++;
+                            String SQL;
+                            int additionalDays = dateUtil.getDisputeTimeLineDate();
+                            String unique_log_code = terminalid + stan + rrn;
+                            String nuban = "";
+    //                        String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
+    //                                ? "" : 
+    //                                restCall.getNuban(validators.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
+                            String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
+                            SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
+    //                        SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?)";
+    //                        int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban});
+                            if (userrole == 8) {
+                                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                                jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
+                            }
+                            if (retval > 0) 
+                                recorded++;
                         }
-                        if (retval > 0) 
-                            recorded++;
                     }
                 }
             }
@@ -924,8 +928,24 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             if (getTransaction.size() > 0) {
                 int userrole = GetUserRole(sessiontoken);
                 String SQL;
+                if (!getTransaction.get(0).getResponse_code().equals("00")) {
+                    NetworkResponse networkResponse = new NetworkResponse();
+                    networkResponse.setCode(200);
+                    networkResponse.setStatus("failed");
+                    networkResponse.setMessage("Only completely processed or approved transactions can be logged for dispute");
+                    return responseManager.ResponseOk(networkResponse);
+                }
                 int additionalDays = dateUtil.getDisputeTimeLineDate();
                 String nuban = "";
+                String tnxDate = getTransaction.get(0).getNcs_date_time();
+                int daysAgo = dateUtil.daysAgo(tnxDate);
+                if (daysAgo > 120 && userrole != 8) {
+                    NetworkResponse networkResponse = new NetworkResponse();
+                    networkResponse.setCode(200);
+                    networkResponse.setStatus("failed");
+                    networkResponse.setMessage("Transaction occured more than 120 days ago and cannot be logged");
+                    return responseManager.ResponseOk(networkResponse);
+                } 
 //                String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
 //                        ? "" : 
 //                        restCall.getNuban(validators.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));

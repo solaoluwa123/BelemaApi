@@ -5,12 +5,6 @@
  */
 package com.transgate.api.util;
 
-import com.squareup.okhttp.OkHttpClient;
-import com.squareup.okhttp.RequestBody;
-import com.squareup.okhttp.MultipartBuilder;
-import com.squareup.okhttp.Request;
-import com.squareup.okhttp.Response;
-import com.squareup.okhttp.MediaType;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
@@ -26,6 +20,12 @@ import java.util.logging.Logger;
 import javax.mail.*;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
+import okhttp3.MultipartBody;
 /**
  *
  * @author Makintola
@@ -167,14 +167,12 @@ public class Mailers {
         String encryptSubject = habariMailEncrypt.encryptText(subject);
         String encryptMessage = habariMailEncrypt.encryptText(message);
         String encryptAttachmentName = habariMailEncrypt.encryptText(attachmentName);
-//        String encryptAttachmentPath = habariMailEncrypt.encryptText(attachmentPath);
         String clientId = "9";
         
         OkHttpClient client = new OkHttpClient();
         
         MediaType mediaType = MediaType.parse("multipart/form-data");
-        RequestBody body = new MultipartBuilder()
-//        RequestBody body = new MultipartBuilder.Builder().setType(MultipartBody.FORM)
+        RequestBody body = new MultipartBody.Builder()
           .addFormDataPart("Recipient", encryptRecipient)
           .addFormDataPart("EmailMessage", encryptMessage)
           .addFormDataPart("EmailSubject", encryptSubject)
@@ -183,7 +181,7 @@ public class Mailers {
           .addFormDataPart("AttachmentName", encryptAttachmentName)
           .addFormDataPart("Attachment", attachmentPath, RequestBody.create(MediaType.parse("application/octet-stream"),
                 new File(attachmentPath)))
-          .type(mediaType)
+          .setType(MultipartBody.FORM)
           .build();
         Request request = new Request.Builder()
           .url(location)
@@ -207,20 +205,17 @@ public class Mailers {
         String encryptRecipient = habariMailEncrypt.encryptText(recipient);
         String encryptSubject = habariMailEncrypt.encryptText(subject);
         String encryptMessage = habariMailEncrypt.encryptText(message);
-//        String encryptAttachmentPath = habariMailEncrypt.encryptText(attachmentPath);
         String clientId = "9";
         
         OkHttpClient client = new OkHttpClient();
         
-        MediaType mediaType = MediaType.parse("multipart/form-data");
-        RequestBody body = new MultipartBuilder()
-//        RequestBody body = new MultipartBuilder.Builder().setType(MultipartBody.FORM)
+        RequestBody body =  new MultipartBody.Builder()
           .addFormDataPart("Recipient", encryptRecipient)
           .addFormDataPart("EmailMessage", encryptMessage)
           .addFormDataPart("EmailSubject", encryptSubject)
           .addFormDataPart("ClientId", clientId)
           .addFormDataPart("Sender", encryptSender)
-          .type(mediaType)
+          .setType(MultipartBody.FORM)
           .build();
         Request request = new Request.Builder()
           .url(location)
