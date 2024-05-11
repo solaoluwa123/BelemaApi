@@ -426,7 +426,7 @@ public class TransactionsService implements TransactionsInterface {
         try {
             String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
-            List<FullTransactionModel> transactions;
+            List<Map<String, Object>> transactions;
             SQL = "SELECT a.*, "
                 + "b.name as destInstitutionName "
                 + "FROM ajiswitch_db.tbl_timeout_retry a "
@@ -434,7 +434,7 @@ public class TransactionsService implements TransactionsInterface {
                 + "ON a.destination_institution_code = b.code "
                 + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
                 + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
-            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
+            transactions = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, limit, offset});
 
             SQL = "SELECT COUNT(a.id) as totalRecords "
                 + "FROM ajiswitch_db.tbl_timeout_retry a "
@@ -470,7 +470,7 @@ public class TransactionsService implements TransactionsInterface {
     ) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String whereQuery = "";
+            String whereQuery = "WHERE";
             
             if (!session_id.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
@@ -503,14 +503,14 @@ public class TransactionsService implements TransactionsInterface {
             }
             String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
-            List<FullTransactionModel> transactions;
+            List<Map<String, Object>> transactions;
             SQL = "SELECT a.*, "
                 + "b.name as destInstitutionName "
                 + "FROM ajiswitch_db.tbl_timeout_retry a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.destination_institution_code = b.code " + whereQuery
                 + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
-            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+            transactions = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
 
             SQL = "SELECT COUNT(a.id) as totalRecords "
                 + "FROM ajiswitch_db.tbl_timeout_retry a " + whereQuery;
