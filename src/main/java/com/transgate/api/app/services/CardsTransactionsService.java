@@ -1064,7 +1064,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 case "-1":
                     SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
-                            + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
+                            + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number, a.arbitrated_proof_uri, a.arbitration_closed_date, a.arbitration_closed_by "
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
@@ -1082,7 +1082,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 default:
                     SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
-                            + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
+                            + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number, a.arbitrated_proof_uri, a.arbitration_closed_date, a.arbitration_closed_by "
                             + "FROM sparkpayweb_db.tbl_disputes a "
 //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                            + "ON a.id = b.id "
@@ -1400,6 +1400,9 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             if (status == -2)  {
                 SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitrated_by = ?, status = ?, date_arbitrated = now() WHERE id = ?";
                 retVal = jdbcTemplate.update(SQL, new Object[]{username, status, id});
+            } else if (status < -2) {
+                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE id = ?";
+                retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, id});
             }
             else {
                 SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
@@ -1448,6 +1451,12 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setResponse_code(rs.getString("response_code"));
             tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? validators.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : "");
             tnx.setStatus_code_message(rs.getString("response_code") != null && rs.getString("response_code").toLowerCase() != "null" && rs.getString("response_code") != "" ? transactionsCodeInterpreter.GetResponse(rs.getString("response_code")) : "");
+            if (hasColumn(rs, "arbitration_closed_date"))
+                tnx.setArbitration_closed_by(rs.getString("arbitration_closed_date"));
+            if (hasColumn(rs, "arbitrated_proof_uri"))
+                tnx.setArbitrated_proof_uri(rs.getString("arbitrated_proof_uri"));
+            if (hasColumn(rs, "arbitration_closed_by"))
+                tnx.setArbitration_closed_by(rs.getString("arbitration_closed_by"));
             if (rs.getInt("status") == -1) tnx.setResult("PENDING");
             else if (rs.getInt("status") == 1) tnx.setResult("REJECTED");
             else if (rs.getInt("status") == 0 && rs.getInt("resolved") == 0) tnx.setResult("ACCEPTED");
