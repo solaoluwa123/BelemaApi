@@ -12,6 +12,7 @@ import com.transgate.api.models.InstitutionTypesModel;
 import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
+import com.transgate.api.util.Constants;
 import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.Validators;
@@ -171,8 +172,11 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, "
-                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName "
+                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
+                    + "c.charge_amount, c.vat "
                     + "FROM ajiswitch_db.tbl_nodes n "
+                    + "LEFT JOIN ajiswitch_db.tbl_charges c "
+                    + "ON c.institution_code = n.institution_code "
                     + "LEFT JOIN tbl_financial_institutions a "
                     + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
@@ -198,8 +202,11 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, "
-                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName "
+                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
+                    + "c.charge_amount, c.vat "
                     + "FROM ajiswitch_db.tbl_nodes n "
+                    + "LEFT JOIN ajiswitch_db.tbl_charges c "
+                    + "ON c.institution_code = n.institution_code "
                     + "LEFT JOIN tbl_financial_institutions a "
                     + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
@@ -219,21 +226,27 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String color, String code, String business_address, int businessType, String creator) {
+    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String publickeylocationLinux, String cbn_bank_account, String color, String code, String business_address, int businessType, String creator, String password, float charge_amount, float vat, String hashKey) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            int retval;
+            int retval, retvalLinux;
             int checkCodeAndName = CheckCodeAndName(name, code);
             if (checkCodeAndName == 0) {
                 int userrole = GetUserRole(creator, sessiontoken);
                 switch (userrole) {
                     case 1:
+                        SQL = "INSERT into ajiswitch_db.tbl_charges(institution_code, charge_amount, vat, date_created, is_active) VALUES(?, ?, ?, now(), '1')";
+                        jdbcTemplate.update(SQL, new Object[]{code, charge_amount, vat});
+                        SQL = "INSERT into ajiswitch_db.tbl_token_users(institution_name, password) VALUES(?, ENCODE(?, ?))";
+                        jdbcTemplate.update(SQL, new Object[]{code, password, Constants.SQL_ENCODE_STRING});
                         SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
                         jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, 1, ?, ?, ?, now())";
-                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name});
-                        if (retval > 0) 
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey) VALUES(?, 1, ?, ?, ?, now(), ?, ?)";
+                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name, cbn_bank_account, hashKey});
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes_temp(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey) VALUES(?, 1, ?, ?, ?, now(), ?, ?)";
+                        retvalLinux = jdbcTemplate.update(SQL, new Object[]{port, publickeylocationLinux, code, name, cbn_bank_account, hashKey});
+                        if (retval > 0 && retvalLinux > 0) 
                             return responseManager.ResponseAccepted();
                         else 
                             return responseManager.ResponseInternalServerError();
@@ -403,7 +416,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor) {
+    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor, float charge_amount, float vat) {
         try {
             String SQL;
             int userrole = GetUserRole(editor, sessiontoken);
@@ -412,6 +425,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                 case 1:
                     SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
                     jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
+                    SQL = "UPDATE ajiswitch_db.tbl_charges SET charge_amount = ?, vat = ? WHERE institution_code = ?";
+                    jdbcTemplate.update(SQL, new Object[]{charge_amount, vat, code});
                     SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ? WHERE institution_code = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{name, code});
                     if (retVal > 0)
@@ -971,6 +986,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             response.setBusinessTypeName(rs.getString("businessTypeName"));
             response.setStatus(rs.getString("status"));
             response.setDate_updated(rs.getString("date_updated"));
+            response.setCharge_amount(rs.getFloat("charge_amount"));
+            response.setVat(rs.getFloat("vat"));
             return response;
         }
     }

@@ -12,7 +12,9 @@ package com.transgate.api.models;
 public class FinancialInstitutionModel {
     int id, businessType, port_number;
     String name, shortName, code, color, business_address, date_created, businessTypeName, created_by, actionType, note, status, date_updated;
-    String publickeylocation, cbn_bank_account, switch_code;
+    String publickeylocation, cbn_bank_account, switch_code, publickeylocationLinux, password, hashKey;
+    float vat, charge_amount;
+    
     public int getId() {
         return id;
     }
@@ -155,6 +157,46 @@ public class FinancialInstitutionModel {
 
     public void setSwitch_code(String switch_code) {
         this.switch_code = switch_code;
+    }
+
+    public String getPublickeylocationLinux() {
+        return publickeylocationLinux;
+    }
+
+    public void setPublickeylocationLinux(String publickeylocationLinux) {
+        this.publickeylocationLinux = publickeylocationLinux;
+    }
+
+    public float getVat() {
+        return vat;
+    }
+
+    public void setVat(float vat) {
+        this.vat = vat;
+    }
+
+    public float getCharge_amount() {
+        return charge_amount;
+    }
+
+    public void setCharge_amount(float charge_amount) {
+        this.charge_amount = charge_amount;
+    }
+
+    public String getPassword() {
+        return password;
+    }
+
+    public void setPassword(String password) {
+        this.password = password;
+    }
+
+    public String getHashKey() {
+        return hashKey;
+    }
+
+    public void setHashKey(String hashKey) {
+        this.hashKey = hashKey;
     }
     
 }

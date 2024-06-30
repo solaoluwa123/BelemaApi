@@ -15,7 +15,7 @@ public interface FinancialInstitutionsInterface {
     
     public ResponseEntity GetFinancialInstitutions();
 
-    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String color, String code, String business_address, int businessType, String creator);
+    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String publickeylocationLinux, String cbn_bank_account, String color, String code, String business_address, int businessType, String creator, String password, float charge_amount, float vat, String hashKey);
     
     public ResponseEntity GetFinancialInstitutionsTypes();
     
@@ -23,7 +23,7 @@ public interface FinancialInstitutionsInterface {
     
     public ResponseEntity Activate(String sessiontoken, String code, String username);
     
-    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor);
+    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor, float charge_amount, float vat);
     
     public ResponseEntity GetFinancialInstitutionByCode(String sessiontoken, String code);
     

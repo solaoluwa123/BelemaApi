@@ -59,7 +59,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.Create(sessiontoken, financialInstitutionModel.getName(), financialInstitutionModel.getShortName(), financialInstitutionModel.getPort_number(), financialInstitutionModel.getPublickeylocation(), financialInstitutionModel.getColor(), financialInstitutionModel.getCode(), financialInstitutionModel.getBusiness_address(), financialInstitutionModel.getBusinessType(), financialInstitutionModel.getCreated_by());
+        return financialInstitutionsInterface.Create(sessiontoken, financialInstitutionModel.getName(), financialInstitutionModel.getShortName(), financialInstitutionModel.getPort_number(), financialInstitutionModel.getPublickeylocation(), financialInstitutionModel.getPublickeylocationLinux(), financialInstitutionModel.getCbn_bank_account(), financialInstitutionModel.getColor(), financialInstitutionModel.getCode(), financialInstitutionModel.getBusiness_address(), financialInstitutionModel.getBusinessType(), financialInstitutionModel.getCreated_by(), financialInstitutionModel.getPassword(), financialInstitutionModel.getCharge_amount(), financialInstitutionModel.getVat(), financialInstitutionModel.getHashKey());
     }
     
     @RequestMapping(value = "/financial-institutions/types", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -102,7 +102,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.Edit(sessiontoken, institution.getCode(), institution.getName(), institution.getShortName(), institution.getPort_number(), institution.getPublickeylocation(), institution.getColor(), institution.getBusiness_address(), institution.getBusinessType(), institution.getCreated_by());
+        return financialInstitutionsInterface.Edit(sessiontoken, institution.getCode(), institution.getName(), institution.getShortName(), institution.getPort_number(), institution.getPublickeylocation(), institution.getColor(), institution.getBusiness_address(), institution.getBusinessType(), institution.getCreated_by(), institution.getCharge_amount(), institution.getVat());
     }
     
     @RequestMapping(value = "/financial-institutions/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

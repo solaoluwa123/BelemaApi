@@ -11,7 +11,7 @@ package com.transgate.api.util;
  */
 
 public class Constants {
-    private Constants() {
+    public Constants() {
     }
     
     public static final String SYESTEMFICODE = "000013";
@@ -29,4 +29,6 @@ public class Constants {
     public static final String SESSIONMASTERKEY_2 = "09AC35351B4BB1B4B23A1835244714C3";
     public static final String BANK_INCOME_ACCOUNT = "205/10/1/8946/0";
     public static final String HABARIPAY_INCOME_ACCOUNT = "205/214633/1/55/2";
+    
+    public static final String SQL_ENCODE_STRING = "Super$oft_2023";
 }
