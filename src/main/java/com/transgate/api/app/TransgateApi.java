@@ -60,7 +60,7 @@ public class TransgateApi //extends SpringBootServletInitializer
         executeGet("app/crons/autopassdisputesforsettlement");
     }
     
-    @Scheduled(fixedRate = 1000 * 20) // Run every 20 seconds (10000 milliseconds)
+    @Scheduled(fixedRate = 1000 * 120) // Run every 2 minutes (10000 milliseconds)
     public void updateOldAccountNUBAN() {
         executeGet("app/crons/cards/disputes/update-nuban");
     }

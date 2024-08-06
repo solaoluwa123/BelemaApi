@@ -63,7 +63,7 @@ public interface CardsTransactionsInterface {
             int limit
         );
     
-    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username);
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username, boolean isExternal);
     
     public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String username);
     
@@ -75,7 +75,9 @@ public interface CardsTransactionsInterface {
     
     public ResponseEntity GetDisputesByMerchant(String merchantid, String startDate, String endDate, int page, int limit);
     
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String username);
+//    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String username);
+    
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String selectedDisputes, String type, String username);
     
     public ResponseEntity UpdateCardsDisputesNUBAN();
     

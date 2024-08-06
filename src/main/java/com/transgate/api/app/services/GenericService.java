@@ -1014,4 +1014,143 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
+    
+    @Override
+    public ResponseEntity GetGapsPayments(String merchant_id, String startDate, String endDate, int page, int limit, String isSettled, String reference) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<Map<String, Object>> payments;
+            String whereQuery = !startDate.equals("")
+                    || !endDate.equals("")
+                    || !merchant_id.equals("")
+                    || !reference.equals("")
+                    || !isSettled.equals("")
+                    ? "WHERE" : "";
+            
+            if (!startDate.equals("") && !endDate.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.settlement_date BETWEEN '" + startDate + "' AND '" + endDate + "'";
+            }
+            if (!merchant_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.merchant_id = '" + merchant_id + "'";
+            }
+            if (!isSettled.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.isSettled = '" + isSettled + "'";
+            }
+            if (!reference.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.gaps_reference = '" + reference + "'";
+            }
+//            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
+            SQL = "SELECT a.* "
+                + "FROM sparkpay.tbl_merchant_paid_list a "
+                + whereQuery
+                + " ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
+            payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
+            SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amountpaid) as totalValue "
+                + "FROM sparkpay.tbl_merchant_paid_list a "
+                + whereQuery;
+
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            networkResponse.setMeta(meta);
+//            }
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All gaps payments");
+            networkResponse.setData((ArrayList) payments);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetTNXStatusChange(String session_id, String startDate, String endDate, int page, int limit, String requested_by, String approved_by, String current_status, String new_status, String status) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<Map<String, Object>> transactions;
+            String whereQuery = !startDate.equals("")
+                    || !endDate.equals("")
+                    || !session_id.equals("")
+                    || !requested_by.equals("")
+                    || !approved_by.equals("")
+                    || !current_status.equals("")
+                    || !new_status.equals("")
+                    || !status.equals("")
+                    ? "WHERE" : "";
+            
+            if (!startDate.equals("") && !endDate.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.created_at BETWEEN '" + startDate + "' AND '" + endDate + "'";
+            }
+            if (!session_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.session_id = '" + session_id + "'";
+            }
+            if (!requested_by.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.requested_by = '" + requested_by + "'";
+            }
+            if (!approved_by.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.approved_by = '" + approved_by + "'";
+            }
+            if (!new_status.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.new_status = '" + new_status + "'";
+            }
+            if (!current_status.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.current_status = '" + current_status + "'";
+            }
+            if (!status.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.status = '" + status + "'";
+            }
+            
+            SQL = "SELECT a.* "
+                + "FROM ajiswitch_db.tbl_transactions_status a "
+                + whereQuery
+                + " ORDER BY a.created_at DESC LIMIT ? OFFSET ?";
+            transactions = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
+            SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amount) as totalValue "
+                + "FROM ajiswitch_db.tbl_transactions_status a "
+                + whereQuery;
+
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            networkResponse.setMeta(meta);
+//            }
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All transactions");
+            networkResponse.setData((ArrayList) transactions);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
 }

@@ -215,6 +215,7 @@ public class UsersService implements UsersInterface {
                     }
                 }
                 
+                
                 if (userRoleid == 6) {
                     SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
@@ -487,7 +488,7 @@ public class UsersService implements UsersInterface {
                         response.setTransgateMenu(eM);
                     }
                 }
-                else if (userRoleid == 8) {
+                else if (userRoleid == 8 || userRoleid == 5) {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "

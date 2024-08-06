@@ -34,6 +34,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetFailedTnxCountByInstitutions(String startDate, String endDate, boolean isCurrent);
     
+    public ResponseEntity GetFailedTnxCountByInstitutions(String institution, String startDate, String endDate, boolean isCurrent);
+    
     public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent);
     
     public ResponseEntity GetAllResponseCodesTNXInstitution(String institutioncode, String startDate, String endDate, boolean isCurrent);
@@ -46,7 +48,7 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetTransactionsVolume(String institutioncode, String startDate, String endDate);
     
-    public ResponseEntity GetTransactionsRates(String startDate, String endDate, boolean inward);
+    public ResponseEntity GetTransactionsRates(String startDate, String endDate, boolean inward, String institution);
     
     public ResponseEntity GetTransactionsRates(String institutioncode, String startDate, String endDate, boolean inward);
     
@@ -87,7 +89,7 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetDisputeTypes();
     
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status, String proof_of_reject_uri);
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status, String proof_of_reject_uri, String selectedDisputes, String type);
     
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids);
     
@@ -119,4 +121,7 @@ public interface TransactionsInterface {
             int page, 
             int limit,
             String isProcessed);
+    
+    public ResponseEntity RequestTransactionStatusChange(String sessionid, String sessiontoken, String username, String status);
+    public ResponseEntity UpdateTransactionStatusChange(String id, String sessiontoken, String username, String status);
 }

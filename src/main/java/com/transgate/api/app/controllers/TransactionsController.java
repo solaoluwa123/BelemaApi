@@ -131,6 +131,18 @@ public class TransactionsController {
         return transactionsInterface.GetFailedTnxCountByInstitutions(startDate, endDate, isCurrent);
     }
         
+    @RequestMapping(value = "/top-failing-institutions/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetFailedTnxCountByInstitutionsByInstitution(@RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate, 
+            @RequestParam("endDate") String endDate,
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetFailedTnxCountByInstitutions(institutioncode, startDate, endDate, isCurrent);
+    }
+        
     @RequestMapping(value = "/top-failed-response-codes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTop6ResponseCodesTNXInstitution(@RequestHeader(value = "Authorization") String header,
             @PathVariable ("institutioncode") String institutioncode,
@@ -193,21 +205,23 @@ public class TransactionsController {
     @RequestMapping(value = "/transactions-rates", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTransactionsRates(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate, 
-            @RequestParam("endDate") String endDate) {
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("institution") Optional<String> institution) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetTransactionsRates(startDate, endDate, false);
+        return transactionsInterface.GetTransactionsRates(startDate, endDate, false, institution.orElse(""));
     }
         
     @RequestMapping(value = "/transactions-rates/inward", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTransactionsRatesInward(@RequestHeader(value = "Authorization") String header,
             @RequestParam("startDate") String startDate, 
-            @RequestParam("endDate") String endDate) {
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("institution") Optional<String> institution) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetTransactionsRates(startDate, endDate, true);
+        return transactionsInterface.GetTransactionsRates(startDate, endDate, true, institution.orElse(""));
     }
         
     @RequestMapping(value = "/transactions-rates/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -324,7 +338,7 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getUsername(), dispute.getStatus(), dispute.getProof_of_reject_uri());
+        return transactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getUsername(), dispute.getStatus(), dispute.getProof_of_reject_uri(), dispute.getSelectedDisputes(), dispute.getType());
     }
     
     @RequestMapping(value = "/transactions/disputes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -488,5 +502,25 @@ public class TransactionsController {
             page, 
             limit,
             isProcessed);
+    }
+    
+    @RequestMapping(value = "/transaction/status/change", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity RequestTransactionStatusChange(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @RequestBody DisputeModel model) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.RequestTransactionStatusChange(model.getSrcSessionid(), sessiontoken, model.getUsername(), model.getNarration());
+    }
+    
+    @RequestMapping(value = "/transaction/status/change/update", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity ApproveTransactionStatusChange(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @RequestBody DisputeModel model) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.UpdateTransactionStatusChange(model.getSrcSessionid(), sessiontoken, model.getUsername(), model.getNarration());
     }
 }

@@ -34,6 +34,14 @@ public class ResponseManager {
         return new ResponseEntity(networkResponse, HttpStatus.ACCEPTED);
     }
     
+    public ResponseEntity ResponseAccepted(String message) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        networkResponse.setCode(200);
+        networkResponse.setStatus("success");
+        networkResponse.setMessage(message);
+        return new ResponseEntity(networkResponse, HttpStatus.ACCEPTED);
+    }
+    
     public ResponseEntity ResponseNotFound(Object body) {
         return new ResponseEntity(body, HttpStatus.NOT_FOUND);
     }

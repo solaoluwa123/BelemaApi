@@ -207,4 +207,41 @@ public class GenericController {
         return GenericInterface.GetCardPayments(institutioncode, startDate, endDate, page, limit, response_code, transaction_id, merchant_name.replaceAll("space", " "));
     }
     
+    @RequestMapping(value = "/gapspayments", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetGapsPayments(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @RequestParam("isSettled") String isSettled, 
+            @RequestParam("merchant_id") String merchant_id, 
+            @RequestParam("reference") String reference
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetGapsPayments(merchant_id, startDate, endDate, page, limit, isSettled, reference);
+    }
+    
+    @RequestMapping(value = "/transactions-for-update", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTNXStatusChange(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @RequestParam("session_id") String session_id, 
+            @RequestParam("requested_by") String requested_by, 
+            @RequestParam("approved_by") String approved_by, 
+            @RequestParam("current_status") String current_status, 
+            @RequestParam("new_status") String new_status, 
+            @RequestParam("status") String status
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetTNXStatusChange(session_id, startDate, endDate, page, limit, requested_by, approved_by, current_status, new_status, status);
+    }
+    
 }

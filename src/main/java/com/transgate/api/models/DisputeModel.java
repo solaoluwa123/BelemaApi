@@ -14,6 +14,7 @@ public class DisputeModel extends FullTransactionModel {
     int transactionId, status, resolved;
     String resolvedBy, records, timeline_date, proof_of_reject_uri;
     String loggingInstitution;
+    String selectedDisputes;
     
     public String getType() {
         return type;
@@ -109,6 +110,14 @@ public class DisputeModel extends FullTransactionModel {
 
     public void setLoggingInstitution(String loggingInstitution) {
         this.loggingInstitution = loggingInstitution;
+    }
+
+    public String getSelectedDisputes() {
+        return selectedDisputes;
+    }
+
+    public void setSelectedDisputes(String selectedDisputes) {
+        this.selectedDisputes = selectedDisputes;
     }
     
 }

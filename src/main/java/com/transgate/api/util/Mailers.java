@@ -191,9 +191,11 @@ public class Mailers {
           .build();
         try {
             Response response = client.newCall(request).execute();
+            response.close();
             return response.toString();
         } catch (IOException ex) {
             Logger.getLogger(Mailers.class.getName()).log(Level.SEVERE, null, ex);
+        } finally {
         }
         return "";
     }
@@ -225,6 +227,7 @@ public class Mailers {
           .build();
         try {
             Response response = client.newCall(request).execute();
+            response.close();
             return response.toString();
         } catch (IOException ex) {
             Logger.getLogger(Mailers.class.getName()).log(Level.SEVERE, null, ex);

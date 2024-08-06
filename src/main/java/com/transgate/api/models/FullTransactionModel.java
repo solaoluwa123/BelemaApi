@@ -10,7 +10,7 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class FullTransactionModel extends TransactionModel {
-    String srcInstitutionName, destInstitutionName;
+    String srcInstitutionName, destInstitutionName, destNodeInstitutionName;
 
     public String getSrcInstitutionName() {
         return srcInstitutionName;
@@ -26,6 +26,14 @@ public class FullTransactionModel extends TransactionModel {
 
     public void setDestInstitutionName(String destInstitutionName) {
         this.destInstitutionName = destInstitutionName;
+    }
+
+    public String getDestNodeInstitutionName() {
+        return destNodeInstitutionName;
+    }
+
+    public void setDestNodeInstitutionName(String destNodeInstitutionName) {
+        this.destNodeInstitutionName = destNodeInstitutionName;
     }
     
 }

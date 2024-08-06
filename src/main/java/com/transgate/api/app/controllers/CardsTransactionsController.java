@@ -292,7 +292,7 @@ public class CardsTransactionsController {
         else if (!validators.ValidateJSONWebToken(token, username)) {
             return responseManager.ResponseUnathorized();
         }
-        return CardsTransactionsInterface.LogDispute(token, dispute.getTerminal_id(), dispute.getRetrieval_ref_number(), dispute.getSystem_trace_number(), dispute.getProof_of_debit_uri(), dispute.getLogged_by());
+        return CardsTransactionsInterface.LogDispute(token, dispute.getTerminal_id(), dispute.getRetrieval_ref_number(), dispute.getSystem_trace_number(), dispute.getProof_of_debit_uri(), dispute.getLogged_by(), true);
     }
     
     @RequestMapping(value = "/cards/transactions/disputes/{uniqueid}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -315,7 +315,7 @@ public class CardsTransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.LogDispute(sessiontoken, dispute.getTerminal_id(), dispute.getRetrieval_ref_number(), dispute.getSystem_trace_number(), dispute.getProof_of_debit_uri(), dispute.getLogged_by());
+        return CardsTransactionsInterface.LogDispute(sessiontoken, dispute.getTerminal_id(), dispute.getRetrieval_ref_number(), dispute.getSystem_trace_number(), dispute.getProof_of_debit_uri(), dispute.getLogged_by(), false);
     }
     
     @RequestMapping(value = "/cards/transactions/disputes/create/bulk", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -369,7 +369,7 @@ public class CardsTransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return CardsTransactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getStatus(), dispute.getProof_of_reject_uri(), dispute.getResolved_by());
+        return CardsTransactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getStatus(), dispute.getProof_of_reject_uri(), dispute.getSelectedDisputes(), dispute.getType(), dispute.getResolved_by());
     }
     
     @RequestMapping(value = "/app/crons/cards/disputes/update-nuban", method = RequestMethod.GET, headers = "Accept=application/json")

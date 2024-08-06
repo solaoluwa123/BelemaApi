@@ -14,7 +14,8 @@ public class CardsDisputeModel extends CardsTransactionModel {
     int transaction_id, status, resolved;
     String resolved_by, records, timeline_date, proof_of_reject_uri, proof_of_debit_uri, cardholder_acct_nuban, cardholder_acct_number;
     String result, arbitrated_by, date_arbitrated, arbitration_closed_by, arbitrated_proof_uri, arbitration_closed_date;
-
+    String selectedDisputes;
+    
     public String getLogged_by() {
         return logged_by;
     }
@@ -166,5 +167,14 @@ public class CardsDisputeModel extends CardsTransactionModel {
     public void setArbitration_closed_date(String arbitration_closed_date) {
         this.arbitration_closed_date = arbitration_closed_date;
     }
+
+    public String getSelectedDisputes() {
+        return selectedDisputes;
+    }
+
+    public void setSelectedDisputes(String selectedDisputes) {
+        this.selectedDisputes = selectedDisputes;
+    }
+    
     
 }

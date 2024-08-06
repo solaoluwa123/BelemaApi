@@ -839,7 +839,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 int _id = (int) row.get("id");
                 _temp_date = (String) row.get("date_created").toString();
                 String nuban = cardholder_acct_number != null && cardholder_acct_number.length() > 17 ? restCall.getNuban(validators.FormatCardHolderAcctNum(cardholder_acct_number)) : "";
-                System.out.println("Last Dispute Updated Date: " + _temp_date + " Old Acct: " + cardholder_acct_number + " NUBAN: " + nuban);
+//                System.out.println("Last Dispute Updated Date: " + _temp_date + " Old Acct: " + cardholder_acct_number + " NUBAN: " + nuban);
                 SQL = "UPDATE sparkpayweb_db.tbl_disputes SET cardholder_acct_nuban = ? WHERE id = ?";
                 int update = jdbcTemplate.update(SQL, new Object[]{nuban, _id});
                 if (update > 0) {
@@ -912,7 +912,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     
     
     @Override
-    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username){
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username, boolean isExternal){
         try {
             
             boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
@@ -952,7 +952,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
                 SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, proof_of_debit_uri, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
-                if (userrole == 8) {
+                if (userrole == 8 || isExternal) {
                     SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
                     jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
                 }
@@ -1391,25 +1391,66 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         }
     }
     
+//    @Override
+//    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String username) {
+//        try {
+//            String SQL;
+//            int retVal;
+//            int resolved = status == 0 ? 0 : 1;
+//            if (status == -2)  {
+//                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitrated_by = ?, status = ?, date_arbitrated = now() WHERE id = ?";
+//                retVal = jdbcTemplate.update(SQL, new Object[]{username, status, id});
+//            } else if (status < -2) {
+//                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE id = ?";
+//                retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, id});
+//            }
+//            else {
+//                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
+//               retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, id});
+//            }
+//            if (retVal > 0)
+//                return responseManager.ResponseAccepted();
+//            else
+//                return responseManager.ResponseBadRequest();
+//        } catch (DataAccessException ex) {
+//            System.out.println("error>>>>" + ex.getMessage());
+//            return responseManager.ResponseInternalServerError();
+//        }
+//    }
+    
     @Override
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String username) {
+    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String selectedDisputes, String type, String username) {
         try {
             String SQL;
-            int retVal;
+            int retVal = 0;
             int resolved = status == 0 ? 0 : 1;
-            if (status == -2)  {
-                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitrated_by = ?, status = ?, date_arbitrated = now() WHERE id = ?";
-                retVal = jdbcTemplate.update(SQL, new Object[]{username, status, id});
-            } else if (status < -2) {
-                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE id = ?";
-                retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, id});
+            if (type.equals("bulk")) {
+                String[] idS = selectedDisputes.split(",");
+                for(String _id: idS) {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
+                    int _retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, _id});
+                    retVal = retVal + _retVal;
+                }
+            } else {
+                if (status == -2)  {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitrated_by = ?, status = ?, date_arbitrated = now() WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, id});
+                } else if (status < -2) {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, id});
+                }
+                else {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, id});
+                }
             }
-            else {
-                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
-               retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, id});
+            String action = status == 0 ? "accepted" : status == -1 ? "arbitrated" : "rejected";
+            if (retVal > 0) {
+                if (type.equals("bulk"))
+                    return responseManager.ResponseAccepted("Total of " + retVal+ " dispute has been " + action);
+                else
+                    return responseManager.ResponseAccepted();
             }
-            if (retVal > 0)
-                return responseManager.ResponseAccepted();
             else
                 return responseManager.ResponseBadRequest();
         } catch (DataAccessException ex) {

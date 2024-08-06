@@ -50,8 +50,6 @@ public class Validators {
     
     public final boolean ValidateJSONWebToken(String token, String email) {
         try {
-            System.out.println("token: " + token);
-            System.out.println("email: " + email);
             return Jwts.parserBuilder().setSigningKey(hmacKey).build().parseClaimsJws(token).getBody().getSubject().equals(email);
         } catch (JwtException e) {
             System.out.println("JwtException: " + e);
@@ -63,7 +61,8 @@ public class Validators {
         return "Bearer 958455015C7DB0F3CEDD56F8F3E50E94568905B636A4954A478030E2603E8A7758F8843B7A6EDC837CA5C6B57B262FDF3B44C7FF706DC3EB991EECFC7840FEC7";
     }
     public final String validHeaderExternal() {
-        return "x-bearer-factor";
+        // supersoft-habari-sparkpay-sparkpay-supersoft sha512
+        return "Bearer 39debfdad98874cb5602df5ea2e6efc1177039e628897adc28c65f42d13800af0758edbe97605c49812192fd105854f113cba41192b2ddb093142ab7cc0f5056";
     }
     
     public int removeLeadingZero(String str) {
