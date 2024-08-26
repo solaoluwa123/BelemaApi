@@ -299,6 +299,19 @@ public class TransactionsController {
         return transactionsInterface.SearchTransactionsForSessionIds(model.getSrcSessionid());
     }
     
+    @RequestMapping(value = "/transactions-by-session-ids/with/date", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity SearchTransactionsForSessionIdsWithDate(
+            @RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestBody TransactionModel model) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.SearchTransactionsForSessionIds(model.getSrcSessionid(), startDate, endDate);
+    }
+    
     @RequestMapping(value = "/transactions-by-date/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetInstitutionTransactions(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken, 

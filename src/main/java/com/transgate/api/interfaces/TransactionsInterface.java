@@ -93,6 +93,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids);
     
+    public ResponseEntity SearchTransactionsForSessionIds(String sessionids, String startDate, String endDate);
+    
     public ResponseEntity SearchTransactions(String srcSessionid,
             String channelCode,
             String responseCode,

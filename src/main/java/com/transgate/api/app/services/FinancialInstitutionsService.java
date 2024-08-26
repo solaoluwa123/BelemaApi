@@ -171,7 +171,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, "
+            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, n.cbn_bank_account, n.isProcessTSQ, "
                     + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
                     + "c.charge_amount, c.vat "
                     + "FROM ajiswitch_db.tbl_nodes n "
@@ -201,7 +201,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, "
+            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, n.cbn_bank_account, n.isProcessTSQ, "
                     + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
                     + "c.charge_amount, c.vat "
                     + "FROM ajiswitch_db.tbl_nodes n "
@@ -226,7 +226,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String publickeylocationLinux, String cbn_bank_account, String color, String code, String business_address, int businessType, String creator, String password, float charge_amount, float vat, String hashKey) {
+    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String publickeylocationLinux, String cbn_bank_account, String color, String code, String business_address, int businessType, String creator, String password, float charge_amount, float vat, String hashKey, int is_tsq_processed) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
@@ -242,10 +242,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                         jdbcTemplate.update(SQL, new Object[]{code, password, Constants.SQL_ENCODE_STRING});
                         SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
                         jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey) VALUES(?, 1, ?, ?, ?, now(), ?, ?)";
-                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name, cbn_bank_account, hashKey});
-                        SQL = "INSERT into ajiswitch_db.tbl_nodes_temp(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey) VALUES(?, 1, ?, ?, ?, now(), ?, ?)";
-                        retvalLinux = jdbcTemplate.update(SQL, new Object[]{port, publickeylocationLinux, code, name, cbn_bank_account, hashKey});
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?)";
+                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name, cbn_bank_account, hashKey, is_tsq_processed});
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes_temp(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?)";
+                        retvalLinux = jdbcTemplate.update(SQL, new Object[]{port, publickeylocationLinux, code, name, cbn_bank_account, hashKey, is_tsq_processed});
                         if (retval > 0 && retvalLinux > 0) 
                             return responseManager.ResponseAccepted();
                         else 
@@ -416,7 +416,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor, float charge_amount, float vat) {
+    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor, float charge_amount, float vat, String cbn_bank_account, int is_tsq_processed) {
         try {
             String SQL;
             int userrole = GetUserRole(editor, sessiontoken);
@@ -424,15 +424,21 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             switch (userrole) {
                 case 1:
                     SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
-                    jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
+                    int editRetVal = jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
+                    if (editRetVal < 1) {
+                        SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
+                        jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
+                    }
                     SQL = "UPDATE ajiswitch_db.tbl_charges SET charge_amount = ?, vat = ? WHERE institution_code = ?";
                     jdbcTemplate.update(SQL, new Object[]{charge_amount, vat, code});
-                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ? WHERE institution_code = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{name, code});
-                    if (retVal > 0)
-                        return responseManager.ResponseAccepted();
-                    else
-                        return responseManager.ResponseInternalServerError();
+                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ?, cbn_bank_account = ?, isProcessTSQ = ? WHERE institution_code = ?";
+                    jdbcTemplate.update(SQL, new Object[]{name, cbn_bank_account, is_tsq_processed, code});
+                    SQL = "UPDATE ajiswitch_db.tbl_nodes_temp SET institution_name = ?, cbn_bank_account = ?, isProcessTSQ = ? WHERE institution_code = ?";
+                    jdbcTemplate.update(SQL, new Object[]{name, cbn_bank_account, is_tsq_processed, code});
+//                    if (retVal > 0)
+                    return responseManager.ResponseAccepted();
+//                    else
+//                        return responseManager.ResponseInternalServerError();
                 case 2:
                     boolean checkPendingAction = CheckInstitutionActionPending(code, "edit");
                     if (checkPendingAction) {
@@ -988,6 +994,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             response.setDate_updated(rs.getString("date_updated"));
             response.setCharge_amount(rs.getFloat("charge_amount"));
             response.setVat(rs.getFloat("vat"));
+            response.setCbn_bank_account(rs.getString("cbn_bank_account"));
+            response.setIsProcessTSQ(rs.getInt("isProcessTSQ"));
             return response;
         }
     }

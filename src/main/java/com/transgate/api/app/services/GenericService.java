@@ -1046,8 +1046,10 @@ public class GenericService implements GenericInterface {
                 whereQuery+=" a.gaps_reference = '" + reference + "'";
             }
 //            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
-            SQL = "SELECT a.* "
+            SQL = "SELECT a.*, b.merchant_name "
                 + "FROM sparkpay.tbl_merchant_paid_list a "
+                + "LEFT JOIN sparkpay.merchants b "
+                + "ON a.merchant_id = b.merchant_id "
                 + whereQuery
                 + " ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
             payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});

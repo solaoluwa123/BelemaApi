@@ -10,7 +10,7 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class FinancialInstitutionModel {
-    int id, businessType, port_number;
+    int id, businessType, port_number, isProcessTSQ;
     String name, shortName, code, color, business_address, date_created, businessTypeName, created_by, actionType, note, status, date_updated;
     String publickeylocation, cbn_bank_account, switch_code, publickeylocationLinux, password, hashKey;
     float vat, charge_amount;
@@ -197,6 +197,14 @@ public class FinancialInstitutionModel {
 
     public void setHashKey(String hashKey) {
         this.hashKey = hashKey;
+    }
+
+    public int getIsProcessTSQ() {
+        return isProcessTSQ;
+    }
+
+    public void setIsProcessTSQ(int isProcessTSQ) {
+        this.isProcessTSQ = isProcessTSQ;
     }
     
 }
