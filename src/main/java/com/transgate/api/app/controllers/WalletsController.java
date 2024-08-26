@@ -74,12 +74,13 @@ public class WalletsController {
             @RequestParam("startDate") String start, 
             @RequestParam("endDate") String end,
             @RequestParam("page") int page,
-            @RequestParam("limit") int limit
+            @RequestParam("limit") int limit,
+            @RequestParam("isCurrent") boolean isCurrent
     ) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return walletInterface.GetWalletActivity(walletnumber, start, end, page, limit);
+        return walletInterface.GetWalletActivity(walletnumber, start, end, page, limit, isCurrent);
     }
     
     @RequestMapping(value = "/wallets/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")

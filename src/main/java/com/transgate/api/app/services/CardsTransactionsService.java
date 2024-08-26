@@ -677,14 +677,16 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 whereQuery+=" a.approval_code = '" + approval_code+"'";
             }
             if ((!min_amount.equals("") && Double.parseDouble(min_amount) > 0)) {
-                String minAmount = min_amount + "00";
+//                String minAmount = min_amount + "00";
+                Double minAmount = Double.parseDouble(min_amount) * 100;
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.amount LIKE '%" + minAmount+"'";
+                whereQuery+=" a.amount LIKE '%" + minAmount.toString().replace(".0", "")+"'";
             }
             if ((!max_amount.equals("") && Double.parseDouble(max_amount) > 0)) {
-                String maxAmount = max_amount + "00";
+//                String maxAmount = max_amount + "00";
+                Double maxAmount = Double.parseDouble(max_amount) * 100;
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.amount LIKE '%" + maxAmount+"'";
+                whereQuery+=" a.amount LIKE '%" + maxAmount.toString().replace(".0", "")+"'";
             }
             if (!start_date.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";

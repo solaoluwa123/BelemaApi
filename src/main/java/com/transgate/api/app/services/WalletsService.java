@@ -484,14 +484,15 @@ public class WalletsService implements WalletsInterface {
     }
     
     @Override
-    public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit) {
+    public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try{
             int offset = page > 1 ? (page - 1) * limit : 0;
 //            String meta;
 //            int offset = page > 1 ? (page - 1) * limit : 0;
+            String table = isCurrent ? "ajiswitch_db.tbl_wallet_activities " : "ajiswitch_db.tbl_wallet_activities_hist ";
             String debitActors = "('eseoghene.onoriode@habaripay@com','omoyosola.afolayan@habaripay.com','valerie.ejegi@habaripay.com')";
-            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
+            String SQL = "SELECT * FROM "+table
                     + "WHERE walletnumber = ? "
                     + "AND activity_date_time >= ? AND activity_date_time < ? "
                     + "AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
@@ -503,7 +504,7 @@ public class WalletsService implements WalletsInterface {
             List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{walletnumber, startDate, endDate, limit, offset});
            
             SQL = "SELECT COUNT(id) as totalRecords "
-                    + "FROM ajiswitch_db.tbl_wallet_activities "
+                    + "FROM "+table
                     + "WHERE walletnumber = ? "
                     + "AND activity_date_time >= ? AND activity_date_time < ? "
                     + "AND credit_or_debit = 'cr' AND actor != 'SYSTEM' ";

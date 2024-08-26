@@ -20,7 +20,7 @@ public interface WalletsInterface {
 
     public ResponseEntity GetWallets(String institutioncode);
     
-    public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit);
+    public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit, boolean isCurrent);
 
     public ResponseEntity InitiateDebitCreditWallet(String sessiontoken, String walletnumber, String actionType, BigDecimal amount, String fundby);
     
