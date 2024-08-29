@@ -114,16 +114,30 @@ public class TransactionsService implements TransactionsInterface {
     }
     
     public List<FullTransactionModel> GetTransactionFromHistory(String sessionId, String source) {
-        String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
-                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                    + "ON a.destination_institution_code = c.code "
-                    + "WHERE a.session_id = ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)";
-        
-        List<FullTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{sessionId, source, source}, new FullTransactionMapper());
+        List<FullTransactionModel> transactions;
+        if (!source.equals("-1")) {
+            String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                        + "ON a.source_institution_code = b.code "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                        + "ON a.destination_institution_code = c.code "
+                        + "WHERE a.session_id = ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)";
+
+            transactions = jdbcTemplate.query(SQL, new Object[]{sessionId, source, source}, new FullTransactionMapper());
+        } else {
+            String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                        + "ON a.source_institution_code = b.code "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                        + "ON a.destination_institution_code = c.code "
+                        + "WHERE a.session_id = ?";
+
+            transactions = jdbcTemplate.query(SQL, new Object[]{sessionId}, new FullTransactionMapper());
+        }
         return transactions;
     }
     
@@ -1705,8 +1719,13 @@ public class TransactionsService implements TransactionsInterface {
                             int additionalDays = dateUtil.getDisputeTimeLineDate();
                             SQL = "INSERT into tbl_disputes(transactionSessionid, transactionid, amount, originator_account_name, beneficiary_account_name, transaction_date_time, loggedBy, ownerInstitution, destInstitution, ownerInstitutionName, destInstitutionName, status, date_created, timeline_date) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?))";
                             int retval = jdbcTemplate.update(SQL, new Object[]{sessionId, getTransaction.get(0).getId(), getTransaction.get(0).getSrcAmount(), getTransaction.get(0).getSrcAccountName(), getTransaction.get(0).getDestAccountName(), getTransaction.get(0).getTransactiondate(), username, getTransaction.get(0).getSrcInstitutioncode(), getTransaction.get(0).getDestInstitutioncode(), getTransaction.get(0).getSrcInstitutionName(), getTransaction.get(0).getDestInstitutionName(), additionalDays});
-                            if (retval > 0) 
+                            if (retval > 0) {
                                 recorded++;
+                                if (getTransaction.get(0).getDestInstitutioncode().equals(sourceInstitution)) {
+                                    SQL = "UPDATE tbl_disputes SET resolvedBy = ?, status = '0', resolved = '0', date_modified = now() WHERE transactionSessionid = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{username, sessionId});
+                                }
+                            }
                         }
                     }
                 }
@@ -1755,8 +1774,13 @@ public class TransactionsService implements TransactionsInterface {
                 int additionalDays = dateUtil.getDisputeTimeLineDate();
                 SQL = "INSERT into tbl_disputes(transactionSessionid, transactionid, amount, originator_account_name, beneficiary_account_name, transaction_date_time, loggedBy, ownerInstitution, destInstitution, ownerInstitutionName, destInstitutionName, status, date_created, timeline_date) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?))";
                 int retval = jdbcTemplate.update(SQL, new Object[]{sessionId, getTransaction.get(0).getId(), getTransaction.get(0).getSrcAmount(), getTransaction.get(0).getSrcAccountName(), getTransaction.get(0).getDestAccountName(), getTransaction.get(0).getTransactiondate(), username, getTransaction.get(0).getSrcInstitutioncode(), getTransaction.get(0).getDestInstitutioncode(), getTransaction.get(0).getSrcInstitutionName(), getTransaction.get(0).getDestInstitutionName(), additionalDays});
-                if (retval > 0) 
+                if (retval > 0) {
+                    if (getTransaction.get(0).getDestInstitutioncode().equals(sourceInstitution)) {
+                        SQL = "UPDATE tbl_disputes SET resolvedBy = ?, status = '0', resolved = '0', date_modified = now() WHERE transactionSessionid = ?";
+                        jdbcTemplate.update(SQL, new Object[]{username, sessionId});
+                    }
                     return responseManager.ResponseAccepted();
+                }
                 else 
                     return responseManager.ResponseInternalServerError();
 //                switch (userrole) {
