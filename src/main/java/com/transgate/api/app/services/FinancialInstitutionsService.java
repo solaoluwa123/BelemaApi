@@ -15,7 +15,6 @@ import com.transgate.api.models.UserModel;
 import com.transgate.api.util.Constants;
 import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -35,17 +34,17 @@ import org.springframework.stereotype.Service;
 @Service
 public class FinancialInstitutionsService implements FinancialInstitutionsInterface {
     @Autowired
-    DataSource dataSource;
-
-    @Autowired
     JdbcTemplate jdbcTemplate;
     
     @Autowired
     private UsersInterface usersInterface;
 
     ResponseManager responseManager = new ResponseManager();
-    Randomizer randomizer = new Randomizer();
-    Validators validators = new Validators();
+    
+    private final AppEnvironmentConfig appConfig;
+    public FinancialInstitutionsService(AppEnvironmentConfig appConfig) {
+        this.appConfig = appConfig;
+    }
     
     private boolean CheckExistingContact(String email_address, String institution) {
         boolean found;
@@ -239,7 +238,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                         SQL = "INSERT into ajiswitch_db.tbl_charges(institution_code, charge_amount, vat, date_created, is_active) VALUES(?, ?, ?, now(), '1')";
                         jdbcTemplate.update(SQL, new Object[]{code, charge_amount, vat});
                         SQL = "INSERT into ajiswitch_db.tbl_token_users(institution_name, password) VALUES(?, ENCODE(?, ?))";
-                        jdbcTemplate.update(SQL, new Object[]{code, password, Constants.SQL_ENCODE_STRING});
+                        jdbcTemplate.update(SQL, new Object[]{code, password, appConfig.getSqlEncodeString()});
                         SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
                         jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
                         SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?)";

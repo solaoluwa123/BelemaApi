@@ -5,6 +5,7 @@
  */
 package com.transgate.api.interfaces;
 
+import com.transgate.api.models.NetworkResponse;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -13,6 +14,8 @@ import org.springframework.http.ResponseEntity;
  */
 public interface UsersInterface {
     public ResponseEntity Login(String username, String password);
+    
+    public boolean LoginExternal(String username, String password);
     
     public ResponseEntity SetUp2FA(String sessiontoken, String username, int enable);
     

@@ -7,11 +7,9 @@ package com.transgate.api.app.services;
 
 import com.transgate.api.interfaces.UnlockAccountsInterface;
 import com.transgate.api.util.CSVHelper;
-import static com.transgate.api.util.Constants.BANK_INCOME_ACCOUNT;
 import static com.transgate.api.util.Constants.FRONTENDURL;
-import static com.transgate.api.util.Constants.HABARIPAY_INCOME_ACCOUNT;
+import com.transgate.api.util.Formatter;
 import com.transgate.api.util.Mailers;
-import com.transgate.api.util.Validators;
 import java.math.BigDecimal;
 import java.text.DecimalFormat;
 import java.text.ParseException;
@@ -26,7 +24,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -38,15 +35,19 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class UnlockAccounts implements UnlockAccountsInterface {
-    @Autowired
-    DataSource dataSource;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
     
     CSVHelper cSVHelper = new CSVHelper();
-    Validators validators = new Validators();
     Mailers mailers = new Mailers();
+    
+    Formatter formatter = new Formatter();
+    
+    private final AppEnvironmentConfig appConfig;
+    public UnlockAccounts(AppEnvironmentConfig appConfig) {
+        this.appConfig = appConfig;
+    }
     
     @Override
     public void AutoPassDisputesForSettlement() {
@@ -101,11 +102,11 @@ public class UnlockAccounts implements UnlockAccountsInterface {
     }
     
     public String GetHabaripayAccountNumber() {
-        return HABARIPAY_INCOME_ACCOUNT;
+        return appConfig.getHabariIncomeAccount();
     }
     
     public String GetBankIncomeAccountNumber() {
-        return BANK_INCOME_ACCOUNT;
+        return appConfig.getBankIncomeAccount();
     }
     
     public boolean isWeekend(String dateString) {
@@ -188,7 +189,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                     List<String[]> data = new ArrayList<>();
                     String merchantAccount = (String) merchant.get("account_account_number");
                     String merchantName = (String) merchant.get("merchant_name");
-                    merchantName = validators.RemoveSpecialCharacters(merchantName.split(" ")[0]);
+                    merchantName = formatter.RemoveSpecialCharacters(merchantName.split(" ")[0]);
                     BigDecimal _msc = (BigDecimal) merchant.get("merchant_service_charge");
                     DecimalFormat df = new DecimalFormat("0.00");
                     Double msc = _msc.doubleValue();
@@ -222,7 +223,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                             String remark = "RVSL_POS TRANSFER"+formatedDate+"_"+system_trace_number+"_"+retrieval_ref_number;
                             data.add(new String[]{
                                 i == 0 ? "Card holder's Accts" : "",
-                                validators.FormatCardHolderAcctNum(accountNumber).replace('/', ','),
+                                formatter.FormatCardHolderAcctNum(accountNumber).replace('/', ','),
                                 tAmount.toString(),
                                 "2",
                                 remark
@@ -238,7 +239,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
                                 data
                         );
 
-                        String url = FRONTENDURL+"/accepteddisputereports/"+validators.RemoveSpecialCharacters(fileName)+".csv";;
+                        String url = FRONTENDURL+"/accepteddisputereports/"+formatter.RemoveSpecialCharacters(fileName)+".csv";;
                         String message = "Dear Team,<br/><br/>Please find attached Habaripay entries to be regularized in respective accounts/ledgers.<br/><br/>Thank you for your continuous support";
 //                        mailers.SendMailWithHabariOkHttpClient(
 //                                "Dispute Report for "+merchantName.trim(), 

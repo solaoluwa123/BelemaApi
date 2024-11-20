@@ -9,12 +9,11 @@ package com.transgate.api.app.config;
  *
  * @author Olawoyin Samson
  */
+import com.transgate.api.app.AuthTokenInterceptor;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
-import org.springframework.boot.web.server.ErrorPage;
-import org.springframework.boot.web.server.ErrorPageRegistrar;
-import org.springframework.context.annotation.Bean;
-import org.springframework.http.HttpStatus;
+import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 
 /**
  *
@@ -22,7 +21,15 @@ import org.springframework.http.HttpStatus;
  */
 @Configuration
 public class WebConfig implements WebMvcConfigurer {
+    @Autowired
+    private AuthTokenInterceptor authTokenInterceptor;
 
+    @Override
+    public void addInterceptors(InterceptorRegistry registry) {
+        // Add the interceptor to all endpoints or specific paths
+        registry.addInterceptor(authTokenInterceptor)
+                .addPathPatterns("/**");
+    }
 //    @Bean
 //    public ErrorPageRegistrar errorPageRegistrar() {
 //        return registry -> registry.addErrorPages(new ErrorPage(HttpStatus.NOT_FOUND, "/index"));

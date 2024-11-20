@@ -11,7 +11,7 @@ package com.transgate.api.models;
  */
 public class TransactionHalfModel {
     String srcSessionid, srcAccountName, destAccountName, srcAmount, transactiondate, responseCodeDefinition, srcResponsecode;
-    String srcAccountKYC, destAccountKYC, srcAccountNumber, destAccountNumber, srcAccountBank, destAccountBank;
+    String srcAccountKYC, destAccountKYC, srcAccountNumber, destAccountNumber, srcAccountBank, destAccountBank, destNodeInstitutionName;
     public String getSessionid() {  
         return srcSessionid;
     }
@@ -114,6 +114,14 @@ public class TransactionHalfModel {
 
     public void setDestAccountBank(String destAccountBank) {
         this.destAccountBank = destAccountBank;
+    }
+
+    public String getDestNodeInstitutionName() {
+        return destNodeInstitutionName;
+    }
+
+    public void setDestNodeInstitutionName(String destNodeInstitutionName) {
+        this.destNodeInstitutionName = destNodeInstitutionName;
     }
     
 }

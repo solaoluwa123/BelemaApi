@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import com.transgate.api.interfaces.WalletsInterface;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import java.math.BigDecimal;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -32,7 +32,11 @@ public class WalletsController {
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+    // Constructor injection for RestCall
+    public WalletsController(Validators validators) {
+        this.validators = validators;
+    }
     
     @RequestMapping(value = "/wallets/create", method = RequestMethod.PUT, headers = "Accept=application/json")
     public ResponseEntity Create(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,

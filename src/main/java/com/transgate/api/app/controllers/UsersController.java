@@ -13,7 +13,7 @@ import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -38,7 +38,11 @@ public class UsersController {
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+    // Constructor injection for RestCall
+    public UsersController(Validators validators) {
+        this.validators = validators;
+    }
     
     @Autowired
     GenericInterface GenericInterface;
@@ -76,15 +80,24 @@ public class UsersController {
     @RequestMapping(value = "/user/generate-token", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity SignUser(@RequestHeader(value = "auth") String header,
             @RequestBody LoginRequest login) {
-        if (!validators.validHeaderExternal().equals(header)) {
-            return responseManager.InvalidAuthorizationHeader();
-        }
         NetworkResponse response = new NetworkResponse();
-        String token = validators.GenerateJSONWebToken(login.getUsername());
-        response.setMessage(token);
-        response.setCode(200);
-        response.setStatus("success");
-        return responseManager.ResponseOk(response);
+        if (validators.validHeaderExternal().equals(header)) {
+            String token = validators.GenerateJSONWebToken(login.getUsername());
+            response.setMessage(token);
+            response.setCode(200);
+            response.setStatus("success");
+            return responseManager.ResponseOk(response);
+        } else {     
+            boolean validUser = usersInterface.LoginExternal(login.getUsername(), header.split(" ")[1]);
+            if (validUser) {
+                String token = validators.GenerateJSONWebToken(login.getUsername());
+                response.setMessage(token);
+                response.setCode(200);
+                response.setStatus("success");
+                return responseManager.ResponseOk(response);
+            }
+        }
+        return responseManager.InvalidAuthorizationHeader();
     }
     
     @RequestMapping(value = "/users/login", method = RequestMethod.POST, headers = "Accept=application/json")

@@ -9,7 +9,7 @@ import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.interfaces.MerchantsInterface;
 import com.transgate.api.models.CardsMerchantModel;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -34,7 +34,11 @@ public class MerchantsController {
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+    // Constructor injection for RestCall
+    public MerchantsController(Validators validators) {
+        this.validators = validators;
+    }
     
     @Autowired
     GenericInterface GenericInterface;

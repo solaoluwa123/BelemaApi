@@ -12,8 +12,6 @@ import com.transgate.api.models.MenuModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.RoleModel;
 import com.transgate.api.models.UserModel;
-import com.transgate.api.models.WalletModel;
-import com.transgate.api.util.Mailers;
 import com.transgate.api.util.Randomizer;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import static java.lang.Integer.parseInt;
@@ -25,7 +23,6 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -41,14 +38,17 @@ import org.springframework.security.crypto.bcrypt.BCrypt;
 @Service
 public class UsersService implements UsersInterface {
     @Autowired
-    DataSource dataSource;
-
-    @Autowired
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
-    Mailers mailers = new Mailers();
+    
+    private final Validators validators;
+
+    // Constructor injection for RestCall
+    public UsersService(Validators validators) {
+        this.validators = validators;
+    }
     
     private int GetUserRole(String username, String session_token) {
         try {
@@ -333,6 +333,39 @@ public class UsersService implements UsersInterface {
     }
     
     @Override
+    public boolean LoginExternal(String username, String password) {
+        LoginResponse response = new LoginResponse();
+        try {
+            String SQL;
+            SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
+            int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
+            if (attemptsLeft == 0) {
+                SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
+                jdbcTemplate.update(SQL, new Object[]{username});
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
+                return false;
+            }
+            SQL = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret from sparkpayweb_db.tbl_users a "
+                    + "LEFT JOIN tbl_user_details b "
+                    + "ON a.username = b.email_address "
+                    + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
+            String security = "";
+            List<Map<String, Object>> users = jdbcTemplate.queryForList(SQL, new Object[]{username});
+            if (users.size() == 1) {
+                security = (String) users.get(0).get("password");
+            } else {
+                return false;
+            }
+            boolean comparePassword = BCrypt.checkpw(password, security);
+            return comparePassword;
+        } catch (DataAccessException ex) {
+            return false;
+        }
+    }
+    
+    @Override
     public ResponseEntity Login(String username, String password) {
         LoginResponse response = new LoginResponse();
         try {
@@ -363,9 +396,13 @@ public class UsersService implements UsersInterface {
 //                response.setTwofasecretkey(two_fa_secret);
             }
             boolean comparePassword = BCrypt.checkpw(password, security);
-            String sessiontoken = randomizer.GenerateToken(100);
+            Date date = new Date();
+            long time = date.getTime();
+            Date expirationDate = new Date(time + (1000 * 60 * 120)); //120mins
+            String sessiontoken = validators.GenerateJSONWebToken(username, expirationDate);
             response.setSession_token(sessiontoken);
             response.setUsername(username);
+//                String sessiontoken = randomizer.GenerateToken(100);
             if (comparePassword == true) {
                 SQL = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
                 jdbcTemplate.update(SQL, new Object[]{sessiontoken, username});

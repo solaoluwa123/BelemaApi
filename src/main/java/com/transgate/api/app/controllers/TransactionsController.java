@@ -9,7 +9,7 @@ import com.transgate.api.interfaces.TransactionsInterface;
 import com.transgate.api.models.DisputeModel;
 import com.transgate.api.models.TransactionModel;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -32,7 +32,11 @@ public class TransactionsController {
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+    // Constructor injection for RestCall
+    public TransactionsController(Validators validators) {
+        this.validators = validators;
+    }
     
     @RequestMapping(value = "/transactions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {

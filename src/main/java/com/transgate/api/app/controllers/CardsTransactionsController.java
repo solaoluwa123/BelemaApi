@@ -6,10 +6,10 @@
 package com.transgate.api.app.controllers;
 
 import com.transgate.api.interfaces.CardsTransactionsInterface;
+import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.models.CardsDisputeModel;
-import com.transgate.api.models.CardsTransactionModel;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -27,12 +27,20 @@ import org.springframework.web.bind.annotation.RestController;
  */
 @RestController
 public class CardsTransactionsController {
+    
+    @Autowired
+    private UsersInterface usersInterface;
+    
     @Autowired
     private CardsTransactionsInterface CardsTransactionsInterface;
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+    // Constructor injection for RestCall
+    public CardsTransactionsController(Validators validators) {
+        this.validators = validators;
+    }
     
     @RequestMapping(value = "/cards/transactions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {
@@ -286,13 +294,21 @@ public class CardsTransactionsController {
             @RequestHeader(value = "Authorization") String token, 
             @RequestHeader(value = "username") String username,
             @RequestBody CardsDisputeModel dispute) {
-        if (!validators.validHeaderExternal().equals(header)) {
-            return responseManager.InvalidAuthorizationHeader();
+        if (validators.validHeaderExternal().equals(header) || usersInterface.LoginExternal(username, header.split(" ")[1])) {
+            if (!validators.ValidateJSONWebToken(token, username)) {
+                return responseManager.ResponseUnathorized();
+            }
+            return CardsTransactionsInterface.LogDispute(
+                    token, 
+                    dispute.getTerminal_id(), 
+                    dispute.getRetrieval_ref_number(), 
+                    dispute.getSystem_trace_number(), 
+                    dispute.getProof_of_debit_uri(), 
+                    dispute.getLogged_by(), 
+                    true
+            );
         }
-        else if (!validators.ValidateJSONWebToken(token, username)) {
-            return responseManager.ResponseUnathorized();
-        }
-        return CardsTransactionsInterface.LogDispute(token, dispute.getTerminal_id(), dispute.getRetrieval_ref_number(), dispute.getSystem_trace_number(), dispute.getProof_of_debit_uri(), dispute.getLogged_by(), true);
+        return responseManager.ResponseUnathorized();
     }
     
     @RequestMapping(value = "/cards/transactions/disputes/{uniqueid}", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -300,13 +316,27 @@ public class CardsTransactionsController {
             @RequestHeader(value = "Authorization") String token,
             @RequestHeader(value = "username") String username,
             @PathVariable ("uniqueid") String uniqueid) {
-        if (!validators.validHeaderExternal().equals(header)) {
-            return responseManager.InvalidAuthorizationHeader();
+        if (validators.validHeaderExternal().equals(header) || usersInterface.LoginExternal(username, header.split(" ")[1])) {
+            if (!validators.ValidateJSONWebToken(token, username)) {
+                return responseManager.ResponseUnathorized();
+            }
+            return CardsTransactionsInterface.GetOneDispute(uniqueid);
         }
-        else if (!validators.ValidateJSONWebToken(token, username)) {
-            return responseManager.ResponseUnathorized();
+        return responseManager.ResponseUnathorized();
+    }
+    
+    @RequestMapping(value = "/cards/transactions/disputes", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetDisputesExternal(@RequestHeader(value = "auth") String header, 
+            @RequestHeader(value = "Authorization") String token,
+            @RequestHeader(value = "username") String username,
+            @RequestParam("search") String search) {
+        if (validators.validHeaderExternal().equals(header) || usersInterface.LoginExternal(username, header.split(" ")[1])) {
+            if (!validators.ValidateJSONWebToken(token, username)) {
+                return responseManager.ResponseUnathorized();
+            }
+            return CardsTransactionsInterface.GetDisputes(search);
         }
-        return CardsTransactionsInterface.GetOneDispute(uniqueid);
+        return responseManager.ResponseUnathorized();
     }
     
     @RequestMapping(value = "/cards/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")

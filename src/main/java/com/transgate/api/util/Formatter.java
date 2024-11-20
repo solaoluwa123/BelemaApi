@@ -1,70 +1,19 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
+ * Click nbfs://nbhost/SystemFileSystem/Templates/Classes/Class.java to edit this template
  */
 package com.transgate.api.util;
-import io.jsonwebtoken.JwtException;
-import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.SignatureAlgorithm;
-import java.security.Key;
+
 import java.text.NumberFormat;
-import java.util.Base64;
-import java.util.Date;
 import java.util.Locale;
-import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.crypto.spec.SecretKeySpec;
 
 /**
  *
  * @author Makintola
  */
-public class Validators {
-       
-    String secret = "sparkpayxbearerfactorajijetjwtscrete2023habari";
-
-    Key hmacKey = new SecretKeySpec(Base64.getDecoder().decode(secret), 
-                            SignatureAlgorithm.HS256.getJcaName());
-    
-    public final String GenerateJSONWebToken(String email) {
-        try {
-            Date date = new Date();
-            long time = date.getTime();
-            Date expirationDate = new Date(time + 300000l); //5mins
-            String token = Jwts.builder()
-                    .setIssuer("Ajijet-x-Habari")
-                    .setExpiration(expirationDate)
-                    .setIssuedAt(date)
-                    .setId(UUID.randomUUID().toString())
-                    .setSubject(email)
-                    .signWith(hmacKey)
-                    .compact();
-            return token;
-        } catch (JwtException e) {
-            System.out.println("JwtException: " + e);
-            return "";
-        }
-    }
-    
-    public final boolean ValidateJSONWebToken(String token, String email) {
-        try {
-            return Jwts.parserBuilder().setSigningKey(hmacKey).build().parseClaimsJws(token).getBody().getSubject().equals(email);
-        } catch (JwtException e) {
-            System.out.println("JwtException: " + e);
-            return false;
-        }
-    }
-    
-    public final String validHeader() {
-        return "Bearer 958455015C7DB0F3CEDD56F8F3E50E94568905B636A4954A478030E2603E8A7758F8843B7A6EDC837CA5C6B57B262FDF3B44C7FF706DC3EB991EECFC7840FEC7";
-    }
-    public final String validHeaderExternal() {
-        // supersoft-habari-sparkpay-sparkpay-supersoft sha512
-        return "Bearer 39debfdad98874cb5602df5ea2e6efc1177039e628897adc28c65f42d13800af0758edbe97605c49812192fd105854f113cba41192b2ddb093142ab7cc0f5056";
-    }
-    
+public class Formatter {
     public int removeLeadingZero(String str) {
         return Integer.parseInt(str);
 //        if (str.substring(0, 1).equals("0"))

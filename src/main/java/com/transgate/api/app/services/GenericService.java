@@ -41,6 +41,11 @@ public class GenericService implements GenericInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    private final AppEnvironmentConfig appConfig;
+    public GenericService(AppEnvironmentConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+    
     private int GetUserRole(String session_token) {
         try {
             int role;
@@ -206,7 +211,7 @@ public class GenericService implements GenericInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<Map<String, Object>> rows;
             String meta;
-            if (institution.equals(Constants.SYESTEMFICODE)) {
+            if (institution.equals(appConfig.getSystemFICode())) {
                 List<Map<String, Object>> _rows;
                 SQL = "SELECT a.institution_code FROM ajiswitch_db.tbl_nodes a WHERE a.issettlementbank = 0";
                 _rows = jdbcTemplate.queryForList(SQL);

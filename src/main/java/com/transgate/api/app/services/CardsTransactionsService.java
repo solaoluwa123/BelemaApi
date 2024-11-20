@@ -10,11 +10,11 @@ import com.transgate.api.models.CardsDisputeModel;
 import com.transgate.api.models.CardsTransactionModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.util.DateUtil;
+import com.transgate.api.util.Formatter;
 import com.transgate.api.util.Mailers;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.RestCall;
 import com.transgate.api.util.TransactionsCodeInterpreter;
-import com.transgate.api.util.Validators;
 import java.io.UnsupportedEncodingException;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -53,7 +54,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     TransactionsCodeInterpreter transactionsCodeInterpreter = new TransactionsCodeInterpreter();
     DateUtil dateUtil = new DateUtil();
     RestCall restCall = new RestCall();
-    Validators validators = new Validators();
+    Formatter formatter = new Formatter();
     Mailers mailers = new Mailers();
     
     String _temp_date = "2023-01-01 00:00:00";
@@ -66,7 +67,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
             return role;
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage() + "------------");
+//            System.out.println("error>>>>" + ex.getMessage() + "------------");
             return -100;
         }
     }
@@ -794,7 +795,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                             String nuban = "";
     //                        String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
     //                                ? "" : 
-    //                                restCall.getNuban(validators.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
+    //                                restCall.getNuban(formatter.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
                             String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
                             SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                             int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
@@ -840,7 +841,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 String cardholder_acct_number = (String) row.get("cardholder_acct_number");
                 int _id = (int) row.get("id");
                 _temp_date = (String) row.get("date_created").toString();
-                String nuban = cardholder_acct_number != null && cardholder_acct_number.length() > 17 ? restCall.getNuban(validators.FormatCardHolderAcctNum(cardholder_acct_number)) : "";
+                String nuban = cardholder_acct_number != null && cardholder_acct_number.length() > 17 ? restCall.getNuban(formatter.FormatCardHolderAcctNum(cardholder_acct_number)) : "";
 //                System.out.println("Last Dispute Updated Date: " + _temp_date + " Old Acct: " + cardholder_acct_number + " NUBAN: " + nuban);
                 SQL = "UPDATE sparkpayweb_db.tbl_disputes SET cardholder_acct_nuban = ? WHERE id = ?";
                 int update = jdbcTemplate.update(SQL, new Object[]{nuban, _id});
@@ -950,7 +951,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 } 
 //                String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
 //                        ? "" : 
-//                        restCall.getNuban(validators.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
+//                        restCall.getNuban(formatter.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
                 String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution"; 
                 SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                 int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, proof_of_debit_uri, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
@@ -1109,6 +1110,39 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             networkResponse.setMessage("All Arbitrated Disputes by Institution: " + institutioncode);
             networkResponse.setData((ArrayList) transactions);
             networkResponse.setMeta(meta);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
+    public ResponseEntity GetDisputes(String uniqueIds) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        List<String> idArray = new ArrayList<>(Arrays.asList(uniqueIds.split(",")));
+        if (idArray.size() > 10) {
+            networkResponse.setCode(400);
+            networkResponse.setMessage("Rquest size must be lesser or equal to 10");
+            networkResponse.setStatus("bad request");
+            return responseManager.ResponseOk(networkResponse);
+        }
+        try {    
+             String placeholders = idArray.stream()
+                                 .map(id -> "?")
+                                 .collect(Collectors.joining(","));
+            String SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+                            + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
+                            + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
+                            + "FROM sparkpayweb_db.tbl_disputes a "
+                            + "WHERE a.unique_log_code IN (" + placeholders + ")";
+            List<CardsDisputeModel> transactions = jdbcTemplate.query(SQL, idArray.toArray(), new CardsTransactionsDisputesMapper());
+                        
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Found total of: " + transactions.size() + " disputes");
+            networkResponse.setData((ArrayList) transactions);
             
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
@@ -1492,7 +1526,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setDate_arbitrated(rs.getString("date_arbitrated"));
             tnx.setCardholder_acct_nuban(rs.getString("cardholder_acct_nuban"));
             tnx.setResponse_code(rs.getString("response_code"));
-            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? validators.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : "");
+            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? formatter.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : "");
             tnx.setStatus_code_message(rs.getString("response_code") != null && rs.getString("response_code").toLowerCase() != "null" && rs.getString("response_code") != "" ? transactionsCodeInterpreter.GetResponse(rs.getString("response_code")) : "");
             if (hasColumn(rs, "arbitration_closed_date"))
                 tnx.setArbitration_closed_by(rs.getString("arbitration_closed_date"));
@@ -1535,7 +1569,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setEncrypted_expiry_date(rs.getString("encrypted_expiry_date"));
             tnx.setEncrypted_pan(rs.getString("encrypted_pan"));
             tnx.setApproval_code(rs.getString("approval_code"));
-            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? validators.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : rs.getString("cardholder_acct_number"));
+            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? formatter.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : rs.getString("cardholder_acct_number"));
             tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
             tnx.setDestination_acquiring_institution_name(rs.getString("station_name") != null ? rs.getString("station_name") : "");
             tnx.setIsTxnReversed(rs.getString("isTxnReversed"));

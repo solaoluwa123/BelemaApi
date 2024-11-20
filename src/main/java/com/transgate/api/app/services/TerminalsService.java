@@ -38,6 +38,11 @@ public class TerminalsService implements TerminalsInterface {
 
     ResponseManager responseManager = new ResponseManager();
     
+    private final AppEnvironmentConfig appConfig;
+    public TerminalsService(AppEnvironmentConfig appConfig) {
+        this.appConfig = appConfig;
+    }
+    
     private int GetUserRole(String session_token) {
         try {
             int role;
@@ -326,7 +331,7 @@ public class TerminalsService implements TerminalsInterface {
                     retval = jdbcTemplate.update(SQL, new Object[]{terminal_id});
                     if (retval > 0) {
                         SQL = "INSERT INTO postxnprocessor.transaction_keys VALUES(8603, ?, '', '', '', '', 0, 0, now(), now(), '', '', 0, now(), ?, ?, ?, '', 0)";
-                        retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, Constants.SESSIONMASTERKEY, Constants.SESSIONMASTERKEYCHECKVALUE, Constants.SESSIONMASTERKEY_2});
+                        retval = jdbcTemplate.update(SQL, new Object[]{terminal_id, appConfig.getSessionMasterKey(), appConfig.getSessionMasterKeyCheckValue(), appConfig.getSessionMasterKey2()});
                         if (retval > 0) 
                             return responseManager.ResponseAccepted();
                         else 

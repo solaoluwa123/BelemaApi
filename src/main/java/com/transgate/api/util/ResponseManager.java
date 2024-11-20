@@ -26,6 +26,14 @@ public class ResponseManager {
         return new ResponseEntity(networkResponse, HttpStatus.FORBIDDEN);
     }
     
+    public ResponseEntity InvalidSession() {
+        NetworkResponse networkResponse = new NetworkResponse();
+        networkResponse.setCode(401);
+        networkResponse.setStatus("invalid session");
+        networkResponse.setMessage("Invalid Session");
+        return new ResponseEntity(networkResponse, HttpStatus.UNAUTHORIZED);
+    }
+    
     public ResponseEntity ResponseAccepted() {
         NetworkResponse networkResponse = new NetworkResponse();
         networkResponse.setCode(200);

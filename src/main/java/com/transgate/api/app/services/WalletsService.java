@@ -11,18 +11,11 @@ import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.WalletModel;
 import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import javax.sql.DataSource;
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -38,15 +31,11 @@ import java.math.BigDecimal;
  */
 @Service
 public class WalletsService implements WalletsInterface {
-    @Autowired
-    DataSource dataSource;
 
     @Autowired
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
-    Randomizer randomizer = new Randomizer();
-    Validators validators = new Validators();
     
     @Autowired
     private FinancialInstitutionsInterface financialInstitutionsInterface;
@@ -490,7 +479,7 @@ public class WalletsService implements WalletsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
 //            String meta;
 //            int offset = page > 1 ? (page - 1) * limit : 0;
-            String table = isCurrent ? "ajiswitch_db.tbl_wallet_activities " : "ajiswitch_db.tbl_wallet_activities_hist ";
+            String table = isCurrent ? "ajiswitch_db.tbl_wallet_activities " : "ajiswitch_db.tbl_wallet_activities ";
             String debitActors = "('eseoghene.onoriode@habaripay@com','omoyosola.afolayan@habaripay.com','valerie.ejegi@habaripay.com')";
             String SQL = "SELECT * FROM "+table
                     + "WHERE walletnumber = ? "

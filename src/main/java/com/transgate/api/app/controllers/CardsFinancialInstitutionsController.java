@@ -9,7 +9,7 @@ import com.transgate.api.interfaces.CardsFinancialInstitutionsInterface;
 import com.transgate.api.interfaces.GenericInterface;
 import com.transgate.api.models.CardsFinancialInstitutionModel;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -32,7 +32,11 @@ public class CardsFinancialInstitutionsController {
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+    // Constructor injection for RestCall
+    public CardsFinancialInstitutionsController(Validators validators) {
+        this.validators = validators;
+    }
     
     @Autowired
     GenericInterface GenericInterface;

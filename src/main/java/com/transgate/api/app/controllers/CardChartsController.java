@@ -6,11 +6,8 @@
 package com.transgate.api.app.controllers;
 
 import com.transgate.api.interfaces.CardChartInterface;
-import com.transgate.api.interfaces.TransactionsInterface;
-import com.transgate.api.models.DisputeModel;
-import com.transgate.api.models.TransactionModel;
 import com.transgate.api.util.ResponseManager;
-import com.transgate.api.util.Validators;
+import com.transgate.api.app.services.Validators;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -27,7 +24,12 @@ public class CardChartsController {
     
     ResponseManager responseManager = new ResponseManager();
     
-    Validators validators = new Validators();
+    private final Validators validators;
+
+    // Constructor injection for RestCall
+    public CardChartsController(Validators validators) {
+        this.validators = validators;
+    }
         
     @RequestMapping(value = "/successful-transactions-count", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetSuccessTNXVolume(@RequestHeader(value = "Authorization") String header,

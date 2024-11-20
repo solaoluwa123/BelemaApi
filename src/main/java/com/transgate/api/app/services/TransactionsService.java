@@ -1178,7 +1178,7 @@ public class TransactionsService implements TransactionsInterface {
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {    
-            String SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, "
+            String SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, a.destination_node, "
                     + "b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1187,7 +1187,7 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.destination_institution_code = c.code "
                     + "WHERE a.session_id IN ("+sessionids+")";
             List<TransactionHalfModel> transactions = jdbcTemplate.query(SQL, new TransactionHalfMapper());
-            SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, "
+            SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, a.destination_node, "
                     + "b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1211,7 +1211,7 @@ public class TransactionsService implements TransactionsInterface {
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {    
-            String SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, "
+            String SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, a.destination_node, "
                     + "b.name as srcInstitutionName, c.name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
                     + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1220,9 +1220,8 @@ public class TransactionsService implements TransactionsInterface {
                     + "ON a.destination_institution_code = c.code "
                     + "WHERE a.session_id IN ("+sessionids+") AND a.transaction_date_time BETWEEN '"+startDate+"' AND '"+endDate+"'";
             List<TransactionHalfModel> transactions = jdbcTemplate.query(SQL, new TransactionHalfMapper());
-            System.out.println("::" + SQL);
             if (transactions.size() < 1) {
-                SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, "
+                SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, a.destination_node, "
                         + "b.name as srcInstitutionName, c.name as destInstitutionName "
                         + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
                         + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
@@ -1232,7 +1231,6 @@ public class TransactionsService implements TransactionsInterface {
                         + "WHERE a.session_id IN ("+sessionids+") AND a.transaction_date_time BETWEEN '"+startDate+"' AND '"+endDate+"'";
                 List<TransactionHalfModel> transactions_s = jdbcTemplate.query(SQL, new TransactionHalfMapper());
                 transactions.addAll(transactions_s);
-            System.out.println("::" + SQL);
             }
             networkResponse.setCode(200);
             networkResponse.setMessage("Transactions For Uploaded Session IDs");
@@ -2097,6 +2095,16 @@ public class TransactionsService implements TransactionsInterface {
             response.setResponsecode(rs.getString("response_code"));
             response.setResponsecodedefinition(responseCodeInterpreter.InterpreteCode(rs.getString("response_code") == null || rs.getString("response_code").equals("null") ? "" : rs.getString("response_code")));
             response.setTransactiondate(rs.getString("transaction_date_time"));
+            if (ColumnExistinRS(rs, "destination_node")) {
+                switch(rs.getString("destination_node")) {
+                    case "9082":
+                        response.setDestNodeInstitutionName("NIP");
+                        break;
+                    default:
+                        response.setDestNodeInstitutionName("HabariPay");
+                        break;
+                }
+            }
             return response;
         }
     }

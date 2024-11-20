@@ -8,12 +8,9 @@ package com.transgate.api.util;
 import java.io.File;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  *
@@ -21,7 +18,8 @@ import java.util.regex.Pattern;
  */
 public class CSVHelper {
     
-    Validators validators = new Validators();
+    Formatter formatter = new Formatter();
+    
     public final String WriteFile(
             String fileName,
             String[] headers,
@@ -29,8 +27,7 @@ public class CSVHelper {
     ) {
         FileWriter writer = null;
         try {
-            String location = "";
-            String csvFilePath = "C:\\Supersoft\\accepteddisputereports\\"+validators.RemoveSpecialCharacters(fileName)+".csv";
+            String csvFilePath = "C:\\Supersoft\\accepteddisputereports\\"+formatter.RemoveSpecialCharacters(fileName)+".csv";
             File csvFile = new File(csvFilePath);
             if (!csvFile.exists()) {
                 csvFile.createNewFile();
