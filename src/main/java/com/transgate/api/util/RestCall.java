@@ -23,7 +23,7 @@ public class RestCall {
     
     public String getNuban(String accountNumber) throws JSONException {
         HttpURLConnection connection = null;
-        String nuban = "";
+        String nuban = accountNumber;
         try {
             URL url = new URL("https://habaripay.gtbank.com/bank-services/v1/retrieve-nuban?accountNumber="+accountNumber);
             connection = (HttpURLConnection) url.openConnection();
@@ -38,7 +38,7 @@ public class RestCall {
                 myResponse.append(my_response);
             }
             JSONObject response = new JSONObject(myResponse.toString());
-            nuban = response.getBoolean("success") ? response.getJSONObject("data").getString("nuban") : "";
+            nuban = response.getBoolean("success") ? response.getJSONObject("data").getString("nuban") : nuban;
         } catch (IOException e) {
             System.out.println(e.toString());
         } finally {

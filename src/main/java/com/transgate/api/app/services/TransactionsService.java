@@ -167,41 +167,82 @@ public class TransactionsService implements TransactionsInterface {
             String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
-            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
-                + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
-                + "a.destination_node "
-                + "FROM " + table + " a "
-                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                + "ON a.source_institution_code = b.code "
-                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                + "ON a.destination_institution_code = c.code "
-//                + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
-//                + "ON a.destination_node = n.port_number "
-                + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
-                + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
-            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
-
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                + "FROM "+ table +" a "
-                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                + "ON a.source_institution_code = b.code "
-                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                + "ON a.destination_institution_code = c.code "
-                + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
-                + "ORDER BY a.id DESC";
-            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
+            List<Map<String, Object>> agg;
+            if (isCurrent) {
+                SQL = "("
+                        + "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                            + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                            + "a.destination_node "
+                            + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                            + "ON a.source_institution_code = b.code "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                            + "ON a.destination_institution_code = c.code "
+        //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+        //                    + "ON a.destination_node = n.port_number "
+                            + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                        + ")"
+                        + " UNION ALL ("
+                            + "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                            + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                            + "a.destination_node "
+                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                            + "ON a.source_institution_code = b.code "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                            + "ON a.destination_institution_code = c.code "
+        //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+        //                    + "ON a.destination_node = n.port_number "
+                            + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                        + ")"
+                        + " ORDER BY id DESC LIMIT ? OFFSET ?";
+                transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
+                
+                SQL = "SELECT SUM(amount) as totalValue, COUNT(*) as totalRecords "
+                    + "FROM (SELECT a.amount FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                    + " UNION ALL SELECT a.amount FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                    + ") AS combined_results";
+                agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, startDate, endDate, institutioncode, institutioncode});
+            }
+            else {
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                    + "a.destination_node "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code "
+    //                + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+    //                + "ON a.destination_node = n.port_number "
+                    + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
+                transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
+                
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
+                    + "ORDER BY a.id DESC";
+                agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
+            }
+            
             Map<String, Object> row = agg.get(0);
             BigDecimal tValue = (BigDecimal) row.get("totalValue");
             Double totalValue = tValue != null ? tValue.doubleValue() : 0;
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+//            SQL = "SELECT MIN(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//            String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+//            SQL = "SELECT MAX(transaction_date_time) from ajiswitch_db.tbl_creditfundtransfers";
+//            String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
             networkResponse.setMeta(meta);
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("Transactions By Institution: " + institutioncode);
+            networkResponse.setMessage("All Transactions");
             networkResponse.setData((ArrayList) transactions);
             
             return responseManager.ResponseOk(networkResponse);
@@ -218,30 +259,72 @@ public class TransactionsService implements TransactionsInterface {
             String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
-            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
-                + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
-                + "a.destination_node "
-                + "FROM "+table+" a "
-                + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                + "ON a.source_institution_code = b.code "
-                + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                + "ON a.destination_institution_code = c.code "
-//                + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
-//                + "ON a.destination_node = n.port_number "
-                + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
-                + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
-            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
-
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                + "FROM "+table+" a "
+            List<Map<String, Object>> agg;
+            if (isCurrent) {
+                SQL = "("
+                        + "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                            + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                            + "a.destination_node "
+                            + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                            + "ON a.source_institution_code = b.code "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                            + "ON a.destination_institution_code = c.code "
+        //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+        //                    + "ON a.destination_node = n.port_number "
+                            + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                        + ")"
+                        + " UNION ALL "
+                        + "("
+                            + "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                            + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                            + "a.destination_node "
+                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                            + "ON a.source_institution_code = b.code "
+                            + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                            + "ON a.destination_institution_code = c.code "
+        //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+        //                    + "ON a.destination_node = n.port_number "
+                            + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                        + ")"
+                    + " ORDER BY id DESC LIMIT ? OFFSET ?";
+                transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, startDate, endDate, limit, offset}, new FullTransactionMapper());
+                
+                SQL = "SELECT SUM(amount) as totalValue, COUNT(*) as totalRecords "
+                    + "FROM (SELECT a.amount FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                    + " UNION ALL SELECT a.amount FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                    + ") AS combined_results";
+                agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, startDate, endDate});
+            }
+            else {
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                    + "a.destination_node "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.source_institution_code = b.code "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                    + "ON a.destination_institution_code = c.code "
+    //                + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+    //                + "ON a.destination_node = n.port_number "
+                    + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
+                    + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
+                transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
+                
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
                 + "ON a.source_institution_code = b.code "
                 + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
                 + "ON a.destination_institution_code = c.code "
                 + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
                 + "ORDER BY a.id DESC";
-            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            }
+            
             Map<String, Object> row = agg.get(0);
             BigDecimal tValue = (BigDecimal) row.get("totalValue");
             Double totalValue = tValue != null ? tValue.doubleValue() : 0;
@@ -359,27 +442,41 @@ public class TransactionsService implements TransactionsInterface {
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<FullTransactionModel> transactions;
             if (isCurrent) {
-                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
-                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
-                    + "a.destination_node "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                    + "ON a.destination_institution_code = c.code "
-//                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
-//                    + "ON a.destination_node = n.port_number "
-                    + whereQuery
-                    + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
+                SQL = "("
+                    + "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                        + "a.destination_node "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                        + "ON a.source_institution_code = b.code "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                        + "ON a.destination_institution_code = c.code "
+    //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+    //                    + "ON a.destination_node = n.port_number "
+                        + whereQuery+""
+                    + ")" +
+                    " UNION ALL ("
+                        + "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
+                        + "a.destination_node "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                        + "ON a.source_institution_code = b.code "
+                        + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
+                        + "ON a.destination_institution_code = c.code "
+    //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
+    //                    + "ON a.destination_node = n.port_number "
+                        + whereQuery+""
+                    + ")"
+                    + " ORDER BY id DESC LIMIT ? OFFSET ?";
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
 
-                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                    + "ON a.destination_institution_code = c.code " + whereQuery
-                    + " ORDER BY a.id DESC";
+                SQL = "SELECT SUM(amount) as totalValue, COUNT(*) as totalRecords "
+                    + "FROM (SELECT a.amount FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + whereQuery
+                    + " UNION ALL SELECT a.amount FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + whereQuery
+                    + ") AS combined_results";
             } else {
                 SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
@@ -397,15 +494,12 @@ public class TransactionsService implements TransactionsInterface {
 
                 SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                     + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                    + "ON a.destination_institution_code = c.code " + whereQuery
-                    + " ORDER BY a.id DESC";
+                    + whereQuery;
             }
-            LocalTime currentTime = LocalTime.now();
-            int hour = currentTime.getHour();
-            if (isCurrent && transactions.size() < 1 && hour >= 12) {
+//            LocalTime currentTime = LocalTime.now();
+//            int hour = currentTime.getHour();
+//            if (isCurrent && transactions.size() < 1 && hour >= 12) {
+            if (isCurrent && transactions.size() < 1) {
                 SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name as srcInstitutionName, c.name as destInstitutionName, "
                     + "a.destination_node "
@@ -422,11 +516,7 @@ public class TransactionsService implements TransactionsInterface {
 
                 SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
                     + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
-                    + "ON a.source_institution_code = b.code "
-                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions c "
-                    + "ON a.destination_institution_code = c.code " + whereQuery
-                    + " ORDER BY a.id DESC";
+                    + whereQuery;
             }
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);

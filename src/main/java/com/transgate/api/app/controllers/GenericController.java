@@ -211,6 +211,24 @@ public class GenericController {
         return GenericInterface.GetCardPayments(institutioncode, startDate, endDate, page, limit, response_code, transaction_id, merchant_name.replaceAll("space", " "));
     }
     
+    @RequestMapping(value = "/nuspayments/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetCardNUSPayments(@RequestHeader(value = "Authorization") String header, 
+            @RequestHeader(value = "auth-token") String sessiontoken, 
+            @PathVariable ("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate, 
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @RequestParam("response_code") String response_code, 
+            @RequestParam("transaction_id") String transaction_id, 
+            @RequestParam("merchant_name") String merchant_name
+    ) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return GenericInterface.GetCardNUSPayments(institutioncode, startDate, endDate, page, limit, response_code, transaction_id, merchant_name.replaceAll("space", " "));
+    }
+    
     @RequestMapping(value = "/gapspayments", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetGapsPayments(@RequestHeader(value = "Authorization") String header, 
             @RequestHeader(value = "auth-token") String sessiontoken, 

@@ -386,6 +386,7 @@ public class UsersService implements UsersInterface {
                     + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
 //            String security = jdbcTemplate.queryForObject(SQL, new Object[]{username}, String.class);
             String security = "", two_fa_secret = "";
+            boolean comparePassword = false;
             int two_fa_enabled = 0;
             List<Map<String, Object>> users = jdbcTemplate.queryForList(SQL, new Object[]{username});
             if (users.size() > 0) {
@@ -395,7 +396,8 @@ public class UsersService implements UsersInterface {
                 response.setTwofaenabled(two_fa_enabled);
 //                response.setTwofasecretkey(two_fa_secret);
             }
-            boolean comparePassword = BCrypt.checkpw(password, security);
+            if (password.length() > 0)
+                comparePassword = BCrypt.checkpw(password, security);
             Date date = new Date();
             long time = date.getTime();
             Date expirationDate = new Date(time + (1000 * 60 * 120)); //120mins

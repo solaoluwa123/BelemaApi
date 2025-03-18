@@ -841,7 +841,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 String cardholder_acct_number = (String) row.get("cardholder_acct_number");
                 int _id = (int) row.get("id");
                 _temp_date = (String) row.get("date_created").toString();
-                String nuban = cardholder_acct_number != null && cardholder_acct_number.length() > 17 ? restCall.getNuban(formatter.FormatCardHolderAcctNum(cardholder_acct_number)) : "";
+                String nuban = cardholder_acct_number != null && cardholder_acct_number.length() > 17 ? restCall.getNuban(formatter.FormatCardHolderAcctNum(cardholder_acct_number)) : cardholder_acct_number;
 //                System.out.println("Last Dispute Updated Date: " + _temp_date + " Old Acct: " + cardholder_acct_number + " NUBAN: " + nuban);
                 SQL = "UPDATE sparkpayweb_db.tbl_disputes SET cardholder_acct_nuban = ? WHERE id = ?";
                 int update = jdbcTemplate.update(SQL, new Object[]{nuban, _id});

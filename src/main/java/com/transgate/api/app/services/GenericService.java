@@ -1021,6 +1021,71 @@ public class GenericService implements GenericInterface {
     }
     
     @Override
+    public ResponseEntity GetCardNUSPayments(String institutionCode, String startDate, String endDate, int page, int limit, String response_code, String transaction_id, String merchant_name) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            String SQL;
+            int offset = page > 1 ? (page - 1) * limit : 0;
+            List<Map<String, Object>> payments;
+            String whereQuery = !startDate.equals("")
+                    || !endDate.equals("")
+                    || !response_code.equals("")
+                    || !transaction_id.equals("")
+                    || !merchant_name.equals("")
+                    ? "WHERE" : "";
+            
+            if (!startDate.equals("") && !endDate.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.txndatetime BETWEEN '" + startDate + "' AND '" + endDate + "'";
+            }
+            if (!response_code.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                if (response_code.equals("111"))
+                    whereQuery+=" a.responsecode != 00";
+                else                    
+                    whereQuery+=" a.responsecode = " + response_code+"";
+            }
+            if (!transaction_id.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.transactionid = '" + transaction_id + "'";
+            }
+            if (!merchant_name.equals("")) {
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
+                whereQuery+=" a.merchantname LIKE '%" + merchant_name + "%'";
+            }
+//            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
+            SQL = "SELECT a.amount, a.transactionid, a.merchantname, a.responsecode, a.responsemessage, a.txndatetime "
+                + "FROM cardweb_db.tbl_nuspayments a "
+                + whereQuery
+                + " ORDER BY a.txndatetime DESC LIMIT ? OFFSET ?";
+            payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
+            SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amount) as totalValue "
+                + "FROM cardweb_db.tbl_nuspayments a "
+                + whereQuery;
+
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
+            Map<String, Object> row = agg.get(0);
+            BigDecimal tValue = (BigDecimal) row.get("totalValue");
+            Double totalValue = tValue != null ? tValue.doubleValue() : 0;
+            Long tRecords = (Long) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            networkResponse.setMeta(meta);
+//            }
+            
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All cards payments");
+            networkResponse.setData((ArrayList) payments);
+            
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+    
+    @Override
     public ResponseEntity GetGapsPayments(String merchant_id, String startDate, String endDate, int page, int limit, String isSettled, String reference) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {

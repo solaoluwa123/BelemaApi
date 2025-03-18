@@ -38,4 +38,5 @@ public interface GenericInterface {
     public ResponseEntity GetCardPayments(String institutionCode, String startDate, String endDate, int page, int limit, String response_code, String transaction_id, String merchant_name);
     public ResponseEntity GetGapsPayments(String merchant_id, String startDate, String endDate, int page, int limit, String isSettled, String reference);
     public ResponseEntity GetTNXStatusChange(String session_id, String startDate, String endDate, int page, int limit, String requested_by, String approved_by, String current_status, String new_status, String status);
+    public ResponseEntity GetCardNUSPayments(String institutionCode, String startDate, String endDate, int page, int limit, String response_code, String transaction_id, String merchant_name);
 }
