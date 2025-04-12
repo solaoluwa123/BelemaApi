@@ -23,6 +23,8 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -37,19 +39,22 @@ import org.springframework.security.crypto.bcrypt.BCrypt;
  */
 @Service
 public class UsersService implements UsersInterface {
+
     @Autowired
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
-    
+    private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
+
+
     private final Validators validators;
 
     // Constructor injection for RestCall
     public UsersService(Validators validators) {
         this.validators = validators;
     }
-    
+
     private int GetUserRole(String username, String session_token) {
         try {
             int role;
@@ -62,7 +67,7 @@ public class UsersService implements UsersInterface {
             return -100;
         }
     }
-    
+
     private String GetUserSecret(String username, String session_token) {
         try {
             String secret;
@@ -79,7 +84,7 @@ public class UsersService implements UsersInterface {
             return "";
         }
     }
-    
+
     private boolean CheckExistingUser(String email_address) {
         boolean found;
         try {
@@ -88,14 +93,14 @@ public class UsersService implements UsersInterface {
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{email_address}, int.class);
 
             found = totalRows > 0;
-            
+
             return found;
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return false;
         }
     }
-    
+
     private boolean CheckUserPending(String username, String email_address, String actionType) {
         boolean found;
         try {
@@ -104,14 +109,14 @@ public class UsersService implements UsersInterface {
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{username, actionType, email_address, actionType}, int.class);
 
             found = totalRows > 0;
-            
+
             return found;
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return false;
         }
     }
-    
+
     private List<UserModel> GetUserFromPendings(int id, String actionType) {
         try {
             String SQL;
@@ -123,13 +128,13 @@ public class UsersService implements UsersInterface {
                     + "ORDER BY a.id DESC";
             List<UserModel> users = jdbcTemplate.query(SQL, new Object[]{id, actionType}, new UserMapper2());
             return users;
-            
+
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return null;
         }
     }
-    
+
     @Override
     public ResponseEntity ClearUserSession(String sessiontoken, String username) {
         try {
@@ -141,7 +146,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseUnathorized();
         }
     }
-            
+
     @Override
     public ResponseEntity Login2FA(String _sessiontoken, String username, String password) {
         LoginResponse response = new LoginResponse();
@@ -165,7 +170,7 @@ public class UsersService implements UsersInterface {
                         + "LEFT JOIN tbl_financial_institutions d "
                         + "ON c.financial_institution_code = d.code "
                         + "WHERE a.email_address = ? || a.username = ? AND a.deleted = 0";
-                
+
                 List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{username, username}, new UserMapper());
                 response.setCode(200);
                 response.setStatus("success");
@@ -187,8 +192,7 @@ public class UsersService implements UsersInterface {
                     response.setLast_login(details.get(0).getLast_login());
                     response.setSession_token(sessiontoken);
                     response.setDate_updated(details.get(0).getDate_updated());
-                }
-                else {
+                } else {
                     userRoleid = 4;
                     response.setId(parseInt(randomizer.GenerateReference(5, "1234567890")));
                     response.setUsername(username);
@@ -201,7 +205,7 @@ public class UsersService implements UsersInterface {
                     response.setDate_created((new Date()).toString());
                     response.setDate_updated(null);
                 }
-                
+
                 if (userRoleid == 5) {
                     SQL = "SELECT a.id, a.institution_id, b.acquirer_id, b.institution_name "
                             + "FROM tbl_map_card_users_institution a "
@@ -214,8 +218,7 @@ public class UsersService implements UsersInterface {
                         response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
-                
-                
+
                 if (userRoleid == 6) {
                     SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
@@ -226,7 +229,7 @@ public class UsersService implements UsersInterface {
                         response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
-                
+
                 if (userRoleid == 7) {
                     SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
@@ -237,7 +240,7 @@ public class UsersService implements UsersInterface {
                         response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
-                
+
                 if (userRoleid == 8) {
                     SQL = "SELECT a.id, a.institution_id, a.institution_name "
                             + "FROM tbl_map_card_users_institution a "
@@ -248,9 +251,9 @@ public class UsersService implements UsersInterface {
                         response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
                     }
                 }
-                
+
                 List<MenuModel> menu;
-                if (userRoleid < 5){
+                if (userRoleid < 5) {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
@@ -261,13 +264,11 @@ public class UsersService implements UsersInterface {
 
                     if (menu.size() > 0) {
                         response.setTransgateMenu(menu);
-                    }
-                    else {
+                    } else {
                         List<MenuModel> eM = new ArrayList<>();
                         response.setTransgateMenu(eM);
                     }
-                }
-                else if (userRoleid == 8) {
+                } else if (userRoleid == 8) {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
@@ -278,40 +279,38 @@ public class UsersService implements UsersInterface {
 
                     if (menu.size() > 0) {
                         response.setTransgateMenu(menu);
-                    }
-                    else {
+                    } else {
                         List<MenuModel> eM = new ArrayList<>();
                         response.setTransgateMenu(eM);
                     }
-                }
-                else
+                } else {
                     response.setTransgateMenu(new ArrayList<>());
-                if (userRoleid < 4) 
+                }
+                if (userRoleid < 4) {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
                             + "ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 2 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
                             + "ORDER BY a.id ASC";
-                else
+                } else {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
                             + "ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
                             + "ORDER BY a.id ASC";
+                }
                 menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
-                
+
                 if (menu.size() > 0) {
                     response.setSparkpayMenu(menu);
-                }
-                else {
+                } else {
                     List<MenuModel> eM = new ArrayList<>();
                     response.setSparkpayMenu(eM);
                 }
                 return responseManager.ResponseOk(response);
-            }
-            else {
+            } else {
                 SQL = "UPDATE tbl_user_details SET attempts_left = attempts_left - 1 WHERE email_address = ?";
                 jdbcTemplate.update(SQL, new Object[]{username});
                 response.setCode(404);
@@ -331,7 +330,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseUnathorized();
         }
     }
-    
+
     @Override
     public boolean LoginExternal(String username, String password) {
         LoginResponse response = new LoginResponse();
@@ -364,76 +363,97 @@ public class UsersService implements UsersInterface {
             return false;
         }
     }
-    
+
     @Override
     public ResponseEntity Login(String username, String password) {
+        logger.info("Login attempt initiated for user: {}", username);
         LoginResponse response = new LoginResponse();
         try {
-            String SQL;
-            SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
-            int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
+            // Query to fetch the number of login attempts left
+            String sql = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
+             logger.info("{} : sql query to get attempts left {} -->", username, sql);
+            int attemptsLeft = jdbcTemplate.queryForObject(sql, new Object[]{username}, int.class);
+            logger.info("User {} has {} login attempts remaining.", username, attemptsLeft);
+
             if (attemptsLeft == 0) {
-                SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
-                jdbcTemplate.update(SQL, new Object[]{username});
+                logger.warn("Account locked for user {} due to multiple failed login attempts.", username);
+                sql = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
+                logger.info("{} : sql query to update unlock time --> {}.", username, sql);
+                jdbcTemplate.update(sql, new Object[]{username});
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
                 return responseManager.ResponseOk(response);
             }
-            SQL = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret from sparkpayweb_db.tbl_users a "
-                    + "LEFT JOIN tbl_user_details b "
-                    + "ON a.username = b.email_address "
+
+            // Query to obtain user security details including password and two-factor configuration
+            sql = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret from sparkpayweb_db.tbl_users a "
+                    + "LEFT JOIN tbl_user_details b ON a.username = b.email_address "
                     + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
-//            String security = jdbcTemplate.queryForObject(SQL, new Object[]{username}, String.class);
-            String security = "", two_fa_secret = "";
+            logger.info("Fetching security details for user --> {}", username);
+            logger.info("{} : sql query to obtain user security details including password and two-factor configuration {}.", username, sql);
+            List<Map<String, Object>> users = jdbcTemplate.queryForList(sql, new Object[]{username});
+            String security = "";
+            String twoFaSecret = "";
             boolean comparePassword = false;
-            int two_fa_enabled = 0;
-            List<Map<String, Object>> users = jdbcTemplate.queryForList(SQL, new Object[]{username});
-            if (users.size() > 0) {
+            int twoFaEnabled = 0;
+
+            if (!users.isEmpty()) {
                 security = (String) users.get(0).get("password");
-                two_fa_secret = (String) users.get(0).get("two_fa_secret");
-                two_fa_enabled = (int) users.get(0).get("two_fa_enabled");
-                response.setTwofaenabled(two_fa_enabled);
-//                response.setTwofasecretkey(two_fa_secret);
+                twoFaSecret = (String) users.get(0).get("two_fa_secret");
+                twoFaEnabled = (int) users.get(0).get("two_fa_enabled");
+                response.setTwofaenabled(twoFaEnabled);
+                logger.info("User {} found. two_fa_enabled: {}.", username, twoFaEnabled);
+            } else {
+                logger.info("No matching user record found for username: {}", username);
             }
-            if (password.length() > 0)
+            logger.info("Password before check for user {}: {}", username, password);
+            if (password != null && password.length() > 0) {
+                logger.info("Password after check for user {}: {}", username, password);
                 comparePassword = BCrypt.checkpw(password, security);
-            Date date = new Date();
-            long time = date.getTime();
-            Date expirationDate = new Date(time + (1000 * 60 * 120)); //120mins
-            String sessiontoken = validators.GenerateJSONWebToken(username, expirationDate);
-            response.setSession_token(sessiontoken);
+                logger.info("Password comparison result for user {}: {}", username, comparePassword);
+            }
+
+            // Generate JWT session token valid for 120 minutes
+            Date now = new Date();
+            Date expirationDate = new Date(now.getTime() + (1000 * 60 * 120)); // 120 minutes
+            String sessionToken = validators.GenerateJSONWebToken(username, expirationDate);
+            response.setSession_token(sessionToken);
             response.setUsername(username);
-//                String sessiontoken = randomizer.GenerateToken(100);
-            if (comparePassword == true) {
-                SQL = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
-                jdbcTemplate.update(SQL, new Object[]{sessiontoken, username});
-                if (two_fa_enabled == 1) {
+            logger.info("Session token generated for user {}: {}", username, sessionToken);
+
+            if (comparePassword) {
+                sql = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
+                logger.info("{} : sql query to reset password{}.", username, sql);
+                jdbcTemplate.update(sql, new Object[]{sessionToken, username});
+                logger.info("User {} authenticated successfully.", username);
+
+                // If two-factor authentication is enabled, return response early
+                if (twoFaEnabled == 1) {
                     response.setCode(200);
                     response.setStatus("success");
                     response.setMessage("Login successful");
                     return responseManager.ResponseOk(response);
                 }
-//                String token = randomizer.GenerateToken();
-//                SQL = "INSERT into tbl_user_token(username, token, date_created) VALUES(?, ?, now())";
-//                jdbcTemplate.update(SQL, new Object[]{username, token});
-//                response.setToken(token);
-                SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.session_token, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name "
-                        + "from tbl_user_details a "
-                        + "LEFT JOIN tbl_role b "
-                        + "ON a.role = b.id "
-                        + "LEFT JOIN tbl_financial_institution_contacts c "
-                        + "ON a.email_address = c.email_address "
-                        + "LEFT JOIN tbl_financial_institutions d "
-                        + "ON c.financial_institution_code = d.code "
+
+                // Query to fetch complete user details
+                sql = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, "
+                        + "a.date_created, a.date_updated, a.session_token, a.last_login, b.role_name, c.financial_institution_code, "
+                        + "d.name as institution_name "
+                        + "FROM tbl_user_details a "
+                        + "LEFT JOIN tbl_role b ON a.role = b.id "
+                        + "LEFT JOIN tbl_financial_institution_contacts c ON a.email_address = c.email_address "
+                        + "LEFT JOIN tbl_financial_institutions d ON c.financial_institution_code = d.code "
                         + "WHERE a.email_address = ? || a.username = ? AND a.deleted = 0";
-                
-                List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{username, username}, new UserMapper());
+                logger.info("Fetching full user details for {}", username);
+                logger.info("{} : sql query to fetch complete user detail{}.", username, sql);
+                List<UserModel> details = jdbcTemplate.query(sql, new Object[]{username, username}, new UserMapper());
                 response.setCode(200);
                 response.setStatus("success");
                 response.setMessage("Login successful");
                 int userRoleid;
-                if (details.size() > 0) {
+
+                if (!details.isEmpty()) {
                     userRoleid = details.get(0).getRoleid();
                     response.setId(details.get(0).getId());
                     response.setUsername(details.get(0).getUsername());
@@ -448,8 +468,8 @@ public class UsersService implements UsersInterface {
                     response.setFinancial_institution_name(details.get(0).getInstitutionName());
                     response.setLast_login(details.get(0).getLast_login());
                     response.setDate_updated(details.get(0).getDate_updated());
-                }
-                else {
+                    logger.info("User details populated for {}", username);
+                } else {
                     userRoleid = 4;
                     response.setId(parseInt(randomizer.GenerateReference(5, "1234567890")));
                     response.setUsername(username);
@@ -459,139 +479,94 @@ public class UsersService implements UsersInterface {
                     response.setPhone_number("");
                     response.setRoleid(4);
                     response.setRole("Third Party Vendor");
-                    response.setDate_created((new Date()).toString());
+                    response.setDate_created(now.toString());
                     response.setDate_updated(null);
+                    logger.info("No detailed user record found for {}. Defaulting role to 'Third Party Vendor'.", username);
                 }
-                
-                if (userRoleid == 5) {
-                    SQL = "SELECT a.id, a.institution_id, b.acquirer_id, b.institution_name "
-                            + "FROM tbl_map_card_users_institution a "
-                            + "LEFT JOIN sparkpayweb_db.tbl_financial_institutions b "
-                            + "ON a.institution_id = b.bank_code "
-                            + "WHERE a.user_email = ?";
-                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
-                    if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("acquirer_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
-                    }
-                }
-                
-                if (userRoleid == 6) {
-                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
-                            + "FROM tbl_map_card_users_institution a "
-                            + "WHERE a.user_email = ?";
-                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
-                    if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
-                    }
-                }
-                
-                if (userRoleid == 7) {
-                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
-                            + "FROM tbl_map_card_users_institution a "
-                            + "WHERE a.user_email = ?";
-                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
-                    if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
-                    }
-                }
-                
-                if (userRoleid == 8) {
-                    SQL = "SELECT a.id, a.institution_id, a.institution_name "
-                            + "FROM tbl_map_card_users_institution a "
-                            + "WHERE a.user_email = ?";
-                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{username});
-                    if (rows.size() > 0) {
-                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
-                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
-                    }
-                }
-                
-                List<MenuModel> menu;
-                if (userRoleid < 5){
-                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
-                            + "FROM `tbl_menus` a "
-                            + "LEFT JOIN `tbl_menus` b "
-                            + "ON a.id = b.parent_id "
-                            + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 1 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
-                            + "ORDER BY a.id ASC";
-                    menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
 
-                    if (menu.size() > 0) {
-                        response.setTransgateMenu(menu);
-                    }
-                    else {
-                        List<MenuModel> eM = new ArrayList<>();
-                        response.setTransgateMenu(eM);
+                // Retrieve financial institution details based on user role
+                if (userRoleid == 5 || userRoleid == 6 || userRoleid == 7 || userRoleid == 8) {
+                    sql = "SELECT a.id, a.institution_id, a.institution_name FROM tbl_map_card_users_institution a WHERE a.user_email = ?";
+                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql, new Object[]{username});
+                    if (!rows.isEmpty()) {
+                        // Set the details based on the role (using the same fields for simplicity)
+                        response.setFinancial_institution_code((String) rows.get(0).get("institution_id"));
+                        response.setFinancial_institution_name((String) rows.get(0).get("institution_name"));
+                        logger.info("Financial institution info for user {}: {} - {}", username,
+                                response.getFinancial_institution_code(), response.getFinancial_institution_name());
                     }
                 }
-                else if (userRoleid == 8 || userRoleid == 5) {
-                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
-                            + "FROM `tbl_menus` a "
-                            + "LEFT JOIN `tbl_menus` b "
-                            + "ON a.id = b.parent_id "
+
+                // Handling menu based on user role
+                List<MenuModel> menu;
+                if (userRoleid < 5) {
+                    sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
+                            + "b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND (a.role_id = 0 OR a.role_id = ?) AND a.access = 1 "
+                            + "ORDER BY a.id ASC";
+                     logger.info("{} : sql query {}.", username, sql);
+                    menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
+                    response.setTransgateMenu(!menu.isEmpty() ? menu : new ArrayList<>());
+                } else if (userRoleid == 8 || userRoleid == 5) {
+                    sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
+                            + "b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
                             + "ORDER BY a.id ASC";
-                    menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
-
-                    if (menu.size() > 0) {
-                        response.setTransgateMenu(menu);
-                    }
-                    else {
-                        List<MenuModel> eM = new ArrayList<>();
-                        response.setTransgateMenu(eM);
-                    }
-                }
-                else
+                     logger.info("{} : sql query {}.", username, sql);
+                    menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
+                    response.setTransgateMenu(!menu.isEmpty() ? menu : new ArrayList<>());
+                } else {
                     response.setTransgateMenu(new ArrayList<>());
-                if (userRoleid < 4) 
-                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
-                            + "FROM `tbl_menus` a "
-                            + "LEFT JOIN `tbl_menus` b "
-                            + "ON a.id = b.parent_id "
-                            + "WHERE a.parent_id IS NULL AND a.role_id = 0 AND a.access = 2 OR a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
+                }
+
+                // Retrieve secondary menu information based on role
+                if (userRoleid < 4) {
+                    sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
+                            + "b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
+                            + "WHERE a.parent_id IS NULL AND (a.role_id = 0 OR a.role_id = ?) AND a.access = 2 "
                             + "ORDER BY a.id ASC";
-                else
-                    SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
-                            + "FROM `tbl_menus` a "
-                            + "LEFT JOIN `tbl_menus` b "
-                            + "ON a.id = b.parent_id "
+                     logger.info("{} : sql query {}.", username, sql);
+                    
+                } else {
+                    sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
+                            + "b.label as child_label, b.path as child_path, b.parent_id "
+                            + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
                             + "ORDER BY a.id ASC";
-                menu = jdbcTemplate.query(SQL, new Object[]{userRoleid}, new MenuMapper());
-                
-                if (menu.size() > 0) {
-                    response.setSparkpayMenu(menu);
+                     logger.info("{} : sql query {}.", username, sql);
                 }
-                else {
-                    List<MenuModel> eM = new ArrayList<>();
-                    response.setSparkpayMenu(eM);
-                }
+                menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
+                response.setSparkpayMenu(!menu.isEmpty() ? menu : new ArrayList<>());
+                logger.info("Login process completed successfully for user: {}", username);
                 return responseManager.ResponseOk(response);
-            }
-            else {
-                SQL = "UPDATE tbl_user_details SET attempts_left = attempts_left - 1 WHERE email_address = ?";
-                jdbcTemplate.update(SQL, new Object[]{username});
+            } else {
+                logger.info("Invalid password provided for user: {}", username);
+                sql = "UPDATE tbl_user_details SET attempts_left = attempts_left - 1 WHERE email_address = ?";
+                logger.info("{} : sql query {}.", username, sql);
+                jdbcTemplate.update(sql, new Object[]{username});
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Invalid username or password");
                 return responseManager.ResponseOk(response);
             }
         } catch (DataAccessException ex) {
-            System.out.println(ex);
+            logger.info("DataAccessException while processing login for user {}: {}", username, ex.getMessage(), ex);
             if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
                 response.setCode(400);
                 response.setStatus("failed");
                 response.setMessage("Invalid username or password");
                 return responseManager.ResponseOk(response);
             }
-            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseUnathorized();
+        } catch (Exception ex) {
+            logger.info("Unexpected error while processing login for user {}: {}", username, ex.getMessage(), ex);
             return responseManager.ResponseUnathorized();
         }
     }
-    
+
     @Override
     public ResponseEntity SetUp2FA(String sessiontoken, String username, int enable) {
         NetworkResponse response = new NetworkResponse();
@@ -615,7 +590,7 @@ public class UsersService implements UsersInterface {
                 int ret = jdbcTemplate.update(SQL, new Object[]{enable, secret, username});
                 if (ret > 0) {
                     response.setStatus("success");
-                    String meta = "{\"qrCodeUri\": " + "\"" + qrCodeUri + "\"" +"}";
+                    String meta = "{\"qrCodeUri\": " + "\"" + qrCodeUri + "\"" + "}";
                     response.setMeta(meta);
                 } else {
                     response.setStatus("failed");
@@ -629,7 +604,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseUnathorized();
         }
     }
-    
+
     @Override
     public ResponseEntity ResetPassword(String code, String password, String token) {
         LoginResponse response = new LoginResponse();
@@ -647,8 +622,7 @@ public class UsersService implements UsersInterface {
                 response.setCode(200);
                 response.setMessage("Password reset complete");
                 return responseManager.ResponseOk(response);
-            }
-            else {
+            } else {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Invalid reset code");
@@ -684,8 +658,7 @@ public class UsersService implements UsersInterface {
                 response.setCode(200);
                 response.setMessage("Account activated");
                 return responseManager.ResponseOk(response);
-            }
-            else {
+            } else {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Invalid activation link");
@@ -722,7 +695,7 @@ public class UsersService implements UsersInterface {
                     + "ON a.username = b.email_address "
                     + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
             int found = jdbcTemplate.queryForObject(SQL, new Object[]{email}, int.class);
-            
+
             if (found > 0) {
                 String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                 String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
@@ -754,14 +727,14 @@ public class UsersService implements UsersInterface {
         try {
             String SQL;
             SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
-                        + "from tbl_user_details a "
-                        + "LEFT JOIN tbl_role b "
-                        + "ON a.role = b.id "
-                        + "LEFT JOIN tbl_financial_institution_contacts c "
-                        + "ON a.email_address = c.email_address "
-                        + "LEFT JOIN tbl_financial_institutions d "
-                        + "ON c.financial_institution_code = d.code "
-                        + "WHERE a.id = ? AND a.deleted = 0";
+                    + "from tbl_user_details a "
+                    + "LEFT JOIN tbl_role b "
+                    + "ON a.role = b.id "
+                    + "LEFT JOIN tbl_financial_institution_contacts c "
+                    + "ON a.email_address = c.email_address "
+                    + "LEFT JOIN tbl_financial_institutions d "
+                    + "ON c.financial_institution_code = d.code "
+                    + "WHERE a.id = ? AND a.deleted = 0";
             List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{userid}, new UserMapper());
             int userRoleid;
             if (details.size() > 0) {
@@ -780,8 +753,7 @@ public class UsersService implements UsersInterface {
                 response.setDate_created(details.get(0).getDate_created());
                 response.setDate_updated(details.get(0).getDate_updated());
                 return responseManager.ResponseOk(response);
-            }
-            else {
+            } else {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("User not found");
@@ -805,7 +777,7 @@ public class UsersService implements UsersInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            if (systemUsers)
+            if (systemUsers) {
                 SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name  "
                         + "from tbl_user_details a "
                         + "LEFT JOIN tbl_role b "
@@ -816,7 +788,7 @@ public class UsersService implements UsersInterface {
                         + "ON c.financial_institution_code = d.code "
                         + "WHERE a.deleted = 0 AND role < 4 "
                         + "ORDER BY a.id DESC";
-            else
+            } else {
                 SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, "
                         + "b.role_name, "
                         + "c.institution_id as financial_institution_code, c.institution_name as institution_name  "
@@ -827,19 +799,20 @@ public class UsersService implements UsersInterface {
                         + "ON a.email_address = c.user_email "
                         + "WHERE a.deleted = 0 AND role > 4 "
                         + "ORDER BY a.id DESC";
+            }
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage(systemUsers ? "System USers" : "Other Users");
             networkResponse.setData((ArrayList) users);
-            
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetRoles() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -853,16 +826,16 @@ public class UsersService implements UsersInterface {
             networkResponse.setStatus("success");
             networkResponse.setMessage("All roles");
             networkResponse.setData((ArrayList) roles);
-            
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
-    public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password){
+    public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password) {
         try {
             boolean userExist = CheckExistingUser(email_address);
             if (userExist) {
@@ -876,7 +849,7 @@ public class UsersService implements UsersInterface {
             String SQL;
             int userrole = GetUserRole(creator, sessiontoken);
             String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
-            
+
 //            String code = roleid == 4 ? hashPassword : randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
             String code = hashPassword;
             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
@@ -890,7 +863,7 @@ public class UsersService implements UsersInterface {
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
-                        if (retval > 0){
+                        if (retval > 0) {
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
                             response.setStatus("success");
@@ -898,13 +871,13 @@ public class UsersService implements UsersInterface {
                             response.setFirstname(ref);
                             response.setSurname(code);
                             return responseManager.ResponseOk(response);
-                        }
-//                            return responseManager.ResponseAccepted();
-                        else
+                        } //                            return responseManager.ResponseAccepted();
+                        else {
                             return responseManager.ResponseInternalServerError();
-                    }
-                    else 
+                        }
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 case 2:
                     boolean userPending = CheckUserPending(username, email_address, "create");
                     if (userPending) {
@@ -916,10 +889,11 @@ public class UsersService implements UsersInterface {
                     }
                     SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
                     retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
-                    if (retval > 0) 
+                    if (retval > 0) {
                         return responseManager.ResponseAccepted();
-                    else
+                    } else {
                         return responseManager.ResponseInternalServerError();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -928,7 +902,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     public void MapUserToMerchants(String username, List<String> merchants) {
         for (int i = 0; i < merchants.size(); i++) {
             String SQL = "INSERT INTO sparkpayweb_db.tbl_map_user_to_merchants "
@@ -937,9 +911,9 @@ public class UsersService implements UsersInterface {
             jdbcTemplate.update(SQL, new Object[]{username, merchants.get(i)});
         }
     }
-    
+
     @Override
-    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname){
+    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname) {
         try {
             boolean userExist = CheckExistingUser(email_address);
             if (userExist) {
@@ -962,10 +936,10 @@ public class UsersService implements UsersInterface {
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
-                        if (retval > 0){
+                        if (retval > 0) {
                             if (roleid == 6) {
                                 List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
-                                MapUserToMerchants(email_address, merchantIds);    
+                                MapUserToMerchants(email_address, merchantIds);
                             }
                             String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
                             SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
@@ -978,12 +952,12 @@ public class UsersService implements UsersInterface {
                             response.setSurname(code);
                             return responseManager.ResponseOk(response);
 //                            return responseManager.ResponseAccepted();
-                        }
-                        else
+                        } else {
                             return responseManager.ResponseInternalServerError();
-                    }
-                    else 
+                        }
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 case 2:
                     boolean userPending = CheckUserPending(username, email_address, "create");
                     if (userPending) {
@@ -998,15 +972,15 @@ public class UsersService implements UsersInterface {
                     if (retval > 0) {
                         if (roleid == 6) {
                             List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
-                            MapUserToMerchants(email_address, merchantIds);    
+                            MapUserToMerchants(email_address, merchantIds);
                         }
                         String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
                         SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
                         jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
                         return responseManager.ResponseAccepted();
-                    }
-                    else
+                    } else {
                         return responseManager.ResponseInternalServerError();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -1015,7 +989,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity Delete(String sessiontoken, int userid, String username) {
         try {
@@ -1035,10 +1009,11 @@ public class UsersService implements UsersInterface {
                 case 1:
                     SQL = "UPDATE tbl_user_details SET deleted = 1 WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{userid});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseDeleted();
-                    else
+                    } else {
                         return responseManager.ResponseInternalServerError();
+                    }
                 case 2:
                     boolean userPending = CheckUserPending(loginResponse.getUsername(), loginResponse.getEmail_address(), "delete");
                     if (userPending) {
@@ -1050,10 +1025,11 @@ public class UsersService implements UsersInterface {
                     }
                     SQL = "INSERT INTO tbl_user_details_operations(id, username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'delete', 'Delete user account', now())";
                     retVal = jdbcTemplate.update(SQL, new Object[]{loginResponse.getId(), loginResponse.getUsername(), loginResponse.getFirstname(), loginResponse.getSurname(), loginResponse.getPhone_number(), loginResponse.getEmail_address(), loginResponse.getRoleid()});
-                    if (retVal > 0) 
+                    if (retVal > 0) {
                         return responseManager.ResponseDeleted();
-                    else
+                    } else {
                         return responseManager.ResponseInternalServerError();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -1062,7 +1038,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity UpdateNames(String sessiontoken, String firstname, String surname, String phone_number, String username) {
         try {
@@ -1070,21 +1046,21 @@ public class UsersService implements UsersInterface {
             int retVal;
             SQL = "UPDATE tbl_user_details SET firstname = ?, surname = ?, phone_number = ? WHERE session_token = ?";
             retVal = jdbcTemplate.update(SQL, new Object[]{firstname, surname, phone_number, sessiontoken});
-            if (retVal > 0){
+            if (retVal > 0) {
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
                 networkResponse.setStatus("success");
                 networkResponse.setMessage("Profile Updated");
                 return responseManager.ResponseOk(networkResponse);
-            }
-            else
+            } else {
                 return responseManager.ResponseInternalServerError();
+            }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity UpdatePassword(String sessiontoken, String password, String session_token, String username) {
         LoginResponse response = new LoginResponse();
@@ -1104,8 +1080,7 @@ public class UsersService implements UsersInterface {
                 SQL = "UPDATE tbl_user_details SET date_updated = now() WHERE username = ? AND session_token = ?";
                 jdbcTemplate.update(SQL, new Object[]{username, sessiontoken});
                 return responseManager.ResponseOk(response);
-            }
-            else {
+            } else {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Current password is incorrect");
@@ -1123,7 +1098,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseUnathorized();
         }
     }
-    
+
     @Override
     public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username) {
         try {
@@ -1134,10 +1109,11 @@ public class UsersService implements UsersInterface {
                 case 1:
                     SQL = "UPDATE tbl_user_details SET firstname = ?, surname = ?, phone_number = ?, role = ? WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{firstname, surname, phone_number, roleid, userid});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else
+                    } else {
                         return responseManager.ResponseInternalServerError();
+                    }
                 case 2:
                     ResponseEntity responseEntity = GetUserById(sessiontoken, userid);
                     LoginResponse loginResponse = responseEntity != null ? (LoginResponse) responseEntity.getBody() : new LoginResponse();
@@ -1161,10 +1137,11 @@ public class UsersService implements UsersInterface {
                     note = loginResponse.getPhone_number().equals(phone_number) || phone_number == null ? note : !note.equals("") ? note + ", change phone number from " + loginResponse.getPhone_number() + " to " + phone_number : "Change phone number from " + loginResponse.getPhone_number() + " to " + phone_number;
                     SQL = "INSERT INTO tbl_user_details_operations(username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', ?, now())";
                     retVal = jdbcTemplate.update(SQL, new Object[]{loginResponse.getUsername(), loginResponse.getFirstname().equals(firstname) || firstname == null ? loginResponse.getFirstname() : firstname, loginResponse.getSurname().equals(surname) || surname == null ? loginResponse.getSurname() : surname, loginResponse.getPhone_number().equals(phone_number) || phone_number == null ? loginResponse.getPhone_number() : phone_number, loginResponse.getEmail_address(), roleid, note});
-                    if (retVal > 0) 
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else
+                    } else {
                         return responseManager.ResponseInternalServerError();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -1173,7 +1150,7 @@ public class UsersService implements UsersInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact) {
         try {
@@ -1194,10 +1171,11 @@ public class UsersService implements UsersInterface {
                                 SQL = "DELETE FROM tbl_financial_institution_contacts_operations WHERE email_address = ? AND actionType = 'delete'";
                                 jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address()});
                             }
-                            if (retVal > 0 && retVal2 > 0)
+                            if (retVal > 0 && retVal2 > 0) {
                                 return responseManager.ResponseDeleted();
-                            else
+                            } else {
                                 return responseManager.ResponseInternalServerError();
+                            }
                         case "edit":
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
@@ -1223,7 +1201,7 @@ public class UsersService implements UsersInterface {
                             jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address(), users.get(0).getSecurity(), ref});
                             SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getUsername(), users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getEmail_address(), users.get(0).getRoleid()});
-                            if (retVal > 0 && retVal2 > 0){
+                            if (retVal > 0 && retVal2 > 0) {
                                 LoginResponse response = new LoginResponse();
                                 response.setCode(201);
                                 response.setStatus("success");
@@ -1232,43 +1210,42 @@ public class UsersService implements UsersInterface {
                                 response.setSurname(code);
                                 response.setUsername(users.get(0).getEmail_address());
                                 return responseManager.ResponseOk(response);
-                            }
-//                                return responseManager.ResponseAccepted();
-                            else
+                            } //                                return responseManager.ResponseAccepted();
+                            else {
                                 return responseManager.ResponseInternalServerError();
+                            }
                         default:
                             return responseManager.ResponseBadRequest();
                     }
-                }
-                else {
+                } else {
                     NetworkResponse networkResponse = new NetworkResponse();
                     networkResponse.setCode(200);
                     networkResponse.setStatus("failed");
                     networkResponse.setMessage("Not found");
                     return responseManager.ResponseNotFound(networkResponse);
                 }
-            }
-            else
+            } else {
                 return responseManager.ResponseUnathorized();
+            }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetUsersForActions(boolean systemUsers) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            if (systemUsers)
+            if (systemUsers) {
                 SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, b.role_name "
                         + "from tbl_user_details_operations a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
                         + "WHERE a.role < 4 "
                         + "ORDER BY a.id DESC";
-            else 
+            } else {
                 SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
                         + "b.role_name, "
                         + "c.institution_id as financial_institution_code, c.institution_name as institution_name  "
@@ -1279,19 +1256,20 @@ public class UsersService implements UsersInterface {
                         + "ON a.email_address = c.user_email "
                         + "WHERE a.role > 4 "
                         + "ORDER BY a.id DESC";
+            }
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper2());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage(systemUsers ? "Pending System Users" : "Pending Other Users");
             networkResponse.setData((ArrayList) users);
             return responseManager.ResponseOk(networkResponse);
-            
+
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetContactsForActions() {
         try {
@@ -1315,18 +1293,19 @@ public class UsersService implements UsersInterface {
             networkResponse.setMessage("Pending Institution Contacts");
             networkResponse.setData((ArrayList) users);
             return responseManager.ResponseOk(networkResponse);
-            
+
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     class UserMapper implements RowMapper<UserModel> {
+
         @Override
         public UserModel mapRow(ResultSet rs, int arg1) throws SQLException {
             UserModel response = new UserModel();
-            
+
             response.setId(rs.getInt("id"));
             response.setUsername(rs.getString("username"));
             response.setEmail_address(rs.getString("email_address"));
@@ -1344,12 +1323,13 @@ public class UsersService implements UsersInterface {
             return response;
         }
     }
-    
+
     class UserMapper2 implements RowMapper<UserModel> {
+
         @Override
         public UserModel mapRow(ResultSet rs, int arg1) throws SQLException {
             UserModel response = new UserModel();
-            
+
             response.setId(rs.getInt("id"));
             response.setUsername(rs.getString("username"));
             response.setEmail_address(rs.getString("email_address"));
@@ -1368,12 +1348,13 @@ public class UsersService implements UsersInterface {
             return response;
         }
     }
-    
+
     class MenuMapper implements RowMapper<MenuModel> {
+
         @Override
         public MenuModel mapRow(ResultSet rs, int arg1) throws SQLException {
             MenuModel response = new MenuModel();
-            
+
             response.setId(rs.getInt("id"));
             response.setIcon(rs.getString("icon"));
             response.setLabel(rs.getString("label"));
@@ -1386,19 +1367,20 @@ public class UsersService implements UsersInterface {
             return response;
         }
     }
-    
+
     class RoleMapper implements RowMapper<RoleModel> {
+
         @Override
         public RoleModel mapRow(ResultSet rs, int arg1) throws SQLException {
             RoleModel response = new RoleModel();
-            
+
             response.setId(rs.getInt("id"));
             response.setRole_name(rs.getString("role_name"));
             response.setDate_created(rs.getString("date_created"));
             return response;
         }
     }
-    
+
     public static boolean hasColumn(ResultSet rs, String columnName) throws SQLException {
         ResultSetMetaData rsmd = rs.getMetaData();
         int columns = rsmd.getColumnCount();
@@ -1409,5 +1391,5 @@ public class UsersService implements UsersInterface {
         }
         return false;
     }
-    
+
 }

@@ -84,8 +84,10 @@ public class ResponseCodeInterpreter {
                 return "System malfunction";
             case "97":
                 return "Timeout waiting for response from destination";
+            case "98":
+                return "Invalid Bank Code";
             default:
-                return "Undefined";
+                return "Failed";
         }
     }
 }

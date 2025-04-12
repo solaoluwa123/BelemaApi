@@ -14,6 +14,7 @@ import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.app.services.Validators;
+import java.util.logging.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -46,6 +47,8 @@ public class UsersController {
     
     @Autowired
     GenericInterface GenericInterface;
+    
+    private Logger logger = Logger.getLogger(UsersController.class.getName());
     
     @RequestMapping(value = "/users/crons/unlock", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Unlock() {
@@ -103,6 +106,7 @@ public class UsersController {
     @RequestMapping(value = "/users/login", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity Login(@RequestHeader(value = "Authorization") String header,
             @RequestBody LoginRequest login) {
+        logger.info(String.format("%s :: LoginUser() :: header --->   %s", logger.getName(), header)); 
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
