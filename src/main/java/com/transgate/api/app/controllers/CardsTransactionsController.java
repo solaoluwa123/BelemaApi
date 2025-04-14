@@ -11,6 +11,7 @@ import com.transgate.api.models.CardsDisputeModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.app.services.Validators;
 import java.util.Optional;
+import java.util.logging.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -35,7 +36,7 @@ public class CardsTransactionsController {
     private CardsTransactionsInterface CardsTransactionsInterface;
     
     ResponseManager responseManager = new ResponseManager();
-    
+    private Logger logger = Logger.getLogger(CardsTransactionsController.class.getName());
     private final Validators validators;
     // Constructor injection for RestCall
     public CardsTransactionsController(Validators validators) {
@@ -174,36 +175,72 @@ public class CardsTransactionsController {
         return CardsTransactionsInterface.GetByTerminalOwner(owner, startDate, endDate, page, limit, isCurrent);
     }
     
-    @RequestMapping(value = "/cards/transactions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity SearchTransactions(
-            @RequestHeader(value = "Authorization") String header, 
-            @RequestHeader(value = "auth-token") String sessiontoken,  
-            @RequestParam("message_type") String message_type, 
-            @RequestParam("bin") String bin, 
-            @RequestParam("processing_code") String processing_code, 
-            @RequestParam("system_trace_number") String system_trace_number, 
-            @RequestParam("response_code") String response_code, 
-            @RequestParam("min_amount") String min_amount, 
-            @RequestParam("max_amount") String max_amount, 
-            @RequestParam("start_date") String start_date, 
-            @RequestParam("end_date") String end_date,
-            @RequestParam("page") int page,
-            @RequestParam("limit") int limit,
-            @RequestParam("retrieval_ref_number") String retrieval_ref_number, 
-            @RequestParam("acquirer_institution_id") String acquirer_institution_id, 
-            @RequestParam("destination_acquiring_institution_id") String destination_acquiring_institution_id, 
-            @RequestParam("pan") String pan, 
-            @RequestParam("rrn") String rrn, 
-            @RequestParam("terminal_id") String terminal_id, 
-            @RequestParam("merchant_id") String merchant_id, 
-            @RequestParam("location_name_address") String location_name_address,  
-            @RequestParam("approval_code") String approval_code,  
-            @RequestParam("isCurrent") boolean isCurrent 
-    ) {
-        if (!validators.validHeader().equals(header)) {
-            return responseManager.InvalidAuthorizationHeader();
-        }
-        return CardsTransactionsInterface.SearchTransactions(message_type,
+@RequestMapping(value = "/cards/transactions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
+public ResponseEntity SearchTransactions(
+        @RequestHeader(value = "Authorization") String header, 
+        @RequestHeader(value = "auth-token") String sessiontoken,  
+        @RequestParam("message_type") String message_type, 
+        @RequestParam("bin") String bin, 
+        @RequestParam("processing_code") String processing_code, 
+        @RequestParam("system_trace_number") String system_trace_number, 
+        @RequestParam("response_code") String response_code, 
+        @RequestParam("min_amount") String min_amount, 
+        @RequestParam("max_amount") String max_amount, 
+        @RequestParam("start_date") String start_date, 
+        @RequestParam("end_date") String end_date,
+        @RequestParam("page") int page,
+        @RequestParam("limit") int limit,
+        @RequestParam("retrieval_ref_number") String retrieval_ref_number, 
+        @RequestParam("acquirer_institution_id") String acquirer_institution_id, 
+        @RequestParam("destination_acquiring_institution_id") String destination_acquiring_institution_id, 
+        @RequestParam("pan") String pan, 
+        @RequestParam("rrn") String rrn, 
+        @RequestParam("terminal_id") String terminal_id, 
+        @RequestParam("merchant_id") String merchant_id, 
+        @RequestParam("location_name_address") String location_name_address,  
+        @RequestParam("approval_code") String approval_code,  
+        @RequestParam("isCurrent") boolean isCurrent 
+) {
+    logger.info("Entered SearchTransactions method for /cards/transactions/q/search");
+    
+    // Validate the Authorization header.
+    logger.info("Validating Authorization header...");
+    if (!validators.validHeader().equals(header)) {
+        logger.info("Invalid Authorization header detected. Returning error response.");
+        return responseManager.InvalidAuthorizationHeader();
+    }
+    
+    logger.info("Authorization header is valid.");
+    
+    // Log incoming parameters (adjust if any are considered sensitive).
+    logger.info("Request parameters: "
+            + "message_type=" + message_type + ", "
+            + "bin=" + bin + ", "
+            + "processing_code=" + processing_code + ", "
+            + "system_trace_number=" + system_trace_number + ", "
+            + "response_code=" + response_code + ", "
+            + "min_amount=" + min_amount + ", "
+            + "max_amount=" + max_amount + ", "
+            + "start_date=" + start_date + ", "
+            + "end_date=" + end_date + ", "
+            + "page=" + page + ", "
+            + "limit=" + limit + ", "
+            + "retrieval_ref_number=" + retrieval_ref_number + ", "
+            + "acquirer_institution_id=" + acquirer_institution_id + ", "
+            + "destination_acquiring_institution_id=" + destination_acquiring_institution_id + ", "
+            + "pan=" + pan + ", "
+            + "rrn=" + rrn + ", "
+            + "terminal_id=" + terminal_id + ", "
+            + "merchant_id=" + merchant_id + ", "
+            + "location_name_address=" + location_name_address + ", "
+            + "approval_code=" + approval_code + ", "
+            + "isCurrent=" + isCurrent);
+    
+    // Log that we are about to call the downstream service.
+    logger.info("Calling CardsTransactionsInterface.SearchTransactions with provided parameters.");
+    
+    ResponseEntity downstreamResponse = CardsTransactionsInterface.SearchTransactions(
+            message_type,
             bin,
             processing_code,
             min_amount,
@@ -222,8 +259,13 @@ public class CardsTransactionsController {
             location_name_address,
             approval_code,
             page,
-            limit,isCurrent);
-    }
+            limit,
+            isCurrent);
+    
+    logger.info("Exiting SearchTransactions method for /cards/transactions/q/search");
+    return downstreamResponse;
+}
+
     
 //    @RequestMapping(value = "/cards/transactions/disputes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
 //    public ResponseEntity SearchTransactionsDisputes(
