@@ -36,6 +36,7 @@ public class TransactionsController {
 
     private final Validators validators;
     private Logger logger = Logger.getLogger(TransactionsInterface.class.getName());
+
     // Constructor injection for RestCall
     public TransactionsController(Validators validators) {
         this.validators = validators;
@@ -86,6 +87,48 @@ public class TransactionsController {
         } catch (Exception ex) {
             // Log the exception details and rethrow the exception.
             logger.info("Exception occurred while processing /transactions-by-date: " + ex.getMessage());
+            throw ex;
+        }
+    }
+    
+    
+    @RequestMapping(value = "/transactions-by-date-only", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity getTransactionsByDateOnly(
+            @RequestHeader(value = "Authorization") String header,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @RequestParam("isCurrent") boolean isCurrent) {
+
+        // Log incoming request details.
+        logger.info("Received GET /transactions-by-date request with parameters: "
+                + "startDate=" + startDate + ", endDate=" + endDate
+                + ", page=" + page + ", limit=" + limit + ", isCurrent=" + isCurrent
+                + ", Authorization header=" + header);
+
+        try {
+            // Validate the Authorization header.
+            if (!validators.validHeader().equals(header)) {
+                logger.info("Invalid Authorization header provided. Expected header: "
+                        + validators.validHeader() + " but received: " + header);
+
+                ResponseEntity invalidResponse = responseManager.InvalidAuthorizationHeader();
+                logger.info("Returning response with status: " + invalidResponse.getStatusCode());
+                return invalidResponse;
+            }
+
+            // Call the underlying transactions service.
+            ResponseEntity responseEntity = transactionsInterface.getTransactionsByDateOnly(startDate, endDate, page, limit, isCurrent);
+
+            // Log basic response details.
+            logger.info("Returning response with status: " + responseEntity.getStatusCode());
+            logger.info("Response body: " + responseEntity.getBody());
+
+            return responseEntity;
+        } catch (Exception ex) {
+            // Log the exception details and rethrow the exception.
+            logger.info("Exception occurred while processing /transactions-by-date-only: " + ex.getMessage());
             throw ex;
         }
     }
@@ -361,6 +404,21 @@ public class TransactionsController {
         }
         return transactionsInterface.Get(institutioncode, startDate, endDate, page, limit, isCurrent);
     }
+    
+        @RequestMapping(value = "/transactions-by-date-only/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity getInstitutionTransactionsByDateOnly(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("institutioncode") String institutioncode,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestParam("page") int page,
+            @RequestParam("limit") int limit,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.getInstitutionTransactionsByDateOnly(institutioncode, startDate, endDate, page, limit, isCurrent);
+    }
 
     @RequestMapping(value = "/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
     public ResponseEntity Create(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
@@ -449,10 +507,38 @@ public class TransactionsController {
             @RequestParam("isCurrent") boolean isCurrent,
             @RequestParam("userInstitutionCode") String userInstitutionCode
     ) {
+        // Log entry into the method without logging sensitive data
+        logger.info("SearchTransactions called with parameters: srcSessionid=" + srcSessionid
+                + ", channelCode=" + channelCode
+                + ", responseCode=" + responseCode
+                + ", srcInstitutioncode=" + srcInstitutioncode
+                + ", destInstitutioncode=" + destInstitutioncode
+                + ", minAmount=" + minAmount
+                + ", maxAmount=" + maxAmount
+                + ", srcAccountName=" + srcAccountName.replaceAll("space", " ")
+                + ", destAccountName=" + destAccountName.replaceAll("space", " ")
+                + ", startDate=" + startDate
+                + ", endDate=" + endDate
+                + ", page=" + page
+                + ", limit=" + limit
+                + ", isCurrent=" + isCurrent
+                + ", userInstitutionCode=" + userInstitutionCode);
+
+        // Optional: Log that header verification is in progress
+        logger.info("Verifying Authorization header");
+
+        // Validate header
         if (!validators.validHeader().equals(header)) {
+            logger.warning("Invalid Authorization header received");
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.SearchTransactions(srcSessionid,
+
+        // Log after header validation and before invoking the transactions service
+        logger.info("Header validated. Proceeding to search transactions.");
+
+        // Call the interface method and log that the service call is being made.
+        ResponseEntity response = transactionsInterface.SearchTransactions(
+                srcSessionid,
                 channelCode,
                 responseCode,
                 srcInstitutioncode,
@@ -467,6 +553,10 @@ public class TransactionsController {
                 limit,
                 isCurrent,
                 userInstitutionCode);
+
+        // Log before returning the response
+        logger.info("SearchTransactions completed. Returning response.");
+        return response;
     }
 
     @RequestMapping(value = "/transactions/disputes/q/search", method = RequestMethod.GET, headers = "Accept=application/json")

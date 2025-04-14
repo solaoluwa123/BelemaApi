@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import com.transgate.api.interfaces.GenericInterface;
+import java.util.logging.Logger;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestParam;
 
@@ -28,6 +29,7 @@ public class GenericController {
     
     ResponseManager responseManager = new ResponseManager();
     
+    private Logger logger = Logger.getLogger(GenericInterface.class.getName());
     private final Validators validators;
     // Constructor injection for RestCall
     public GenericController(Validators validators) {

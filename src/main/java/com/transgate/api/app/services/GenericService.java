@@ -19,6 +19,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.logging.Logger;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
@@ -33,6 +34,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class GenericService implements GenericInterface {
+
     @Autowired
     DataSource dataSource;
 
@@ -40,12 +42,14 @@ public class GenericService implements GenericInterface {
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
-    
+    private Logger logger = Logger.getLogger(GenericService.class.getName());
+
     private final AppEnvironmentConfig appConfig;
+
     public GenericService(AppEnvironmentConfig appConfig) {
         this.appConfig = appConfig;
     }
-    
+
     private int GetUserRole(String session_token) {
         try {
             int role;
@@ -58,43 +62,43 @@ public class GenericService implements GenericInterface {
             return -100;
         }
     }
-    
+
     private boolean CheckPendingDelete(int id, String table) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM "+table+" WHERE id = ? AND delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM " + table + " WHERE id = ? AND delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
-            
+
             return found;
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return false;
         }
     }
-    
+
     private boolean CheckPendingDelete(String id, String column, String table) {
         boolean found;
         try {
             String SQL;
-            SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ? AND delete_flag = 1";
+            SQL = "SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ? AND delete_flag = 1";
             int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
 
             found = totalRows > 0;
-            
+
             return found;
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return false;
         }
     }
-    
+
     public int CheckItemExit(String id, String table, String column) {
         int totalRows = 0;
         try {
-            String SQL = "SELECT COUNT(*) FROM "+table+" WHERE "+column+" = ?";
+            String SQL = "SELECT COUNT(*) FROM " + table + " WHERE " + column + " = ?";
             totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{id}, int.class);
             return totalRows;
         } catch (DataAccessException ex) {
@@ -102,7 +106,7 @@ public class GenericService implements GenericInterface {
             return -1;
         }
     }
-    
+
     @Override
     public ResponseEntity GetBanks() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -111,7 +115,7 @@ public class GenericService implements GenericInterface {
             List<GenericModel> banks;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_bank_code ORDER BY name ASC";
             banks = jdbcTemplate.query(SQL, new GenericMapper());
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Banks");
@@ -122,7 +126,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetSKR() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -131,7 +135,7 @@ public class GenericService implements GenericInterface {
             List<GenericModel> skr;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_send_key_request ORDER BY id ASC";
             skr = jdbcTemplate.query(SQL, new GenericMapper());
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Send Key Request");
@@ -142,7 +146,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetTransactionDirection() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -151,7 +155,7 @@ public class GenericService implements GenericInterface {
             List<GenericModel> skr;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_trasaction_direction ORDER BY id ASC";
             skr = jdbcTemplate.query(SQL, new GenericMapper());
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Transaction Direction");
@@ -162,7 +166,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetStates() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -171,7 +175,7 @@ public class GenericService implements GenericInterface {
             List<GenericModel> states;
             SQL = "SELECT * FROM sparkpayweb_db.states ORDER BY id ASC";
             states = jdbcTemplate.query(SQL, new GenericMapper());
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All States");
@@ -182,7 +186,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetResponseCodes() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -191,7 +195,7 @@ public class GenericService implements GenericInterface {
             List<GenericModel> codes;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_response_codes ORDER BY id ASC";
             codes = jdbcTemplate.query(SQL, new GenericMapper());
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Response codes");
@@ -202,7 +206,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetSettlements(String institution, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -215,7 +219,7 @@ public class GenericService implements GenericInterface {
                 List<Map<String, Object>> _rows;
                 SQL = "SELECT a.institution_code FROM ajiswitch_db.tbl_nodes a WHERE a.issettlementbank = 0";
                 _rows = jdbcTemplate.queryForList(SQL);
-                
+
                 StringBuilder inString = new StringBuilder("(");
                 inString.append("'").append(institution).append("',");
                 for (final Map<String, Object> row : _rows) {
@@ -224,24 +228,24 @@ public class GenericService implements GenericInterface {
                 }
                 inString = inString.deleteCharAt(inString.length() - 1);
                 inString = inString.append(")");
-                
+
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
                         + "LEFT JOIN tbl_financial_institutions b "
                         + "ON a.institution_code = b.code "
-                        + "WHERE a.institution_code IN "+inString.toString()+" AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
+                        + "WHERE a.institution_code IN " + inString.toString() + " AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
                         + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
                 rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, limit, offset});
-                
+
                 SQL = "SELECT COUNT(a.id) as totalRecords "
-                    + "FROM ajiswitch_db.tbl_settlement_details a "
-                        + "WHERE a.institution_code IN "+inString.toString()+" AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
-            
+                        + "FROM ajiswitch_db.tbl_settlement_details a "
+                        + "WHERE a.institution_code IN " + inString.toString() + " AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+
                 List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
                 Map<String, Object> row = agg.get(0);
                 Long tRecords = (Long) row.get("totalRecords");
                 int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-                meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+                meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
 
             } else {
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
@@ -251,18 +255,18 @@ public class GenericService implements GenericInterface {
                         + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
                         + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
                 rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate, limit, offset});
-                
+
                 SQL = "SELECT COUNT(a.id) as totalRecords "
-                    + "FROM ajiswitch_db.tbl_settlement_details a "
+                        + "FROM ajiswitch_db.tbl_settlement_details a "
                         + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
-            
+
                 List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
                 Map<String, Object> row = agg.get(0);
                 Long tRecords = (Long) row.get("totalRecords");
                 int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-                meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+                meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
             }
-            
+
             networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -274,7 +278,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity SearchSettlementsByInstitution(String institution, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -292,15 +296,15 @@ public class GenericService implements GenericInterface {
             rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate, limit, offset});
 
             SQL = "SELECT COUNT(a.id) as totalRecords "
-                + "FROM ajiswitch_db.tbl_settlement_details a "
+                    + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
 
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
             Map<String, Object> row = agg.get(0);
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
-            
+            meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
+
             networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -312,7 +316,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetSettlements(String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -327,17 +331,17 @@ public class GenericService implements GenericInterface {
                     + "WHERE a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
                     + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, limit, offset});
-            
+
             SQL = "SELECT COUNT(a.id) as totalRecords "
                     + "FROM ajiswitch_db.tbl_settlement_details a "
                     + "WHERE a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
-            
+
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             Map<String, Object> row = agg.get(0);
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
-            
+            String meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
+
             networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -349,7 +353,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetSmartDets(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -360,7 +364,7 @@ public class GenericService implements GenericInterface {
                     + "FROM ajiswitch_db.tbl_smartdet_details a "
                     + "ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Smartdet");
@@ -371,7 +375,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetSettlementSummary(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -382,7 +386,7 @@ public class GenericService implements GenericInterface {
                     + "FROM ajiswitch_db.tbl_acct_summary_details a "
                     + "ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlement Summary");
@@ -393,7 +397,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetCardsSettlementSummary(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -404,7 +408,7 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_acct_summary_details a "
                     + "ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlement Summary");
@@ -415,7 +419,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetSettlementsByMerchant(String merchant, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -427,9 +431,12 @@ public class GenericService implements GenericInterface {
                 inString.append(",");
             }
             inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals(""))
+            if (inString.toString().equals("(")) {
+                inString = inString.deleteCharAt(inString.length() - 1);
+            }
+            if (inString.toString().equals("")) {
                 inString = inString.append("(-1");
+            }
             inString = inString.append(")");
             String SQL;
             List<Map<String, Object>> rows;
@@ -437,9 +444,9 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_settlement_details_merchant a "
                     + "LEFT JOIN postxnprocessor.tbl_merchants b "
                     + "ON a.merchant_id = b.merchant_id "
-                    + "WHERE a.merchant_id IN "+inString.toString()+" AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
+                    + "WHERE a.merchant_id IN " + inString.toString() + " AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements");
@@ -450,7 +457,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetCardsSettlementsByPTSP(String ptsp, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -465,18 +472,21 @@ public class GenericService implements GenericInterface {
                 inString.append(",");
             }
             inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals("(")) inString = inString.deleteCharAt(inString.length() - 1);
-            if (inString.toString().equals(""))
+            if (inString.toString().equals("(")) {
+                inString = inString.deleteCharAt(inString.length() - 1);
+            }
+            if (inString.toString().equals("")) {
                 inString = inString.append("(-1");
+            }
             inString = inString.append(")");
 
             SQL = "SELECT a.id, a.institution_name, a.merchant_id, a.acqVol, a.acqVal, a.msc, a.net_set_pos, a.settlement_date, a.report_location, b.merchant_name "
                     + "FROM sparkpay.tbl_settlement_details_merchant a "
                     + "LEFT JOIN postxnprocessor.tbl_merchants b "
                     + "ON a.merchant_id = b.merchant_id "
-                    + "WHERE a.merchant_id IN "+inString.toString()+" AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
+                    + "WHERE a.merchant_id IN " + inString.toString() + " AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements");
@@ -487,7 +497,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetCardsSettlements(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -498,14 +508,14 @@ public class GenericService implements GenericInterface {
 //                    + "FROM sparkpay.tbl_settlement_details a "
 //                    + "WHERE a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv' ORDER BY a.settlement_date DESC";
 //            rows = jdbcTemplate.queryForList(SQL);
-            
+
             SQL = "SELECT a.id, a.institution_name, a.merchant_id, a.acqVol, a.acqVal, a.msc, a.net_set_pos, a.settlement_date, a.report_location, b.merchant_name "
                     + "FROM sparkpay.tbl_settlement_details_merchant a "
                     + "LEFT JOIN postxnprocessor.tbl_merchants b "
                     + "ON a.merchant_id = b.merchant_id "
                     + "WHERE a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv' ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL);
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements");
@@ -516,7 +526,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetCardsSettlementsByAcquirer(String acquirer, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -527,7 +537,7 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_settlement_details a "
                     + "WHERE a.acquirer_id = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{acquirer});
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements by ACQ: " + acquirer);
@@ -538,7 +548,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetCardsSettlementsByIssuer(String issuer, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -549,7 +559,7 @@ public class GenericService implements GenericInterface {
                     + "FROM sparkpay.tbl_settlement_details a "
                     + "WHERE a.issuer_id = ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') ORDER BY a.settlement_date DESC";
             rows = jdbcTemplate.queryForList(SQL, new Object[]{issuer});
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements by ISS: " + issuer);
@@ -560,7 +570,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity DeleteHelper(String sessiontoken, int id, String table, String entity) {
         try {
@@ -570,27 +580,29 @@ public class GenericService implements GenericInterface {
             switch (userrole) {
                 case 1:
                 case 3:
-                    SQL = "DELETE FROM "+table+" WHERE id = ?";
+                    SQL = "DELETE FROM " + table + " WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseDeleted();
-                    else
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 case 2:
                     boolean checkPendingAction = CheckPendingDelete(id, table);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
                         networkResponse.setStatus("failed");
-                        networkResponse.setMessage(entity+" in pending for approval");
+                        networkResponse.setMessage(entity + " in pending for approval");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    SQL = "UPDATE "+table+" SET delete_flag = 1 WHERE id = ?";
+                    SQL = "UPDATE " + table + " SET delete_flag = 1 WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else 
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -599,7 +611,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity DeleteHelper(String sessiontoken, String id, String column, String table, String entity) {
         try {
@@ -609,27 +621,29 @@ public class GenericService implements GenericInterface {
             switch (userrole) {
                 case 1:
                 case 3:
-                    SQL = "DELETE FROM "+table+" WHERE "+column+" = ?";
+                    SQL = "DELETE FROM " + table + " WHERE " + column + " = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseDeleted();
-                    else
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 case 2:
                     boolean checkPendingAction = CheckPendingDelete(id, column, table);
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
                         networkResponse.setStatus("failed");
-                        networkResponse.setMessage(entity+" in pending for approval");
+                        networkResponse.setMessage(entity + " in pending for approval");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    SQL = "UPDATE "+table+" SET delete_flag = 1 WHERE id = ?";
+                    SQL = "UPDATE " + table + " SET delete_flag = 1 WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else 
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -638,7 +652,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity ApprovalHelper(String sessiontoken, int id, String table, String entity, String approvalType) {
         try {
@@ -650,7 +664,7 @@ public class GenericService implements GenericInterface {
                 case 3:
                     if (approvalType.equals("edit")) {
                         final List<Map<String, Object>> rows;
-                        switch(entity) {
+                        switch (entity) {
                             case "Merchant":
                                 SQL = "SELECT * FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
                                 rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
@@ -734,16 +748,16 @@ public class GenericService implements GenericInterface {
                                 break;
                         }
                     }
-                    SQL = approvalType.equals("delete") ?
-                            "DELETE FROM "+table+" WHERE delete_flag = 1 AND id = ?"
-                            : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE id = ?"
-                            : ""
-                            ;
+                    SQL = approvalType.equals("delete")
+                            ? "DELETE FROM " + table + " WHERE delete_flag = 1 AND id = ?"
+                            : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE " + table + " SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE id = ?"
+                            : "";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else 
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -752,7 +766,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity ApprovalHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType) {
         try {
@@ -764,16 +778,16 @@ public class GenericService implements GenericInterface {
                 case 3:
                     if (approvalType.equals("edit")) {
                         final List<Map<String, Object>> rows;
-                        switch(entity) {
+                        switch (entity) {
                             case "Terminal":
-                                SQL = "SELECT * FROM sparkpayweb_db.terminals_bkp WHERE "+column+" = ?";
+                                SQL = "SELECT * FROM sparkpayweb_db.terminals_bkp WHERE " + column + " = ?";
                                 rows = jdbcTemplate.queryForList(SQL, new Object[]{id});
                                 for (final Map<String, Object> row : rows) {
                                     SQL = "UPDATE sparkpay.terminals SET merchant_id = ?, merchant_name = ?, route_mode = ?, acquiring_institution_id = ?,"
-                                            + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE "+column+" = ?";
-                                    jdbcTemplate.update(SQL, new Object[]{row.get("merchant_id"), row.get("merchant_name"), row.get("route_mode"), row.get("acquiring_institution_id"), 
+                                            + "acquiring_institution_name = ?, cbn_bank_code = ?, terminal_type = ? WHERE " + column + " = ?";
+                                    jdbcTemplate.update(SQL, new Object[]{row.get("merchant_id"), row.get("merchant_name"), row.get("route_mode"), row.get("acquiring_institution_id"),
                                         row.get("acquiring_institution_name"), row.get("cbn_bank_code"), row.get("terminal_type"), id});
-                                    SQL = "DELETE FROM sparkpayweb_db.terminals_bkp WHERE "+column+" = ?";
+                                    SQL = "DELETE FROM sparkpayweb_db.terminals_bkp WHERE " + column + " = ?";
                                     jdbcTemplate.update(SQL, new Object[]{id});
                                 }
                                 break;
@@ -781,16 +795,16 @@ public class GenericService implements GenericInterface {
                                 break;
                         }
                     }
-                    SQL = approvalType.equals("delete") ?
-                            "DELETE FROM "+table+" WHERE delete_flag = 1 AND "+column+" = ?"
-                            : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE "+table+" SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE "+column+" = ?"
-                            : ""
-                            ;
+                    SQL = approvalType.equals("delete")
+                            ? "DELETE FROM " + table + " WHERE delete_flag = 1 AND " + column + " = ?"
+                            : approvalType.equals("edit") || approvalType.equals("create") ? "UPDATE " + table + " SET delete_flag = 0, edit_flag = 0, create_flag = 1 WHERE " + column + " = ?"
+                            : "";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -799,7 +813,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity RejectHelper(String sessiontoken, int id, String table, String entity, String approvalType) {
         try {
@@ -810,7 +824,7 @@ public class GenericService implements GenericInterface {
                 case 1:
                 case 3:
                     if (approvalType.equals("edit")) {
-                        switch(entity) {
+                        switch (entity) {
                             case "Merchant":
                                 SQL = "DELETE FROM sparkpayweb_db.merchants_bkp WHERE id = ?";
                                 jdbcTemplate.update(SQL, new Object[]{id});
@@ -839,18 +853,19 @@ public class GenericService implements GenericInterface {
                                 break;
                         }
                     }
-                    SQL = approvalType.equals("delete") ?
-                            "UPDATE "+table+" SET delete_flag = 0 WHERE id = ?"
-                            : approvalType.equals("edit") ?
-                            "UPDATE "+table+" SET edit_flag = 0 WHERE id = ?"
-                            : approvalType.equals("create") ?
-                            "DELETE FROM "+table+" WHERE create_flag = 0 AND id = ?" 
+                    SQL = approvalType.equals("delete")
+                            ? "UPDATE " + table + " SET delete_flag = 0 WHERE id = ?"
+                            : approvalType.equals("edit")
+                            ? "UPDATE " + table + " SET edit_flag = 0 WHERE id = ?"
+                            : approvalType.equals("create")
+                            ? "DELETE FROM " + table + " WHERE create_flag = 0 AND id = ?"
                             : "";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else 
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -859,7 +874,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity RejectHelper(String sessiontoken, String id, String column, String table, String entity, String approvalType) {
         try {
@@ -870,27 +885,28 @@ public class GenericService implements GenericInterface {
                 case 1:
                 case 3:
                     if (approvalType.equals("edit")) {
-                        switch(entity) {
+                        switch (entity) {
                             case "Terminal":
-                                SQL = "DELETE FROM sparkpayweb_db.terminals_bkp WHERE "+column+" = ?";
+                                SQL = "DELETE FROM sparkpayweb_db.terminals_bkp WHERE " + column + " = ?";
                                 jdbcTemplate.update(SQL, new Object[]{id});
                                 break;
                             default:
                                 break;
                         }
                     }
-                    SQL = approvalType.equals("delete") ?
-                            "UPDATE "+table+" SET delete_flag = 0 WHERE "+column+" = ?"
-                            : approvalType.equals("edit") ?
-                            "UPDATE "+table+" SET edit_flag = 0 WHERE "+column+" = ?"
-                            : approvalType.equals("create") ?
-                            "DELETE FROM "+table+" WHERE create_flag = 0 AND "+column+" = ?" 
+                    SQL = approvalType.equals("delete")
+                            ? "UPDATE " + table + " SET delete_flag = 0 WHERE " + column + " = ?"
+                            : approvalType.equals("edit")
+                            ? "UPDATE " + table + " SET edit_flag = 0 WHERE " + column + " = ?"
+                            : approvalType.equals("create")
+                            ? "DELETE FROM " + table + " WHERE create_flag = 0 AND " + column + " = ?"
                             : "";
                     retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                    if (retVal > 0)
+                    if (retVal > 0) {
                         return responseManager.ResponseAccepted();
-                    else
+                    } else {
                         return responseManager.ResponseBadRequest();
+                    }
                 default:
                     return responseManager.ResponseUnathorized();
             }
@@ -899,7 +915,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetTerminalTypes() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -908,7 +924,7 @@ public class GenericService implements GenericInterface {
             List<TerminalTypeModel> types;
             SQL = "SELECT * FROM sparkpayweb_db.tbl_terminal_types ORDER BY terminal_type ASC";
             types = jdbcTemplate.query(SQL, new TerminalTypeMapper());
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Terminal Types");
@@ -919,7 +935,7 @@ public class GenericService implements GenericInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     class GenericMapper implements RowMapper<GenericModel> {
 
         @Override
@@ -932,7 +948,7 @@ public class GenericService implements GenericInterface {
             return bank;
         }
     }
-    
+
     class TerminalTypeMapper implements RowMapper<TerminalTypeModel> {
 
         @Override
@@ -943,7 +959,7 @@ public class GenericService implements GenericInterface {
             return type;
         }
     }
-    
+
     public static boolean hasColumn(ResultSet rs, String columnName) throws SQLException {
         ResultSetMetaData rsmd = rs.getMetaData();
         int columns = rsmd.getColumnCount();
@@ -954,7 +970,7 @@ public class GenericService implements GenericInterface {
         }
         return false;
     }
-    
+
     @Override
     public ResponseEntity GetCardPayments(String institutionCode, String startDate, String endDate, int page, int limit, String response_code, String transaction_id, String merchant_name) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -968,35 +984,36 @@ public class GenericService implements GenericInterface {
                     || !transaction_id.equals("")
                     || !merchant_name.equals("")
                     ? "WHERE" : "";
-            
+
             if (!startDate.equals("") && !endDate.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.txndatetime BETWEEN '" + startDate + "' AND '" + endDate + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.txndatetime BETWEEN '" + startDate + "' AND '" + endDate + "'";
             }
             if (!response_code.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                if (response_code.equals("111"))
-                    whereQuery+=" a.responsecode != 00";
-                else                    
-                    whereQuery+=" a.responsecode = " + response_code+"";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                if (response_code.equals("111")) {
+                    whereQuery += " a.responsecode != 00";
+                } else {
+                    whereQuery += " a.responsecode = " + response_code + "";
+                }
             }
             if (!transaction_id.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.transactionid = '" + transaction_id + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.transactionid = '" + transaction_id + "'";
             }
             if (!merchant_name.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.merchantname LIKE '%" + merchant_name + "%'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.merchantname LIKE '%" + merchant_name + "%'";
             }
 //            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
             SQL = "SELECT a.amount, a.transactionid, a.merchantname, a.responsecode, a.responsemessage, a.txndatetime "
-                + "FROM cardweb_db.tbl_cardpayments a "
-                + whereQuery
-                + " ORDER BY a.txndatetime DESC LIMIT ? OFFSET ?";
+                    + "FROM cardweb_db.tbl_cardpayments a "
+                    + whereQuery
+                    + " ORDER BY a.txndatetime DESC LIMIT ? OFFSET ?";
             payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
             SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amount) as totalValue "
-                + "FROM cardweb_db.tbl_cardpayments a "
-                + whereQuery;
+                    + "FROM cardweb_db.tbl_cardpayments a "
+                    + whereQuery;
 
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
@@ -1004,87 +1021,122 @@ public class GenericService implements GenericInterface {
             Double totalValue = tValue != null ? tValue.doubleValue() : 0;
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
             networkResponse.setMeta(meta);
 //            }
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All cards payments");
             networkResponse.setData((ArrayList) payments);
-            
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
-    public ResponseEntity GetCardNUSPayments(String institutionCode, String startDate, String endDate, int page, int limit, String response_code, String transaction_id, String merchant_name) {
+    public ResponseEntity GetCardNUSPayments(String institutionCode,
+            String startDate, String endDate, int page, int limit,
+            String response_code, String transaction_id, String merchant_name) {
+
+        logger.info("GetCardNUSPayments invoked with: institutionCode=" + institutionCode
+                + ", startDate=" + startDate + ", endDate=" + endDate
+                + ", page=" + page + ", limit=" + limit
+                + ", response_code=" + response_code + ", transaction_id=" + transaction_id
+                + ", merchant_name=" + merchant_name);
+
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
-            List<Map<String, Object>> payments;
-            String whereQuery = !startDate.equals("")
-                    || !endDate.equals("")
-                    || !response_code.equals("")
-                    || !transaction_id.equals("")
-                    || !merchant_name.equals("")
-                    ? "WHERE" : "";
-            
-            if (!startDate.equals("") && !endDate.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.txndatetime BETWEEN '" + startDate + "' AND '" + endDate + "'";
-            }
-            if (!response_code.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                if (response_code.equals("111"))
-                    whereQuery+=" a.responsecode != 00";
-                else                    
-                    whereQuery+=" a.responsecode = " + response_code+"";
-            }
-            if (!transaction_id.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.transactionid = '" + transaction_id + "'";
-            }
-            if (!merchant_name.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.merchantname LIKE '%" + merchant_name + "%'";
-            }
-//            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
-            SQL = "SELECT a.amount, a.transactionid, a.merchantname, a.responsecode, a.responsemessage, a.txndatetime "
-                + "FROM cardweb_db.tbl_nuspayments a "
-                + whereQuery
-                + " ORDER BY a.txndatetime DESC LIMIT ? OFFSET ?";
-            payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
-            SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amount) as totalValue "
-                + "FROM cardweb_db.tbl_nuspayments a "
-                + whereQuery;
+            StringBuilder whereClause = new StringBuilder();
+            boolean hasCondition = false;
 
+            // Build the WHERE clause based on non-empty parameters.
+            if (!startDate.isEmpty() && !endDate.isEmpty()) {
+                whereClause.append(" WHERE a.txndatetime BETWEEN '")
+                        .append(startDate)
+                        .append("' AND '")
+                        .append(endDate)
+                        .append("'");
+                hasCondition = true;
+            }
+            if (!response_code.isEmpty()) {
+                if (hasCondition) {
+                    whereClause.append(" AND ");
+                } else {
+                    whereClause.append(" WHERE ");
+                    hasCondition = true;
+                }
+                if (response_code.equals("111")) {
+                    whereClause.append(" a.responsecode != '00'");
+                } else {
+                    whereClause.append(" a.responsecode = ").append(response_code);
+                }
+            }
+            if (!transaction_id.isEmpty()) {
+                if (hasCondition) {
+                    whereClause.append(" AND ");
+                } else {
+                    whereClause.append(" WHERE ");
+                    hasCondition = true;
+                }
+                whereClause.append(" a.transactionid = '").append(transaction_id).append("'");
+            }
+            if (!merchant_name.isEmpty()) {
+                if (hasCondition) {
+                    whereClause.append(" AND ");
+                } else {
+                    whereClause.append(" WHERE ");
+                    hasCondition = true;
+                }
+                whereClause.append(" a.merchantname LIKE '%").append(merchant_name).append("%'");
+            }
+
+            String finalWhere = whereClause.toString();
+            logger.info("Constructed WHERE clause: " + finalWhere);
+
+            // Build the main query for payments.
+            String SQL = "SELECT a.amount, a.transactionid, a.merchantname, a.responsecode, "
+                    + "a.responsemessage, a.txndatetime "
+                    + "FROM cardweb_db.tbl_nuspayments a "
+                    + finalWhere
+                    + " ORDER BY a.txndatetime DESC LIMIT ? OFFSET ?";
+
+            logger.info("Executing payments query: " + SQL + " with limit=" + limit + " and offset=" + offset);
+            List<Map<String, Object>> payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
+            logger.info("Payments query returned " + payments.size() + " rows.");
+
+            // Build the aggregation query.
+            SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amount) as totalValue "
+                    + "FROM cardweb_db.tbl_nuspayments a " + finalWhere;
+            logger.info("Executing aggregation query: " + SQL);
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
             BigDecimal tValue = (BigDecimal) row.get("totalValue");
             Double totalValue = tValue != null ? tValue.doubleValue() : 0;
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            logger.info("Aggregation results - totalValue: " + totalValue + ", totalRecords: " + totalRecords);
+
+            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": "
+                    + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
             networkResponse.setMeta(meta);
-//            }
-            
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All cards payments");
             networkResponse.setData((ArrayList) payments);
-            
+
+            logger.info("GetCardNUSPayments completed successfully. Returning response.");
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info("DataAccessException in GetCardNUSPayments: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetGapsPayments(String merchant_id, String startDate, String endDate, int page, int limit, String isSettled, String reference) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -1098,34 +1150,34 @@ public class GenericService implements GenericInterface {
                     || !reference.equals("")
                     || !isSettled.equals("")
                     ? "WHERE" : "";
-            
+
             if (!startDate.equals("") && !endDate.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.settlement_date BETWEEN '" + startDate + "' AND '" + endDate + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.settlement_date BETWEEN '" + startDate + "' AND '" + endDate + "'";
             }
             if (!merchant_id.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.merchant_id = '" + merchant_id + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.merchant_id = '" + merchant_id + "'";
             }
             if (!isSettled.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.isSettled = '" + isSettled + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.isSettled = '" + isSettled + "'";
             }
             if (!reference.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.gaps_reference = '" + reference + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.gaps_reference = '" + reference + "'";
             }
 //            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
             SQL = "SELECT a.*, b.merchant_name "
-                + "FROM sparkpay.tbl_merchant_paid_list a "
-                + "LEFT JOIN sparkpay.merchants b "
-                + "ON a.merchant_id = b.merchant_id "
-                + whereQuery
-                + " ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
+                    + "FROM sparkpay.tbl_merchant_paid_list a "
+                    + "LEFT JOIN sparkpay.merchants b "
+                    + "ON a.merchant_id = b.merchant_id "
+                    + whereQuery
+                    + " ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
             payments = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
             SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amountpaid) as totalValue "
-                + "FROM sparkpay.tbl_merchant_paid_list a "
-                + whereQuery;
+                    + "FROM sparkpay.tbl_merchant_paid_list a "
+                    + whereQuery;
 
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
@@ -1133,22 +1185,22 @@ public class GenericService implements GenericInterface {
             Double totalValue = tValue != null ? tValue.doubleValue() : 0;
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
             networkResponse.setMeta(meta);
 //            }
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All gaps payments");
             networkResponse.setData((ArrayList) payments);
-            
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
     @Override
     public ResponseEntity GetTNXStatusChange(String session_id, String startDate, String endDate, int page, int limit, String requested_by, String approved_by, String current_status, String new_status, String status) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -1165,44 +1217,44 @@ public class GenericService implements GenericInterface {
                     || !new_status.equals("")
                     || !status.equals("")
                     ? "WHERE" : "";
-            
+
             if (!startDate.equals("") && !endDate.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.created_at BETWEEN '" + startDate + "' AND '" + endDate + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.created_at BETWEEN '" + startDate + "' AND '" + endDate + "'";
             }
             if (!session_id.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.session_id = '" + session_id + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.session_id = '" + session_id + "'";
             }
             if (!requested_by.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.requested_by = '" + requested_by + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.requested_by = '" + requested_by + "'";
             }
             if (!approved_by.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.approved_by = '" + approved_by + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.approved_by = '" + approved_by + "'";
             }
             if (!new_status.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.new_status = '" + new_status + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.new_status = '" + new_status + "'";
             }
             if (!current_status.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.current_status = '" + current_status + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.current_status = '" + current_status + "'";
             }
             if (!status.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery+" AND " : whereQuery+"";
-                whereQuery+=" a.status = '" + status + "'";
+                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+                whereQuery += " a.status = '" + status + "'";
             }
-            
+
             SQL = "SELECT a.* "
-                + "FROM ajiswitch_db.tbl_transactions_status a "
-                + whereQuery
-                + " ORDER BY a.created_at DESC LIMIT ? OFFSET ?";
+                    + "FROM ajiswitch_db.tbl_transactions_status a "
+                    + whereQuery
+                    + " ORDER BY a.created_at DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
             SQL = "SELECT COUNT(a.id) as totalRecords, SUM(a.amount) as totalValue "
-                + "FROM ajiswitch_db.tbl_transactions_status a "
-                + whereQuery;
+                    + "FROM ajiswitch_db.tbl_transactions_status a "
+                    + whereQuery;
 
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
@@ -1210,15 +1262,15 @@ public class GenericService implements GenericInterface {
             Double totalValue = tValue != null ? tValue.doubleValue() : 0;
             Long tRecords = (Long) row.get("totalRecords");
             int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue+ ", \"totalRecords\": " + totalRecords +", \"page\": " + page +", \"limit\": " + limit +"}";
+            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
             networkResponse.setMeta(meta);
 //            }
-            
+
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All transactions");
             networkResponse.setData((ArrayList) transactions);
-            
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());

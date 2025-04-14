@@ -12,14 +12,12 @@ import com.transgate.api.models.InstitutionTypesModel;
 import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
-import com.transgate.api.util.Constants;
-import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import javax.sql.DataSource;
+import java.util.logging.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +39,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
 
     ResponseManager responseManager = new ResponseManager();
     
+    private Logger logger = Logger.getLogger(FinancialInstitutionsService.class.getName());
     private final AppEnvironmentConfig appConfig;
     public FinancialInstitutionsService(AppEnvironmentConfig appConfig) {
         this.appConfig = appConfig;
@@ -784,57 +783,95 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity CreateContact(String sessiontoken, String creator, String institution, String firstname, String surname, String phone_number, String email_address, String security){
-        try {
-            boolean userExist = CheckExistingContact(email_address, institution);
-            if (userExist) {
-                NetworkResponse networkResponse = new NetworkResponse();
-                networkResponse.setCode(200);
-                networkResponse.setStatus("failed");
-                networkResponse.setMessage("Email address already exit");
-                return responseManager.ResponseOk(networkResponse);
-            }
+public ResponseEntity CreateContact(String sessiontoken, String creator, String institution, 
+        String firstname, String surname, String phone_number, String email_address, String security) {
+    logger.info("CreateContact invoked with: sessiontoken=" + sessiontoken
+            + ", creator=" + creator
+            + ", institution=" + institution
+            + ", firstname=" + firstname
+            + ", surname=" + surname
+            + ", phone_number=" + phone_number
+            + ", email_address=" + email_address);
+    try {
+        // Check if the contact already exists for the institution.
+        boolean contactExist = CheckExistingContact(email_address, institution);
+        if (contactExist) {
+            logger.info("Contact already exists with email: " + email_address + " for institution: " + institution);
+            NetworkResponse networkResponse = new NetworkResponse();
+            networkResponse.setCode(200);
+            networkResponse.setStatus("failed");
+            networkResponse.setMessage("Email address already exist");
+            return responseManager.ResponseOk(networkResponse);
+        }
+
+        // Retrieve the role of the creator.
+        int userrole = GetUserRole(creator, sessiontoken);
+        logger.info("Retrieved userrole: " + userrole + " for creator: " + creator);
+
+        // Create login for the contact.
+        ResponseEntity createLoginResponse = usersInterface.Create(
+                sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
+        logger.info("Received response from usersInterface.Create");
+        LoginResponse response = (LoginResponse) createLoginResponse.getBody();
+        if (response.getStatus().equals("success")) {
+            logger.info("Login response success. Processing contact creation for userrole: " + userrole);
             String SQL;
-            int userrole = GetUserRole(creator, sessiontoken);
-            ResponseEntity CreateLoginForContact = usersInterface.Create(sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
-            LoginResponse response = (LoginResponse) CreateLoginForContact.getBody();
-            if (response.getStatus().equals("success")) {
-                switch (userrole) {
-                    case 1:
-                    case 2:
-                        SQL = "INSERT into tbl_financial_institution_contacts(financial_institution_code, firstname, surname, phone_number, email_address, date_created) VALUES(?, ?, ?, ?, ?, now())";
-                        int retval = jdbcTemplate.update(SQL, new Object[]{institution, firstname, surname, phone_number, email_address});
-                        if (retval > 0) 
-                            return responseManager.ResponseAccepted();
-                        else 
-                            return responseManager.ResponseBadRequest();
-                    case 3:
-                        boolean userPending = CheckContactPending(email_address, "create");
-                        if (userPending) {
-                            NetworkResponse networkResponse = new NetworkResponse();
-                            networkResponse.setCode(200);
-                            networkResponse.setStatus("failed");
-                            networkResponse.setMessage("Contact with email - " + email_address + " is already pending for creation");
-                            return responseManager.ResponseOk(networkResponse);
-                        }
-                        SQL = "INSERT INTO tbl_financial_institution_contacts_operations(financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'create', 'Create contact', now())";
-                        retval = jdbcTemplate.update(SQL, new Object[]{institution, firstname, surname, phone_number, email_address});
-                        if (retval > 0) 
-                            return responseManager.ResponseAccepted();
-                        else
-                            return responseManager.ResponseInternalServerError();
-                    default:
-                        return responseManager.ResponseUnathorized();
-                }
+            int retval;
+            switch (userrole) {
+                case 1:
+                case 2:
+                    SQL = "INSERT into tbl_financial_institution_contacts(" +
+                          "financial_institution_code, firstname, surname, phone_number, email_address, date_created) " +
+                          "VALUES(?, ?, ?, ?, ?, now())";
+                    logger.info("Executing SQL for userrole 1/2: " + SQL);
+                    retval = jdbcTemplate.update(SQL, new Object[]{institution, firstname, surname, phone_number, email_address});
+                    logger.info("Insert into tbl_financial_institution_contacts returned: " + retval);
+                    if (retval > 0) {
+                        logger.info("Successfully inserted contact for email: " + email_address);
+                        return responseManager.ResponseAccepted();
+                    } else {
+                        logger.info("Insert into tbl_financial_institution_contacts failed for email: " + email_address);
+                        return responseManager.ResponseBadRequest();
+                    }
+                case 3:
+                    // Check if creation is already pending.
+                    boolean contactPending = CheckContactPending(email_address, "create");
+                    if (contactPending) {
+                        logger.info("Contact pending creation already exists for email: " + email_address);
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Contact with email - " + email_address + " is already pending for creation");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    SQL = "INSERT INTO tbl_financial_institution_contacts_operations(" +
+                          "financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) " +
+                          "VALUES(?, ?, ?, ?, ?, 'create', 'Create contact', now())";
+                    logger.info("Executing SQL for userrole 3: " + SQL);
+                    retval = jdbcTemplate.update(SQL, new Object[]{institution, firstname, surname, phone_number, email_address});
+                    logger.info("Insert into tbl_financial_institution_contacts_operations returned: " + retval);
+                    if (retval > 0) {
+                        logger.info("Successfully recorded pending contact creation for email: " + email_address);
+                        return responseManager.ResponseAccepted();
+                    } else {
+                        logger.info("Insert into tbl_financial_institution_contacts_operations failed for email: " + email_address);
+                        return responseManager.ResponseInternalServerError();
+                    }
+                default:
+                    logger.info("Unauthorized user role: " + userrole + " for creator: " + creator);
+                    return responseManager.ResponseUnathorized();
             }
-            else {
-                return responseManager.ResponseInternalServerError();
-            }
-        } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+        } else {
+            logger.info("Login response failed. Status: " + response.getStatus());
             return responseManager.ResponseInternalServerError();
         }
+    } catch (DataAccessException ex) {
+        logger.info("DataAccessException in CreateContact: " + ex.getMessage());
+        return responseManager.ResponseInternalServerError();
     }
+}
+
+    
     
     @Override
     public ResponseEntity DeleteContact(String sessiontoken, String email, String username) {

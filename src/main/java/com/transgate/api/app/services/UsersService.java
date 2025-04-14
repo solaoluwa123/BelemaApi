@@ -47,7 +47,6 @@ public class UsersService implements UsersInterface {
     Randomizer randomizer = new Randomizer();
     private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
 
-
     private final Validators validators;
 
     // Constructor injection for RestCall
@@ -371,7 +370,7 @@ public class UsersService implements UsersInterface {
         try {
             // Query to fetch the number of login attempts left
             String sql = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
-             logger.info("{} : sql query to get attempts left {} -->", username, sql);
+            logger.info("{} : sql query to get attempts left {} -->", username, sql);
             int attemptsLeft = jdbcTemplate.queryForObject(sql, new Object[]{username}, int.class);
             logger.info("User {} has {} login attempts remaining.", username, attemptsLeft);
 
@@ -505,7 +504,7 @@ public class UsersService implements UsersInterface {
                             + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND (a.role_id = 0 OR a.role_id = ?) AND a.access = 1 "
                             + "ORDER BY a.id ASC";
-                     logger.info("{} : sql query {}.", username, sql);
+                    logger.info("{} : sql query {}.", username, sql);
                     menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
                     response.setTransgateMenu(!menu.isEmpty() ? menu : new ArrayList<>());
                 } else if (userRoleid == 8 || userRoleid == 5) {
@@ -514,7 +513,7 @@ public class UsersService implements UsersInterface {
                             + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 1 "
                             + "ORDER BY a.id ASC";
-                     logger.info("{} : sql query {}.", username, sql);
+                    logger.info("{} : sql query {}.", username, sql);
                     menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
                     response.setTransgateMenu(!menu.isEmpty() ? menu : new ArrayList<>());
                 } else {
@@ -528,15 +527,15 @@ public class UsersService implements UsersInterface {
                             + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND (a.role_id = 0 OR a.role_id = ?) AND a.access = 2 "
                             + "ORDER BY a.id ASC";
-                     logger.info("{} : sql query {}.", username, sql);
-                    
+                    logger.info("{} : sql query {}.", username, sql);
+
                 } else {
                     sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
                             + "b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
                             + "WHERE a.parent_id IS NULL AND a.role_id = ? AND a.access = 2 "
                             + "ORDER BY a.id ASC";
-                     logger.info("{} : sql query {}.", username, sql);
+                    logger.info("{} : sql query {}.", username, sql);
                 }
                 menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
                 response.setSparkpayMenu(!menu.isEmpty() ? menu : new ArrayList<>());
@@ -835,70 +834,107 @@ public class UsersService implements UsersInterface {
     }
 
     @Override
-    public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password) {
+    public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname,
+            String surname, String phone_number, String email_address, int roleid, String password) {
+        logger.info("Create invoked with sessiontoken: " + sessiontoken
+                + ", creator: " + creator
+                + ", username: " + username
+                + ", firstname: " + firstname
+                + ", surname: " + surname
+                + ", phone_number: " + phone_number
+                + ", email_address: " + email_address
+                + ", roleid: " + roleid);
+
         try {
+            // Check if the user with the given email address already exists.
             boolean userExist = CheckExistingUser(email_address);
             if (userExist) {
+                logger.info("User already exists with email: " + email_address);
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
                 networkResponse.setStatus("success");
-                networkResponse.setMessage("Email address already exit");
+                networkResponse.setMessage("Email address already exists");
                 return responseManager.ResponseOk(networkResponse);
             }
-            String reference = randomizer.GenerateReference();
-            String SQL;
-            int userrole = GetUserRole(creator, sessiontoken);
-            String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
 
-//            String code = roleid == 4 ? hashPassword : randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+            // Generate a reference and retrieve the user role.
+            String reference = randomizer.GenerateReference();
+            int userrole = GetUserRole(creator, sessiontoken);
+            logger.info("User role for creator " + creator + ": " + userrole);
+
+            // Create the hash password.
+            String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+            // Use the hashed password as the code for now.
             String code = hashPassword;
+            // Generate a random reference for the new user.
             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
             int enabled = 1;
+            String SQL;
+            int retval = 0;
+
             switch (userrole) {
                 case 1:
-//                    SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
-//                    jdbcTemplate.update(SQL, new Object[]{ref, code, email});
+                    // Insert the new user into tbl_users.
                     SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), ?, ?)";
-                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, enabled, ref});
+                    logger.info("Executing SQL (tbl_users): " + SQL);
+                    retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, enabled, ref});
+                    logger.info("tbl_users insert returned: " + retval);
+
                     if (retval > 0) {
+                        // Insert user details into tbl_user_details.
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
+                        logger.info("Executing SQL (tbl_user_details): " + SQL);
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
+                        logger.info("tbl_user_details insert returned: " + retval);
+
                         if (retval > 0) {
+                            // Build and return a LoginResponse.
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
                             response.setStatus("success");
                             response.setMessage("Account created");
-                            response.setFirstname(ref);
-                            response.setSurname(code);
+                            response.setFirstname(ref); // Example: Using generated ref
+                            response.setSurname(code);   // Example: Using hashed password as a placeholder
+                            logger.info("Account created successfully for user: " + email_address);
                             return responseManager.ResponseOk(response);
-                        } //                            return responseManager.ResponseAccepted();
-                        else {
+                        } else {
+                            logger.info("Insert into tbl_user_details failed for user: " + email_address);
                             return responseManager.ResponseInternalServerError();
                         }
                     } else {
+                        logger.info("Insert into tbl_users failed for user: " + email_address);
                         return responseManager.ResponseBadRequest();
                     }
                 case 2:
+                    // Check if user creation is already pending.
                     boolean userPending = CheckUserPending(username, email_address, "create");
                     if (userPending) {
+                        logger.info("User pending creation already exists for username: " + username + " or email: " + email_address);
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
                         networkResponse.setStatus("failed");
                         networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
                         return responseManager.ResponseOk(networkResponse);
                     }
+                    // Insert a record into tbl_user_details_operations for pending creation.
                     SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
+                    logger.info("Executing SQL (tbl_user_details_operations): " + SQL);
                     retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
+                    logger.info("tbl_user_details_operations insert returned: " + retval);
+
                     if (retval > 0) {
+                        logger.info("Pending account creation recorded for username: " + username);
                         return responseManager.ResponseAccepted();
                     } else {
+                        logger.info("Insert into tbl_user_details_operations failed for username: " + username);
                         return responseManager.ResponseInternalServerError();
                     }
                 default:
+                    logger.info("Unauthorized user role (" + userrole + ") for creator: " + creator);
                     return responseManager.ResponseUnathorized();
             }
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info("DataAccessException in Create method: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }

@@ -16,6 +16,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity Get(String startDate, String endDate, int page, int limit, boolean isCurrent);
     
+    public ResponseEntity getTransactionsByDateOnly(String startDate, String endDate, int page, int limit, boolean isCurrent);
+    
     public ResponseEntity GetBySessionId(String sessionid);
     
     public ResponseEntity GetBySessionId(String sessionid, boolean isCurrent);
@@ -59,6 +61,8 @@ public interface TransactionsInterface {
     public ResponseEntity Get(String institutioncode);
     
     public ResponseEntity Get(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent);
+    
+    public ResponseEntity getInstitutionTransactionsByDateOnly(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent);
     
     public ResponseEntity LogDispute(String sessiontoken, String sessionId, String amount, String wallet, String sourceInstitution, String type, String username);
     
