@@ -494,8 +494,8 @@ public class TransactionsController {
             @RequestParam("srcSessionid") String srcSessionid,
             @RequestParam("channelCode") String channelCode,
             @RequestParam("responseCode") String responseCode,
-            @RequestParam("srcAccountName") String srcAccountName,
-            @RequestParam("destAccountName") String destAccountName,
+            @RequestParam("srcAccountNumber") String srcAccountNumber,
+            @RequestParam("destAccountNumber") String destAccountNumber,
             @RequestParam("srcInstitutioncode") String srcInstitutioncode,
             @RequestParam("destInstitutioncode") String destInstitutioncode,
             @RequestParam("minAmount") String minAmount,
@@ -515,8 +515,8 @@ public class TransactionsController {
                 + ", destInstitutioncode=" + destInstitutioncode
                 + ", minAmount=" + minAmount
                 + ", maxAmount=" + maxAmount
-                + ", srcAccountName=" + srcAccountName.replaceAll("space", " ")
-                + ", destAccountName=" + destAccountName.replaceAll("space", " ")
+                + ", srcAccountNumber=" + srcAccountNumber
+                + ", destAccountNumber=" + destAccountNumber
                 + ", startDate=" + startDate
                 + ", endDate=" + endDate
                 + ", page=" + page
@@ -545,8 +545,8 @@ public class TransactionsController {
                 destInstitutioncode,
                 minAmount,
                 maxAmount,
-                srcAccountName.replaceAll("space", " "),
-                destAccountName.replaceAll("space", " "),
+                srcAccountNumber.replaceAll("space", " "),
+                destAccountNumber.replaceAll("space", " "),
                 startDate,
                 endDate,
                 page,
@@ -652,13 +652,13 @@ public class TransactionsController {
         return transactionsInterface.RequestTransactionStatusChange(model.getSrcSessionid(), sessiontoken, model.getUsername(), model.getNarration());
     }
 
-    @RequestMapping(value = "/transaction/status/change/update", method = RequestMethod.POST, headers = "Accept=application/json")
-    public ResponseEntity ApproveTransactionStatusChange(@RequestHeader(value = "Authorization") String header,
-            @RequestHeader(value = "auth-token") String sessiontoken,
-            @RequestBody DisputeModel model) {
-        if (!validators.validHeader().equals(header)) {
-            return responseManager.InvalidAuthorizationHeader();
-        }
-        return transactionsInterface.UpdateTransactionStatusChange(model.getSrcSessionid(), sessiontoken, model.getUsername(), model.getNarration());
-    }
+//    @RequestMapping(value = "/transaction/status/change/update", method = RequestMethod.POST, headers = "Accept=application/json")
+//    public ResponseEntity ApproveTransactionStatusChange(@RequestHeader(value = "Authorization") String header,
+//            @RequestHeader(value = "auth-token") String sessiontoken,
+//            @RequestBody DisputeModel model) {
+//        if (!validators.validHeader().equals(header)) {
+//            return responseManager.InvalidAuthorizationHeader();
+//        }
+//        return transactionsInterface.UpdateTransactionStatusChange(model.getSrcSessionid(), sessiontoken, model.getUsername(), model.getNarration());
+//    }
 }

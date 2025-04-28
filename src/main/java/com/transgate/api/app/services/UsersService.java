@@ -949,54 +949,95 @@ public class UsersService implements UsersInterface {
     }
 
     @Override
-    public ResponseEntity CreateOther(String sessiontoken, String creator, String username, String firstname, String surname, String phone_number, String email_address, int roleid, String password, String institutionid, String institutionname) {
+    public ResponseEntity CreateOther(String sessiontoken, String creator, String username,
+            String firstname, String surname, String phone_number, String email_address,
+            int roleid, String password, String institutionid, String institutionname) {
         try {
+            logger.info("CreateOther invoked with: sessiontoken=" + sessiontoken
+                    + ", creator=" + creator
+                    + ", username=" + username
+                    + ", firstname=" + firstname
+                    + ", surname=" + surname
+                    + ", phone_number=" + phone_number
+                    + ", email_address=" + email_address
+                    + ", roleid=" + roleid
+                    + ", institutionid=" + institutionid
+                    + ", institutionname=" + institutionname);
+
+            // Check if the user already exists.
             boolean userExist = CheckExistingUser(email_address);
             if (userExist) {
+                logger.info("User already exists with email: " + email_address);
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
                 networkResponse.setStatus("success");
-                networkResponse.setMessage("Email address already exit");
+                networkResponse.setMessage("Email address already exists");
                 return responseManager.ResponseOk(networkResponse);
             }
+
+            // Generate a reference (if needed) and retrieve the user role.
             String reference = randomizer.GenerateReference();
-            String SQL;
             int userrole = GetUserRole(creator, sessiontoken);
+            logger.info("Retrieved user role (" + userrole + ") for creator: " + creator);
+
+            // Create hashed password.
             String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
+            logger.info("Password hashed successfully.");
+
+            String SQL;
+            int retval = 0;
             switch (userrole) {
                 case 1:
+                    // In case 1, also generate additional random references.
                     String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                     String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
                     SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                    int retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, ref});
+                    logger.info("Executing SQL (tbl_users): " + SQL);
+                    retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, ref});
+                    logger.info("tbl_users insert result: " + retval);
+
                     if (retval > 0) {
                         SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
+                        logger.info("Executing SQL (tbl_user_details): " + SQL);
                         retval = jdbcTemplate.update(SQL, new Object[]{username, firstname, surname, phone_number, email_address, roleid});
+                        logger.info("tbl_user_details insert result: " + retval);
+
                         if (retval > 0) {
                             if (roleid == 6) {
                                 List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
+                                logger.info("Mapping user to merchants: " + merchantIds);
                                 MapUserToMerchants(email_address, merchantIds);
                             }
-                            String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
+                            String institutiontype = roleid == 5 ? "financial_institution_user"
+                                    : roleid == 6 ? "merchant_user"
+                                            : roleid == 7 ? "terminal_owner_user"
+                                                    : roleid == 8 ? "ptsp_user"
+                                                            : "";
                             SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
+                            logger.info("Executing SQL (tbl_map_card_users_institution): " + SQL);
                             jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
+                            logger.info("User mapping inserted successfully.");
+
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
                             response.setStatus("success");
                             response.setMessage("Account created");
                             response.setFirstname(ref);
                             response.setSurname(code);
+                            logger.info("Account creation successful. Returning LoginResponse.");
                             return responseManager.ResponseOk(response);
-//                            return responseManager.ResponseAccepted();
                         } else {
+                            logger.info("tbl_user_details insert failed for email: " + email_address);
                             return responseManager.ResponseInternalServerError();
                         }
                     } else {
+                        logger.info("tbl_users insert failed for email: " + email_address);
                         return responseManager.ResponseBadRequest();
                     }
                 case 2:
                     boolean userPending = CheckUserPending(username, email_address, "create");
                     if (userPending) {
+                        logger.info("User pending creation already exists for username: " + username + " or email: " + email_address);
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
                         networkResponse.setStatus("failed");
@@ -1004,24 +1045,37 @@ public class UsersService implements UsersInterface {
                         return responseManager.ResponseOk(networkResponse);
                     }
                     SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
+                    logger.info("Executing SQL (tbl_user_details_operations): " + SQL);
                     retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
+                    logger.info("tbl_user_details_operations insert result: " + retval);
+
                     if (retval > 0) {
                         if (roleid == 6) {
                             List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
+                            logger.info("Mapping user to merchants (pending case): " + merchantIds);
                             MapUserToMerchants(email_address, merchantIds);
                         }
-                        String institutiontype = roleid == 5 ? "financial_institution_user" : roleid == 6 ? "merchant_user" : roleid == 7 ? "terminal_owner_user" : roleid == 8 ? "ptsp_user" : "";
+                        String institutiontype = roleid == 5 ? "financial_institution_user"
+                                : roleid == 6 ? "merchant_user"
+                                        : roleid == 7 ? "terminal_owner_user"
+                                                : roleid == 8 ? "ptsp_user"
+                                                        : "";
                         SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
+                        logger.info("Executing SQL (tbl_map_card_users_institution) for pending creation: " + SQL);
                         jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
+                        logger.info("Pending account creation mapping inserted successfully.");
+
                         return responseManager.ResponseAccepted();
                     } else {
+                        logger.info("Insert into tbl_user_details_operations failed for username: " + username);
                         return responseManager.ResponseInternalServerError();
                     }
                 default:
+                    logger.info("Unauthorized user role: " + userrole + " for creator " + creator);
                     return responseManager.ResponseUnathorized();
             }
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info("DataAccessException in CreateOther: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }
