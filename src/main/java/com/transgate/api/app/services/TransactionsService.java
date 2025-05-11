@@ -22,8 +22,10 @@ import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -60,6 +62,7 @@ public class TransactionsService implements TransactionsInterface {
     ResponseManager responseManager = new ResponseManager();
     DateUtil dateUtil = new DateUtil();
     private Logger logger = Logger.getLogger(TransactionsService.class.getName());
+    DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
 
     private int GetUserRole(String username, String session_token) {
         try {
@@ -348,6 +351,8 @@ public class TransactionsService implements TransactionsInterface {
     @Override
     public ResponseEntity getInstitutionTransactionsByDateOnly(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
+        ZonedDateTime idKey = ZonedDateTime.now();
+        String marker = idKey.format(fmt);
         try {
             // Log the entry parameters.
             logger.info("Entering getInstitutionTransactionsByDateOnly transactions method for institution with parameters: startDate=" + startDate
@@ -376,7 +381,11 @@ public class TransactionsService implements TransactionsInterface {
                         + " ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("sql query to fetch current day transactions for institution: " + SQL);
                 logger.info("Executing current transactions query with parameters: [startDate, endDate, limit, offset].");
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: getInstitutionTransactionsByDateOnly(): tbl_creditfundtransfers request duration: ---> " + durationMs + " ms");
                 logger.info("Current transactions query returned " + transactions.size() + " rows.");
 
                 SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
@@ -398,14 +407,22 @@ public class TransactionsService implements TransactionsInterface {
                         + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("sql query  to fetch older days transactions for institution: " + SQL);
                 logger.info("Executing historical transactions query with parameters: [startDate, endDate, limit, offset].");
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: getInstitutionTransactionsByDateOnly(): tbl_creditfundtransfer_hist_s request duration: ---> " + durationMs + " ms");
                 logger.info("Historical transactions query returned for institution " + transactions.size() + " rows.");
 
                 SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
 
                 logger.info("sql query  to fetch hitorical days summary for institution: " + SQL);
                 logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
+                ZonedDateTime startTimeAgg = ZonedDateTime.now();
                 agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
+                ZonedDateTime endTimeAgg = ZonedDateTime.now();
+                long durationMsAgg = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: getInstitutionTransactionsByDateOnly(): agg request duration: ---> " + durationMsAgg + " ms");
                 logger.info("Aggregation query executed for historical transactions.");
             }
 
@@ -450,6 +467,8 @@ public class TransactionsService implements TransactionsInterface {
     @Override
     public ResponseEntity Get(String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
+        ZonedDateTime idKey = ZonedDateTime.now();
+        String marker = idKey.format(fmt);
         try {
             // Log the entry parameters.
             logger.info("Entering Get transactions method with parameters: startDate=" + startDate
@@ -481,13 +500,21 @@ public class TransactionsService implements TransactionsInterface {
                 SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.response_code, a.beneficiary_account_number, a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.destination_institution_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.name AS srcInstitutionName, c.name AS destInstitutionName, a.destination_node FROM (SELECT id FROM ajiswitch_db.tbl_creditfundtransfers WHERE transaction_date_time >= ? AND transaction_date_time <= ? ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?) AS sq JOIN ajiswitch_db.tbl_creditfundtransfers a ON a.id = sq.id LEFT JOIN transgateweb_db.tbl_financial_institutions b ON a.source_institution_code = b.code LEFT JOIN transgateweb_db.tbl_financial_institutions c ON a.destination_institution_code = c.code ORDER BY a.transaction_date_time DESC;";
                 logger.info("sql query to fetch current day transactions: " + SQL);
                 logger.info("Executing current transactions query with parameters: [startDate, endDate, limit, offset].");
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: Get(): tbl_creditfundtransfers request duration: ---> " + durationMs + " ms");
                 logger.info("Current transactions query returned " + transactions.size() + " rows.");
 
                 SQL = "SELECT SUM(amount) AS totalValue, COUNT(*) AS totalRecords, AVG(response_code = '00') * 100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers WHERE transaction_date_time BETWEEN ? AND ?;";
                 logger.info("sql query for summary: " + SQL);
                 logger.info("Executing current transactions aggregation query with parameters: [startDate, endDate].");
+                ZonedDateTime startTimeAgg = ZonedDateTime.now();
                 agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                ZonedDateTime endTimeAgg = ZonedDateTime.now();
+                long durationMsAgg = Duration.between(startTimeAgg, endTimeAgg).toMillis();
+                logger.info("\nINFO: " + marker + " :: Get(): agg total duration: ---> " + durationMsAgg + " ms");
                 logger.info("Aggregation query executed for current transactions.");
             } else {
                 logger.info("Executing query for historical transactions from 'tbl_creditfundtransfer_hist_s'.");
@@ -505,13 +532,22 @@ public class TransactionsService implements TransactionsInterface {
                         + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("sql query  to fetch older days transactions: " + SQL);
                 logger.info("Executing historical transactions query with parameters: [startDate, endDate, limit, offset].");
+                ZonedDateTime startTimeHist = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTimeHist = ZonedDateTime.now();
+                long durationMsHist = Duration.between(startTimeHist, endTimeHist).toMillis();
+                logger.info("\nINFO: " + marker + " :: Get(): tbl_creditfundtransfer_hist_s request duration: ---> " + durationMsHist + " ms");
+                
                 logger.info("Historical transactions query returned " + transactions.size() + " rows.");
 
                 SQL = "SELECT SUM(amount) AS totalValue, COUNT(*) AS totalRecords, AVG(response_code = '00') * 100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s WHERE transaction_date_time BETWEEN ? AND ?;";
                 logger.info("sql query  to fetch hitorical days summary: " + SQL);
                 logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
+                ZonedDateTime startTimeAgg = ZonedDateTime.now();
                 agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                ZonedDateTime endTimeAgg = ZonedDateTime.now();
+                long durationMsAgg = Duration.between(startTimeAgg, endTimeAgg).toMillis();
+                logger.info("\nINFO: " + marker + " :: Get(): agg total duration: ---> " + durationMsAgg + " ms");
                 logger.info("Aggregation query executed for historical transactions.");
             }
 
@@ -545,6 +581,9 @@ public class TransactionsService implements TransactionsInterface {
             networkResponse.setMessage("All Transactions");
             networkResponse.setData((ArrayList) transactions);
             logger.info("Transaction response composed successfully. Returning response.");
+            ZonedDateTime endTimeTotalExe = ZonedDateTime.now();
+                long durationMsTotalExe = Duration.between(idKey, endTimeTotalExe).toMillis();
+                logger.info("\nINFO: " + marker + " :: Get(): total method execution duration: ---> " + durationMsTotalExe + " ms");
 
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
@@ -677,6 +716,8 @@ public class TransactionsService implements TransactionsInterface {
             String userInstitutionCode
     ) {
         NetworkResponse networkResponse = new NetworkResponse();
+        ZonedDateTime idKey = ZonedDateTime.now();
+        String marker = idKey.format(fmt);
         try {
             logger.info("SearchTransactions called with: session_id=" + session_id
                     + ", channel_code=" + channel_code
@@ -833,7 +874,12 @@ public class TransactionsService implements TransactionsInterface {
                         + whereQuery
                         + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("Final SQL: " + SQL);
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions() only primary table : tbl_creditfundtransfers duration: ---> " + durationMs + " ms");
+            
             } else if (includeHistory && !includeCurrent) {
                 // Query only historical table.
                 logger.info("Querying only historical transactions.");
@@ -844,7 +890,12 @@ public class TransactionsService implements TransactionsInterface {
                         + whereQuery
                         + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("Final SQL: " + SQL);
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions() only history table : tbl_creditfundtransfer_hist_s duration: ---> " + durationMs + " ms");
+            
             } else if (includeCurrent && includeHistory) {
                 // Query both tables using UNION ALL.
                 logger.info("Querying both current and historical transactions via UNION ALL.");
@@ -862,7 +913,11 @@ public class TransactionsService implements TransactionsInterface {
                 SQL = "SELECT * FROM (" + currentSQL + " UNION ALL " + historySQL + ") as combined "
                         + "ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("Final UNION SQL: " + SQL);
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions(): tbl_creditfundtransfers and tbl_creditfundtransfer_hist_s request duration: ---> " + durationMs + " ms");
             } else {
                 // Fallback if no dates are provided: default to current table.
                 logger.info("No date range provided; defaulting to current transactions.");
@@ -873,7 +928,11 @@ public class TransactionsService implements TransactionsInterface {
                         + whereQuery
                         + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("Final SQL: " + SQL);
+                ZonedDateTime startTime = ZonedDateTime.now();
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new FullTransactionMapper());
+                ZonedDateTime endTime = ZonedDateTime.now();
+                long durationMs = Duration.between(startTime, endTime).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions(): tbl_creditfundtransfers request duration: ---> " + durationMs + " ms");
             }
 
             // Aggregation:
@@ -882,14 +941,22 @@ public class TransactionsService implements TransactionsInterface {
             int totalRecords = 0;
             Double successRate = 0.0;
             if (includeCurrent && includeHistory) {
-                String aggCurrentSQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                String aggCurrentSQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a " + whereQuery;
-                String aggHistorySQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                String aggHistorySQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                         + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a " + whereQuery;
                 logger.info("Executing aggregation on current transactions: " + aggCurrentSQL);
+                ZonedDateTime startTimeAgg = ZonedDateTime.now();
                 List<Map<String, Object>> aggCurrent = jdbcTemplate.queryForList(aggCurrentSQL);
+                ZonedDateTime endTimeAgg = ZonedDateTime.now();
+                long durationMsAgg = Duration.between(startTimeAgg, endTimeAgg).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions(): agg total duration: ---> " + durationMsAgg + " ms");
                 logger.info("Executing aggregation on historical transactions: " + aggHistorySQL);
+                ZonedDateTime startTimeAggHist = ZonedDateTime.now();
                 List<Map<String, Object>> aggHistory = jdbcTemplate.queryForList(aggHistorySQL);
+                ZonedDateTime endTimeAggHist = ZonedDateTime.now();
+                long durationMsAggHist = Duration.between(startTimeAggHist, endTimeAggHist).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions(): agg total duration: ---> " + durationMsAggHist + " ms");
                 // Sum the aggregates.
                 totalValue = sumTotalValue(aggCurrent) + sumTotalValue(aggHistory);
                 totalRecords = sumTotalRecords(aggCurrent) + sumTotalRecords(aggHistory);
@@ -906,7 +973,11 @@ public class TransactionsService implements TransactionsInterface {
                             + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a " + whereQuery;
                 }
                 logger.info("Executing aggregation query: " + aggSQL);
+                ZonedDateTime startTimeAgg = ZonedDateTime.now();
                 List<Map<String, Object>> agg = jdbcTemplate.queryForList(aggSQL);
+                ZonedDateTime endTimeAgg = ZonedDateTime.now();
+                long durationMsAgg = Duration.between(startTimeAgg, endTimeAgg).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions(): agg total duration: ---> " + durationMsAgg + " ms");
 
                 if (agg.isEmpty()) {
                     logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
@@ -938,6 +1009,9 @@ public class TransactionsService implements TransactionsInterface {
             networkResponse.setData((ArrayList) transactions);
 
             logger.info("SearchTransactions completed successfully with " + transactions.size() + " records found");
+            ZonedDateTime endTimeTotalExe = ZonedDateTime.now();
+                long durationMsTotalExe = Duration.between(idKey, endTimeTotalExe).toMillis();
+                logger.info("\nINFO: " + marker + " :: SearchTransactions(): total method execution duration: ---> " + durationMsTotalExe + " ms");
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             logger.info("DataAccessException occurred in SearchTransactions: " + ex.getMessage());
