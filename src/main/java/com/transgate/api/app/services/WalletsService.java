@@ -24,6 +24,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import com.transgate.api.interfaces.WalletsInterface;
 import java.math.BigDecimal;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  *
@@ -33,6 +34,7 @@ import java.math.BigDecimal;
 public class WalletsService implements WalletsInterface {
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();

@@ -15,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -31,6 +32,7 @@ public class TerminalOwnersService implements TerminalOwnersInterface {
     DataSource dataSource;
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();

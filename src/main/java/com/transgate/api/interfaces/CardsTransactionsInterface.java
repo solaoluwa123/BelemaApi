@@ -67,6 +67,8 @@ public interface CardsTransactionsInterface {
     
     public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String username);
     
+    public ResponseEntity LogDisputesBulkExternal(String sessiontoken, String records, String username);
+    
     public ResponseEntity GetDisputes(String institutioncode, String startDate, String endDate, int page, int limit);
     
     public ResponseEntity GetOneDispute(String uniqueId);

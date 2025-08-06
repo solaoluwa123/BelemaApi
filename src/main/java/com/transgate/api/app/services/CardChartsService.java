@@ -6,13 +6,10 @@
 package com.transgate.api.app.services;
 
 import com.transgate.api.interfaces.CardChartInterface;
-import com.transgate.api.interfaces.TransactionsInterface;
 import com.transgate.api.models.*;
 import com.transgate.api.util.DateUtil;
 import com.transgate.api.util.ResponseCodeInterpreter;
 import com.transgate.api.util.ResponseManager;
-import org.json.JSONArray;
-import org.json.JSONException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
@@ -21,7 +18,7 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 
 import javax.sql.DataSource;
-import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
@@ -30,8 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
+import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
  *
@@ -43,6 +39,7 @@ public class CardChartsService implements CardChartInterface {
     DataSource dataSource;
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
@@ -293,7 +290,7 @@ public class CardChartsService implements CardChartInterface {
         public FullTransactionModel mapRow(ResultSet rs, int arg1) throws SQLException {
             FullTransactionModel response = new FullTransactionModel();            
             ResponseCodeInterpreter responseCodeInterpreter = new ResponseCodeInterpreter();
-            response.setId(rs.getInt("id"));
+            response.setId(new BigInteger(rs.getString("id")));
             response.setSrcSessionid(rs.getString("session_id"));
             response.setSrcAccountNumber(rs.getString("originator_account_number"));
             response.setSrcAccountName(rs.getString("originator_account_name"));

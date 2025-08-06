@@ -5,6 +5,7 @@
  */
 package com.transgate.api.interfaces;
 
+import java.math.BigInteger;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -93,7 +94,7 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetDisputeTypes();
     
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, String username, int status, String proof_of_reject_uri, String selectedDisputes, String type);
+    public ResponseEntity ApproveSettlement(String sessiontoken, BigInteger id, String username, int status, String proof_of_reject_uri, String selectedDisputes, String type);
     
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids);
     

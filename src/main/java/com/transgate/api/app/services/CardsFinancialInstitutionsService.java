@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -34,6 +35,7 @@ public class CardsFinancialInstitutionsService implements CardsFinancialInstitut
     DataSource dataSource;
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();

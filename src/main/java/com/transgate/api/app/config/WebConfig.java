@@ -10,8 +10,14 @@ package com.transgate.api.app.config;
  * @author Olawoyin Samson
  */
 import com.transgate.api.app.AuthTokenInterceptor;
+import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.jdbc.DataSourceBuilder;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 
@@ -30,6 +36,8 @@ public class WebConfig implements WebMvcConfigurer {
         registry.addInterceptor(authTokenInterceptor)
                 .addPathPatterns("/**");
     }
+    
+    
 //    @Bean
 //    public ErrorPageRegistrar errorPageRegistrar() {
 //        return registry -> registry.addErrorPages(new ErrorPage(HttpStatus.NOT_FOUND, "/index"));

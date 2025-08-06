@@ -1,5 +1,4 @@
 package com.transgate.api.app;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -55,10 +54,10 @@ public class TransgateApi //extends SpringBootServletInitializer
         executeGet("users/crons/unlock");
     }
     
-    @Scheduled(fixedRate = 1000 * 60 * 60 * 24) // Run every day (10000 milliseconds)
-    public void acceptDisputes() {
-        executeGet("app/crons/autopassdisputesforsettlement");
-    }
+//    @Scheduled(fixedRate = 1000 * 60 * 60 * 24) // Run every day (10000 milliseconds)
+//    public void acceptDisputes() {
+//        executeGet("app/crons/autopassdisputesforsettlement");
+//    }
     
     @Scheduled(fixedRate = 1000 * 120) // Run every 2 minutes (10000 milliseconds)
     public void updateOldAccountNUBAN() {

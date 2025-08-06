@@ -5,13 +5,16 @@
  */
 package com.transgate.api.models;
 
+import java.math.BigInteger;
+
 /**
  *
  * @author Makintola
  */
 public class DisputeModel extends FullTransactionModel {
     String type, loggedBy, dateModified, dateCreated;
-    int transactionId, status, resolved;
+    BigInteger transactionId;
+    int status, resolved;
     String resolvedBy, records, timeline_date, proof_of_reject_uri;
     String loggingInstitution;
     String selectedDisputes;
@@ -64,11 +67,11 @@ public class DisputeModel extends FullTransactionModel {
         this.dateCreated = dateCreated;
     }
 
-    public int getTransactionId() {
+    public BigInteger getTransactionId() {
         return transactionId;
     }
 
-    public void setTransactionId(int transactionId) {
+    public void setTransactionId(BigInteger transactionId) {
         this.transactionId = transactionId;
     }
 

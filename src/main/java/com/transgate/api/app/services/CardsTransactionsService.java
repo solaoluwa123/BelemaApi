@@ -15,27 +15,32 @@ import com.transgate.api.util.Mailers;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.RestCall;
 import com.transgate.api.util.TransactionsCodeInterpreter;
-import java.io.UnsupportedEncodingException;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
 import org.json.JSONArray;
 import org.json.JSONException;
+import org.json.JSONObject;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 /**
  *
@@ -48,6 +53,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     DataSource dataSource;
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
@@ -62,6 +68,19 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     private final Logger logger = Logger.getLogger(CardsTransactionsService.class.getName());
 
     private int GetUserRole(String session_token) {
+        try {
+            int role;
+
+            String SQL = "SELECT role FROM tbl_user_details WHERE deleted = 0 AND session_token = ?";
+            role = jdbcTemplate.queryForObject(SQL, new Object[]{session_token}, int.class);
+            return role;
+        } catch (DataAccessException ex) {
+//            System.out.println("error>>>>" + ex.getMessage() + "------------");
+            return -100;
+        }
+    }
+
+    private int GetUserRoleExternal(String session_token) {
         try {
             int role;
 
@@ -167,14 +186,52 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     }
 
     public List<CardsTransactionModel> GetTransaction(String terminalid, String rrn, String stan, boolean isCurrent) {
+        logger.info(String.format("GetTransaction() called: terminalid=%s, rrn=%s, stan=%s, isCurrent=%s",
+                terminalid, rrn, stan, isCurrent));
+
         String SQL;
-        List<CardsTransactionModel> transactions;
         if (isCurrent) {
-            SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? ORDER BY a.id DESC";
+            SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a "
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? "
+                    + "ORDER BY a.id DESC";
+            logger.info(String.format("Using CURRENT transaction table. SQL: %s", SQL));
         } else {
-            SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? ORDER BY a.id DESC";
+            SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? "
+                    + "ORDER BY a.id DESC";
+            logger.info(String.format("Using HISTORY transaction table. SQL: %s", SQL));
         }
-        transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapperDefault());
+
+        logger.info(String.format("Executing query with params: terminalid=%s, rrn=%s, stan=%s", terminalid, rrn, stan));
+        List<CardsTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan}, new CardsTransactionsMapperDefault());
+        logger.info(String.format("GetTransaction() returned %d result(s)", transactions.size()));
+        return transactions;
+    }
+
+    public List<CardsTransactionModel> getTransactionExternal(String terminalid, String rrn, String stan, String merchantid, boolean isCurrent) {
+        logger.info(String.format("getTransactionExternal() called: terminalid=%s, rrn=%s, stan=%s, merchantid=%s, isCurrent=%s",
+                terminalid, rrn, stan, merchantid, isCurrent));
+
+        String SQL;
+        if (isCurrent) {
+            SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a "
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? AND a.merchant_id = ? "
+                    + "ORDER BY a.id DESC";
+            logger.info(String.format("Using CURRENT transaction table. SQL: %s", SQL));
+        } else {
+            SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
+                    + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
+                    + "WHERE a.terminal_id = ? AND a.retrieval_ref_number = ? AND a.system_trace_number = ? AND a.merchant_id = ? "
+                    + "ORDER BY a.id DESC";
+            logger.info(String.format("Using HISTORY transaction table. SQL: %s", SQL));
+        }
+
+        logger.info(String.format("Executing query with params: terminalid=%s, rrn=%s, stan=%s, merchantid=%s", terminalid, rrn, stan, merchantid));
+        List<CardsTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{terminalid, rrn, stan, merchantid}, new CardsTransactionsMapperDefault());
+        logger.info(String.format("getTransactionExternal() returned %d result(s)", transactions.size()));
         return transactions;
     }
 
@@ -913,40 +970,176 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     @Override
     public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String username) {
         try {
-
+            logger.info(String.format("LogDisputesBulk() called by user='%s' with sessiontoken='%s'", username, sessiontoken));
             JSONArray jsonRecords = new JSONArray(records);
+            logger.info(String.format("Parsed %d records from input JSON", jsonRecords.length()));
+
             int found = 0;
             int recorded = 0;
             int userrole = GetUserRole(sessiontoken);
+            logger.info(String.format("User '%s' has role %d", username, userrole));
 
             for (int i = 0; i < jsonRecords.length(); i++) {
-                String terminalid = jsonRecords.getJSONObject(i).getString("terminalid");
-                String rrn = jsonRecords.getJSONObject(i).getString("rrn");
-                String stan = jsonRecords.getJSONObject(i).getString("stan");
+                JSONObject rec = jsonRecords.getJSONObject(i);
+                String terminalid = rec.getString("terminalid");
+                String rrn = rec.getString("rrn");
+                String stan = rec.getString("stan");
+                logger.info(String.format("Processing record #%d: terminalid=%s, rrn=%s, stan=%s", i + 1, terminalid, rrn, stan));
+
                 boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
+                logger.info(String.format("CheckDisputeExist: %s (terminalid=%s, rrn=%s, stan=%s) => %s",
+                        username, terminalid, rrn, stan, sessionIdExist));
+
                 if (!sessionIdExist) {
                     List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan, false);
+                    logger.info(String.format("GetTransaction returned %d records for terminalid=%s, rrn=%s, stan=%s",
+                            getTransaction.size(), terminalid, rrn, stan));
                     if (getTransaction.size() > 0) {
                         String tnxDate = getTransaction.get(0).getNcs_date_time();
                         int daysAgo = dateUtil.daysAgo(tnxDate);
-                        if (getTransaction.get(0).getResponse_code().equals("00") && (daysAgo <= 120 || userrole == 8)) {
+                        logger.info(String.format("Transaction date: %s, daysAgo=%d", tnxDate, daysAgo));
+
+                        String respCode = getTransaction.get(0).getResponse_code();
+                        if (respCode.equals("00") && (daysAgo <= 120 || userrole == 8)) {
                             found++;
                             String SQL;
                             int additionalDays = dateUtil.getDisputeTimeLineDate();
+                            logger.info(String.format("additionalDays for timeline: %d", additionalDays));
+
                             String unique_log_code = terminalid + stan + rrn;
                             String nuban = "";
-                            //                        String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
-                            //                                ? "" : 
-                            //                                restCall.getNuban(formatter.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
-                            String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution";
+                            // logger.info(String.format("Cardholder_acct_number: %s", getTransaction.get(0).getCardholder_acct_number()));
+
+                            String disputeType = !respCode.equals("00") ? "habari" : "institution";
+                            logger.info(String.format("DisputeType determined: %s", disputeType));
+
                             SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                            int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
-                            //                        SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?)";
-                            //                        int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, nuban});
+                            logger.info(String.format("INSERT dispute SQL: %s", SQL));
+                            logger.info(String.format("Insert params: id=%s, unique_log_code=%s, terminalid=%s, merchant_id=%s, stan=%s, rrn=%s, username=%s, owner_institution=%s, type=%s, additionalDays=%d, nuban=%s, message_type=%s, pan=%s, amount=%s, destination_acquiring_institution_id=%s, acquirer_institution_id=%s, bin=%s, ncs_date_time=%s, response_code=%s, cardholder_acct_number=%s",
+                                    getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(),
+                                    stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays,
+                                    nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(),
+                                    getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(),
+                                    getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(),
+                                    getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(),
+                                    getTransaction.get(0).getCardholder_acct_number()));
+
+                            int retval = jdbcTemplate.update(SQL, new Object[]{
+                                getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(),
+                                stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType,
+                                additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(),
+                                getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(),
+                                getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(),
+                                getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(),
+                                getTransaction.get(0).getCardholder_acct_number()
+                            });
+                            logger.info(String.format("Dispute record inserted, retval=%d", retval));
+
                             if (userrole == 8) {
                                 SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                                logger.info(String.format("Userrole==8, auto-resolving with UPDATE: %s", SQL));
+                                logger.info(String.format("Update params: username=%s, terminalid=%s, rrn=%s, stan=%s", username, terminalid, rrn, stan));
                                 jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
                             }
+                            if (retval > 0) {
+                                recorded++;
+                                logger.info(String.format("recorded incremented to %d", recorded));
+                            }
+                        }
+                    } else {
+                        logger.info(String.format("No valid transaction found for terminalid=%s, rrn=%s, stan=%s", terminalid, rrn, stan));
+                    }
+                } else {
+                    logger.info(String.format("Dispute already exists for terminalid=%s, rrn=%s, stan=%s; skipping insert.", terminalid, rrn, stan));
+                }
+            }
+
+            NetworkResponse networkResponse = new NetworkResponse();
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage(String.format("Total Records: %d\nValid Records: %d\nRecorded: %d", jsonRecords.length(), found, recorded));
+            logger.info(String.format("LogDisputesBulk() completed: %s", networkResponse.getMessage()));
+            return responseManager.ResponseOk(networkResponse);
+
+        } catch (DataAccessException ex) {
+            logger.info(String.format("LogDisputesBulk() DataAccessException: %s", ex.getMessage()));
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        } catch (JSONException ex) {
+            logger.info(String.format("LogDisputesBulk() JSONException: %s", ex.getMessage()));
+            Logger.getLogger(CardsTransactionsService.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        return null;
+    }
+
+    @Override
+    public ResponseEntity LogDisputesBulkExternal(String sessiontoken, String records, String username) {
+        logger.info(String.format("LogDisputesBulkExternal called with sessiontoken='%s', username='%s', rawRecordsLength=%d",
+                "", username, records != null ? records.length() : 0));
+        try {
+            JSONArray jsonRecords = new JSONArray(records);
+            int found = 0;
+            int recorded = 0;
+            int userrole = GetUserRoleExternal(sessiontoken);
+            logger.info(String.format("Parsed %d records; userrole=%d", jsonRecords.length(), userrole));
+            if (userrole == -100) {
+                return responseManager.ResponseUnathorized();
+            }
+
+            for (int i = 0; i < jsonRecords.length(); i++) {
+
+                JSONObject obj = jsonRecords.getJSONObject(i);
+                String terminalid = obj.getString("terminalid");
+                String merchantid = obj.getString("merchantid");
+                String rrn = obj.getString("rrn");
+                String stan = obj.getString("stan");
+                logger.info(String.format("Processing record #%d: terminalid='%s', merchantid='%s', rrn='%s', stan='%s'",
+                        i, terminalid, merchantid, rrn, stan));
+
+                boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
+                logger.info(String.format("CheckDisputeExist returned %s for terminalid='%s', rrn='%s', stan='%s'",
+                        sessionIdExist, terminalid, rrn, stan));
+
+                if (!sessionIdExist) {
+                    List<CardsTransactionModel> txns = getTransactionExternal(terminalid, rrn, stan, merchantid, false);
+                    logger.info(String.format("getTransactionExternal returned %d records for terminalid='%s'", txns.size(), terminalid));
+                    if (!txns.isEmpty()) {
+                        CardsTransactionModel txn = txns.get(0);
+                        String tnxDate = txn.getNcs_date_time();
+                        int daysAgo = dateUtil.daysAgo(tnxDate);
+                        logger.info(String.format("Transaction date='%s' is %d days ago; response_code='%s'",
+                                tnxDate, daysAgo, txn.getResponse_code()));
+
+                        if ("00".equals(txn.getResponse_code()) && (daysAgo <= 120 || userrole == 8)) {
+                            found++;
+                            int additionalDays = dateUtil.getDisputeTimeLineDate();
+                            String uniqueLogCode = terminalid + stan + rrn;
+                            String disputeType = "00".equals(txn.getResponse_code()) ? "institution" : "habari";
+                            logger.info(String.format("Valid dispute: uniqueLogCode='%s', disputeType='%s', additionalDays=%d",
+                                    uniqueLogCode, disputeType, additionalDays));
+
+                            String insertSql
+                                    = "INSERT INTO sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            Object[] insertParams = {txn.getId(), uniqueLogCode, terminalid, txn.getMerchant_id(), stan, rrn,
+                                username, txn.getAcquirer_institution_id(), disputeType, additionalDays,
+                                "", txn.getMessage_type(), txn.getPan(), txn.getRawAmount(),
+                                txn.getDestination_acquiring_institution_id(), txn.getAcquirer_institution_id(),
+                                txn.getBin(), txn.getNcs_date_time(), txn.getResponse_code(), txn.getCardholder_acct_number()};
+
+                            logger.info(String.format("Executing INSERT, params=%s", Arrays.toString(insertParams)));
+                            logger.info(String.format("INSERT query = %s", insertSql));
+
+                            int retval = jdbcTemplate.update(insertSql, insertParams);
+                            logger.info(String.format("INSERT returned %d", retval));
+
+                            if (userrole == 8) {
+                                String updateSql
+                                        = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by=?, status='0', resolved='0', date_modified=now() WHERE terminal_id=? AND retrieval_ref_number=? AND system_trace_number=?";
+                                Object[] updateParams = {username, terminalid, rrn, stan};
+                                logger.info(String.format("Executing UPDATE for resolver, params=%s", Arrays.toString(updateParams)));
+                                jdbcTemplate.update(updateSql, updateParams);
+                            }
+
                             if (retval > 0) {
                                 recorded++;
                             }
@@ -955,19 +1148,27 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 }
             }
 
+            logger.info(String.format("Loop complete: total=%d, valid=%d, recorded=%d",
+                    jsonRecords.length(), found, recorded));
+
             NetworkResponse networkResponse = new NetworkResponse();
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage("Total Records: " + jsonRecords.length() + "\nValid Records: " + found + "\nRecorded: " + recorded);
+            networkResponse.setMessage(
+                    String.format("Total Records: %d%nValid Records: %d%nRecorded: %d",
+                            jsonRecords.length(), found, recorded));
+            logger.info("Returning success response: " + networkResponse.getMessage());
             return responseManager.ResponseOk(networkResponse);
 
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("DataAccessException: %s", ex.getMessage() + ": " + ex));
+            ex.printStackTrace();
             return responseManager.ResponseInternalServerError();
         } catch (JSONException ex) {
-            Logger.getLogger(CardsTransactionsService.class.getName()).log(Level.SEVERE, null, ex);
+            logger.info("JSONException while parsing records " + ex);
+            ex.printStackTrace();
+            return responseManager.ResponseInternalServerError();
         }
-        return null;
     }
 
     @Override
@@ -1056,77 +1257,142 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 
     @Override
     public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username, boolean isExternal) {
+        logger.info(String.format("Entering LogDispute: sessiontoken=, terminalid=%s, rrn=%s, stan=%s, username=%s, isExternal=%b",
+                terminalid, rrn, stan, username, isExternal));
         try {
-
             boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
             String unique_log_code = terminalid + stan + rrn;
+            logger.info(String.format("CheckDisputeExist returned %b for unique_log_code=%s", sessionIdExist, unique_log_code));
+
             if (sessionIdExist) {
+                logger.info(String.format("Dispute already exists, aborting. unique_log_code=%s", unique_log_code));
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
                 networkResponse.setStatus("failed");
                 networkResponse.setMessage("Cannot log dispute with same details twice\nID: " + unique_log_code);
                 return responseManager.ResponseOk(networkResponse);
             }
+
             List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan, false);
+            logger.info(String.format("Retrieved %d transactions for terminalid=%s, rrn=%s, stan=%s",
+                    getTransaction.size(), terminalid, rrn, stan));
+
             if (getTransaction.size() > 0) {
                 int userrole = GetUserRole(sessiontoken);
-                String SQL;
-                if (!getTransaction.get(0).getResponse_code().equals("00")) {
+                logger.info(String.format("User role for sessiontoken %s is %d", sessiontoken, userrole));
+
+                if (!"00".equals(getTransaction.get(0).getResponse_code())) {
+                    logger.info(String.format("Transaction response_code=%s is not '00', cannot log for dispute",
+                            getTransaction.get(0).getResponse_code()));
                     NetworkResponse networkResponse = new NetworkResponse();
                     networkResponse.setCode(200);
                     networkResponse.setStatus("failed");
                     networkResponse.setMessage("Only completely processed or approved transactions can be logged for dispute");
                     return responseManager.ResponseOk(networkResponse);
                 }
+
                 int additionalDays = dateUtil.getDisputeTimeLineDate();
-                String nuban = "";
                 String tnxDate = getTransaction.get(0).getNcs_date_time();
                 int daysAgo = dateUtil.daysAgo(tnxDate);
+                logger.info(String.format("Transaction date %s is %d days ago; allowed window=%d days",
+                        tnxDate, daysAgo, additionalDays));
+
                 if (daysAgo > 120 && userrole != 8) {
+                    logger.info(String.format("Transaction older than 120 days and userrole=%d is not 8; rejecting", userrole));
                     NetworkResponse networkResponse = new NetworkResponse();
                     networkResponse.setCode(200);
                     networkResponse.setStatus("failed");
                     networkResponse.setMessage("Transaction occured more than 120 days ago and cannot be logged");
                     return responseManager.ResponseOk(networkResponse);
                 }
-//                String nuban = getTransaction.get(0).getCardholder_acct_number().length() < 18 || getTransaction.get(0).getCardholder_acct_number() == null 
-//                        ? "" : 
-//                        restCall.getNuban(formatter.FormatCardHolderAcctNum(getTransaction.get(0).getCardholder_acct_number()));
-                String disputeType = !getTransaction.get(0).getResponse_code().equals("00") ? "habari" : "institution";
-                SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                int retval = jdbcTemplate.update(SQL, new Object[]{getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(), stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays, proof_of_debit_uri, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(), getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(), getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(), getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(), getTransaction.get(0).getCardholder_acct_number()});
-                if (userrole == 8 || isExternal) {
-                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
-                    jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
-                }
-                if (retval > 0) {
-                    SQL = "SELECT ptsp_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
-                    String ptspid = jdbcTemplate.queryForObject(SQL, new Object[]{getTransaction.get(0).getMerchant_id()}, String.class);
-                    SQL = "SELECT user_email FROM tbl_map_card_users_institution WHERE institution_id = ? LIMIT 3";
 
-                    List<Map<String, Object>> ptspUsers = jdbcTemplate.queryForList(SQL, new Object[]{ptspid});
-                    if (ptspUsers.size() > 0) {
+                String disputeType = "institution";
+                if ("habari".equals(disputeType = (!"00".equals(getTransaction.get(0).getResponse_code()) ? "habari" : "institution"))) {
+                    // dead code in this branch, but left for fidelity to original
+                }
+                logger.info(String.format("Determined disputeType=%s", disputeType));
+
+                String SQL = "INSERT INTO sparkpayweb_db.tbl_disputes("
+                        + "id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, "
+                        + "logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, "
+                        + "cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, "
+                        + "acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number"
+                        + ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                logger.info(String.format("Executing INSERT SQL: %s", SQL));
+
+                Object[] params = {
+                    getTransaction.get(0).getId(),
+                    unique_log_code,
+                    terminalid,
+                    getTransaction.get(0).getMerchant_id(),
+                    stan,
+                    rrn,
+                    username,
+                    getTransaction.get(0).getAcquirer_institution_id(),
+                    disputeType,
+                    additionalDays,
+                    proof_of_debit_uri,
+                    "", // nuban placeholder
+                    getTransaction.get(0).getMessage_type(),
+                    getTransaction.get(0).getPan(),
+                    getTransaction.get(0).getRawAmount(),
+                    getTransaction.get(0).getDestination_acquiring_institution_id(),
+                    getTransaction.get(0).getAcquirer_institution_id(),
+                    getTransaction.get(0).getBin(),
+                    getTransaction.get(0).getNcs_date_time(),
+                    getTransaction.get(0).getResponse_code(),
+                    getTransaction.get(0).getCardholder_acct_number()
+                };
+                logger.info(String.format("INSERT parameters: %s", Arrays.toString(params)));
+
+                int retval = jdbcTemplate.update(SQL, params);
+                logger.info(String.format("INSERT affected %d rows", retval));
+
+                if (userrole == 8 || isExternal) {
+                    String updateSQL = "UPDATE sparkpayweb_db.tbl_disputes "
+                            + "SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() "
+                            + "WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                    logger.info(String.format("Executing UPDATE SQL: %s", updateSQL));
+                    jdbcTemplate.update(updateSQL, new Object[]{username, terminalid, rrn, stan});
+                    logger.info("Marked dispute as immediately resolved for external/PTSP user");
+                }
+
+                if (retval > 0) {
+                    String ptspSQL = "SELECT ptsp_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
+                    String ptspid = jdbcTemplate.queryForObject(ptspSQL, new Object[]{getTransaction.get(0).getMerchant_id()}, String.class);
+                    logger.info(String.format("Found ptsp_id=%s for merchant_id=%s", ptspid, getTransaction.get(0).getMerchant_id()));
+
+                    String userSQL = "SELECT user_email FROM tbl_map_card_users_institution WHERE institution_id = ? LIMIT 3";
+                    List<Map<String, Object>> ptspUsers = jdbcTemplate.queryForList(userSQL, new Object[]{ptspid});
+                    logger.info(String.format("Fetched %d PTSP user emails", ptspUsers.size()));
+
+                    for (Map<String, Object> row : ptspUsers) {
+                        String toEmail = (String) row.get("user_email");
+                        String message = "<html><body>Dear Team, <br/><br/>Please be informed that a new dispute has been logged against your institution. "
+                                + "Please login to sparkpay and find the dispute under the unique log code " + unique_log_code
+                                + "<br/><br/>Sparkpay,<br/>Cheers</body></html>";
+                        logger.info(String.format("Sending email to %s with subject='New Dispute Log'", toEmail));
                         try {
-                            ptspUsers.forEach(row -> {
-                                String message = "<html><body>Dear Team, <br/><br/>Please be informed that a new dispute has been logged against your institution. Please login to sparkpay and find the dispute under the unique log code " + unique_log_code
-                                        + "<br/><br/>Sparkpay,"
-                                        + "<br/>Cheers</body><html>";
-                                mailers.SendMailWithHabariOkHttpClient(
-                                        "New Dispute Log",
-                                        "no-reply@habaripay.com",
-                                        (String) row.get("user_email"),
-                                        message
-                                );
-                            });
+                            mailers.SendMailWithHabariOkHttpClient(
+                                    "New Dispute Log",
+                                    "no-reply@habaripay.com",
+                                    toEmail,
+                                    message
+                            );
+                            logger.info(String.format("Email sent successfully to %s", toEmail));
                         } catch (Exception e) {
-                            System.out.println("mailer error: " + e.toString());
+                            logger.info(String.format("Mailer error for %s: %s", toEmail, e.toString()));
                         }
                     }
+
+                    logger.info("LogDispute completed: returning 202 Accepted");
                     return responseManager.ResponseAccepted();
                 } else {
+                    logger.info("INSERT returned zero affected rows: internal server error");
                     return responseManager.ResponseInternalServerError();
                 }
             } else {
+                logger.info(String.format("No transaction found for terminalid=%s, rrn=%s, stan=%s", terminalid, rrn, stan));
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(404);
                 networkResponse.setStatus("failed");
@@ -1134,7 +1400,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 return responseManager.ResponseOk(networkResponse);
             }
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("DataAccessException in LogDispute: %s", ex.getMessage()));
             return responseManager.ResponseInternalServerError();
         }
     }
@@ -1263,11 +1529,14 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 
     @Override
     public ResponseEntity GetDisputes(String uniqueIds) {
+        logger.info(String.format("Entering GetDisputes with uniqueIds: %s", uniqueIds));
         NetworkResponse networkResponse = new NetworkResponse();
         List<String> idArray = new ArrayList<>(Arrays.asList(uniqueIds.split(",")));
+        logger.info(String.format("Parsed %d IDs", idArray.size()));
         if (idArray.size() > 10) {
+            logger.info("Request size too large, returning 400");
             networkResponse.setCode(400);
-            networkResponse.setMessage("Rquest size must be lesser or equal to 10");
+            networkResponse.setMessage("Request size must be lesser or equal to 10");
             networkResponse.setStatus("bad request");
             return responseManager.ResponseOk(networkResponse);
         }
@@ -1275,21 +1544,27 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String placeholders = idArray.stream()
                     .map(id -> "?")
                     .collect(Collectors.joining(","));
-            String SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
-                    + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
-                    + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
+            String SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, "
+                    + "a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, "
+                    + "a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, a.message_type, "
+                    + "a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, "
+                    + "a.destination_acquiring_institution_id, a.acquirer_institution_id, "
+                    + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, "
+                    + "a.cardholder_acct_number "
                     + "FROM sparkpayweb_db.tbl_disputes a "
                     + "WHERE a.unique_log_code IN (" + placeholders + ")";
+            logger.info(String.format("Executing SQL: %s", SQL));
             List<CardsDisputeModel> transactions = jdbcTemplate.query(SQL, idArray.toArray(), new CardsTransactionsDisputesMapper());
+            logger.info(String.format("Retrieved %d dispute records", transactions.size()));
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("Found total of: " + transactions.size() + " disputes");
             networkResponse.setData((ArrayList) transactions);
-
+            logger.info("GetDisputes completed successfully");
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("DataAccessException in GetDisputes: %s", ex.getMessage()));
             return responseManager.ResponseInternalServerError();
         }
     }
@@ -1422,157 +1697,309 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             int page,
             int limit
     ) {
-        NetworkResponse networkResponse = new NetworkResponse();
-        try {
-            String start_date_logged = !date_logged.equals("") ? date_logged.substring(0, 10) : "";
-            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, date_logged.length()) : "";
-            String start_date_resolved = !date_resolved.equals("") ? date_resolved.substring(0, 10) : "";
-            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, date_resolved.length()) : "";
-            String start_timeline_date = !timeline_date.equals("") ? timeline_date.substring(0, 10) : "";
-            String end_timeline_date = !timeline_date.equals("") ? timeline_date.substring(11, timeline_date.length()) : "";
-            String SQL;
-            Double totalValue;
-            List<Map<String, Object>> agg;
-            List<CardsDisputeModel> transactions;
-            int offset = page > 1 ? (page - 1) * limit : 0;
-            String whereQuery = !terminal_id.equals("")
-                    || !system_trace_number.equals("")
-                    || !retrieval_ref_number.equals("")
-                    || !transaction_response_code.equals("")
-                    || !dispute_status.equals("")
-                    || !dispute_type.equals("")
-                    || !start_date_logged.equals("")
-                    || !end_date_logged.equals("")
-                    || !start_date_resolved.equals("")
-                    || !end_date_resolved.equals("")
-                    || !start_timeline_date.equals("")
-                    || !end_timeline_date.equals("")
-                    || !merchantsasIds.equals("")
-                    || !pan.equals("")
-                    || !uniquelogid.equals("")
-                    ? "WHERE" : "";
+        logger.info(String.format(
+                "SearchDisputes called with terminal_id=%s, system_trace_number=%s, retrieval_ref_number=%s, response_code=%s, dispute_status=%s, dispute_type=%s, date_logged=%s, date_resolved=%s, timeline_date=%s, merchants=%s, pan=%s, uniqueLogId=%s, page=%d, limit=%d",
+                terminal_id, system_trace_number, retrieval_ref_number, transaction_response_code,
+                dispute_status, dispute_type, date_logged, date_resolved, timeline_date,
+                merchantsasIds, pan, uniquelogid, page, limit
+        ));
 
-            if (!merchantsasIds.equals("")) {
-                List<String> merchantIds = new ArrayList<>(Arrays.asList(merchantsasIds.split(",")));
-                StringBuilder inString = new StringBuilder("(");
-                for (int i = 0; i < merchantIds.size(); i++) {
-                    inString.append("'").append(merchantIds.get(i)).append("'");
-                    inString.append(",");
+        try {
+            List<String> clauses = new ArrayList<>();
+            List<Object> params = new ArrayList<>();
+            int offset = page > 1 ? (page - 1) * limit : 0;
+
+            if (StringUtils.hasText(terminal_id)) {
+                clauses.add("a.terminal_id = ?");
+                params.add(terminal_id);
+            }
+            if (StringUtils.hasText(system_trace_number)) {
+                clauses.add("a.system_trace_number = ?");
+                params.add(system_trace_number);
+            }
+            if (StringUtils.hasText(retrieval_ref_number)) {
+                clauses.add("a.retrieval_ref_number = ?");
+                params.add(retrieval_ref_number);
+            }
+            if (StringUtils.hasText(transaction_response_code)) {
+                clauses.add("a.response_code = ?");
+                params.add(transaction_response_code);
+            }
+            if (StringUtils.hasText(pan)) {
+                clauses.add("a.pan = ?");
+                params.add(pan);
+            }
+            if (StringUtils.hasText(uniquelogid)) {
+                clauses.add("a.unique_log_code = ?");
+                params.add(uniquelogid);
+            }
+            if (StringUtils.hasText(merchantsasIds)) {
+                List<String> mids = Arrays.stream(merchantsasIds.split(","))
+                        .filter(StringUtils::hasText)
+                        .collect(Collectors.toList());
+                if (!mids.isEmpty()) {
+                    String placeholders = mids.stream().map(m -> "?").collect(Collectors.joining(","));
+                    clauses.add("a.merchant_id IN (" + placeholders + ")");
+                    params.addAll(mids);
                 }
-                inString = inString.deleteCharAt(inString.length() - 1);
-                if (inString.toString().equals("(")) {
-                    inString = inString.deleteCharAt(inString.length() - 1);
-                }
-                if (inString.toString().equals("")) {
-                    inString = inString.append("(-1");
-                }
-                inString = inString.append(")");
-                whereQuery += " a.merchant_id IN " + inString;
-            }
-            if (!terminal_id.equals("")) {
-                whereQuery += " a.terminal_id = '" + terminal_id + "'";
-            }
-            if (!uniquelogid.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.unique_log_code = '" + uniquelogid + "'";
-            }
-            if (!pan.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.pan = '" + pan + "'";
-            }
-            if (!system_trace_number.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.system_trace_number = '" + system_trace_number + "'";
-            }
-            if (!retrieval_ref_number.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.retrieval_ref_number = '" + retrieval_ref_number + "'";
-            }
-            if (!transaction_response_code.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.response_code = '" + transaction_response_code + "'";
             }
             switch (dispute_status) {
                 case "-1":
-                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                    whereQuery += " a.status = -1 AND a.resolved = 0";
+                    clauses.add("a.status = -1 AND a.resolved = 0");
                     break;
                 case "0":
-                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                    whereQuery += " a.status = 0 AND a.resolved = 0";
+                    clauses.add("a.status = 0  AND a.resolved = 0");
                     break;
                 case "1":
-                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                    whereQuery += " a.status = 1 AND a.resolved = 1";
+                    clauses.add("a.status = 1  AND a.resolved = 1");
                     break;
-                case "2":
-                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                    whereQuery += " a.status = 0 AND a.resolved = 1";
-                    break;
-                default:
+                case "-2":
+                    clauses.add("a.status = -2  AND a.resolved = 1");
                     break;
             }
-            switch (dispute_type) {
-                case "charge-back":
-                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                    whereQuery += " a.logged_by != a.resolved_by";
-                    break;
-                case "air":
-                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                    whereQuery += " a.logged_by = a.resolved_by";
-                    break;
-                default:
-                    break;
+            if ("charge-back".equals(dispute_type)) {
+                clauses.add("a.logged_by != a.resolved_by");
+            } else if ("air".equals(dispute_type)) {
+                clauses.add("a.logged_by = a.resolved_by");
             }
-            if (!start_date_logged.equals("") && !end_date_logged.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.date_created BETWEEN '" + start_date_logged + "' AND '" + end_date_logged + "'";
+
+            BiConsumer<String, String> bindRange = (col, range) -> {
+                String[] parts = range.split("E", 2);
+                if (parts.length == 2) {
+                    // parse each side as a full timestamp
+                    LocalDateTime start = LocalDateTime.parse(parts[0], DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                    LocalDateTime end = LocalDateTime.parse(parts[1], DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                    clauses.add("a." + col + " BETWEEN ? AND ?");
+                    params.add(start);
+                    params.add(end);
+                }
+            };
+            if (StringUtils.hasText(date_logged)) {
+                bindRange.accept("date_created", date_logged);
             }
-            if (!start_date_resolved.equals("") && !end_date_resolved.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.date_modified BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+            if (StringUtils.hasText(date_resolved)) {
+                bindRange.accept("date_modified", date_resolved);
             }
-            if (!start_timeline_date.equals("") && !end_timeline_date.equals("")) {
-                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
-                whereQuery += " a.timeline_date BETWEEN '" + start_timeline_date + "' AND '" + end_timeline_date + "'";
+            if (StringUtils.hasText(timeline_date)) {
+                bindRange.accept("timeline_date", timeline_date);
             }
-            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
-                    + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
-                    + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
-                    + "FROM sparkpayweb_db.tbl_disputes a "
-                    //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
-                    //                    + "ON a.id = b.id " 
-                    + whereQuery
+
+            String where = clauses.isEmpty()
+                    ? ""
+                    : " WHERE " + String.join(" AND ", clauses);
+            logger.info(String.format("Where query: %s", where));
+
+            // main query
+            String sql = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved,"
+                    + " a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri,"
+                    + " a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated,"
+                    + " a.cardholder_acct_nuban, a.message_type, a.pan, a.amount,"
+                    + " a.system_trace_number, a.retrieval_ref_number,"
+                    + " a.destination_acquiring_institution_id, a.acquirer_institution_id,"
+                    + " a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code,"
+                    + " a.cardholder_acct_number"
+                    + " FROM sparkpayweb_db.tbl_disputes a"
+                    + where
                     + " ORDER BY a.date_created DESC LIMIT ? OFFSET ?";
-            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
+            params.add(limit);
+            params.add(offset);
 
-            SQL = "SELECT "
-                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-                    + "FROM sparkpayweb_db.tbl_disputes a "
-                    //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
-                    //                    + "ON a.id = b.id " 
-                    + whereQuery;
-            agg = jdbcTemplate.queryForList(SQL);
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + 1 + ", \"limit\": " + null + "}";
+            List<CardsDisputeModel> transactions
+                    = jdbcTemplate.query(sql, params.toArray(), new CardsTransactionsDisputesMapper());
+            logger.info(String.format("SearchDisputes returned %d rows", transactions.size()));
 
+            // aggregate query
+            String aggSql = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords"
+                    + " FROM sparkpayweb_db.tbl_disputes a" + where;
+            Object[] aggParams = params.subList(0, params.size() - 2).toArray();
+            Map<String, Object> row = jdbcTemplate.queryForMap(aggSql, aggParams);
+            double totalValue = row.get("totalValue") != null ? ((Number) row.get("totalValue")).doubleValue() / 100 : 0;
+            int totalRecords = ((Number) row.get("totalRecords")).intValue();
+
+            NetworkResponse networkResponse = new NetworkResponse();
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("Searched Disputes Results");
-            networkResponse.setData((ArrayList) transactions);
-            networkResponse.setMeta(meta);
+            networkResponse.setData(new ArrayList<>(transactions));
+            networkResponse.setMeta(String.format(
+                    "{\"totalValue\": %.2f, \"totalRecords\": %d, \"page\": %d, \"limit\": %d}",
+                    totalValue, totalRecords, page, limit
+            ));
 
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("SearchDisputes returned %s rows", ex));
             return responseManager.ResponseInternalServerError();
         }
     }
 
+//    @Override
+//    public ResponseEntity SearchDisputes(
+//            String terminal_id,
+//            String system_trace_number,
+//            String retrieval_ref_number,
+//            String transaction_response_code,
+//            String dispute_status,
+//            String dispute_type,
+//            String date_logged,
+//            String date_resolved,
+//            String timeline_date,
+//            String merchantsasIds,
+//            String pan,
+//            String uniquelogid,
+//            int page,
+//            int limit
+//    ) {
+//        NetworkResponse networkResponse = new NetworkResponse();
+//        try {
+//            String start_date_logged = !date_logged.equals("") ? date_logged.substring(0, 10) : "";
+//            String end_date_logged = !date_logged.equals("") ? date_logged.substring(11, date_logged.length()) : "";
+//            String start_date_resolved = !date_resolved.equals("") ? date_resolved.substring(0, 10) : "";
+//            String end_date_resolved = !date_resolved.equals("") ? date_resolved.substring(11, date_resolved.length()) : "";
+//            String start_timeline_date = !timeline_date.equals("") ? timeline_date.substring(0, 10) : "";
+//            String end_timeline_date = !timeline_date.equals("") ? timeline_date.substring(11, timeline_date.length()) : "";
+//            String SQL;
+//            Double totalValue;
+//            List<Map<String, Object>> agg;
+//            List<CardsDisputeModel> transactions;
+//            int offset = page > 1 ? (page - 1) * limit : 0;
+//            String whereQuery = !terminal_id.equals("")
+//                    || !system_trace_number.equals("")
+//                    || !retrieval_ref_number.equals("")
+//                    || !transaction_response_code.equals("")
+//                    || !dispute_status.equals("")
+//                    || !dispute_type.equals("")
+//                    || !start_date_logged.equals("")
+//                    || !end_date_logged.equals("")
+//                    || !start_date_resolved.equals("")
+//                    || !end_date_resolved.equals("")
+//                    || !start_timeline_date.equals("")
+//                    || !end_timeline_date.equals("")
+//                    || !merchantsasIds.equals("")
+//                    || !pan.equals("")
+//                    || !uniquelogid.equals("")
+//                    ? "WHERE" : "";
+//
+//            if (!merchantsasIds.equals("")) {
+//                List<String> merchantIds = new ArrayList<>(Arrays.asList(merchantsasIds.split(",")));
+//                StringBuilder inString = new StringBuilder("(");
+//                for (int i = 0; i < merchantIds.size(); i++) {
+//                    inString.append("'").append(merchantIds.get(i)).append("'");
+//                    inString.append(",");
+//                }
+//                inString = inString.deleteCharAt(inString.length() - 1);
+//                if (inString.toString().equals("(")) {
+//                    inString = inString.deleteCharAt(inString.length() - 1);
+//                }
+//                if (inString.toString().equals("")) {
+//                    inString = inString.append("(-1");
+//                }
+//                inString = inString.append(")");
+//                whereQuery += " a.merchant_id IN " + inString;
+//            }
+//            if (!terminal_id.equals("")) {
+//                whereQuery += " a.terminal_id = '" + terminal_id + "'";
+//            }
+//            if (!uniquelogid.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.unique_log_code = '" + uniquelogid + "'";
+//            }
+//            if (!pan.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.pan = '" + pan + "'";
+//            }
+//            if (!system_trace_number.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.system_trace_number = '" + system_trace_number + "'";
+//            }
+//            if (!retrieval_ref_number.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.retrieval_ref_number = '" + retrieval_ref_number + "'";
+//            }
+//            if (!transaction_response_code.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.response_code = '" + transaction_response_code + "'";
+//            }
+//            switch (dispute_status) {
+//                case "-1":
+//                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                    whereQuery += " a.status = -1 AND a.resolved = 0";
+//                    break;
+//                case "0":
+//                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                    whereQuery += " a.status = 0 AND a.resolved = 0";
+//                    break;
+//                case "1":
+//                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                    whereQuery += " a.status = 1 AND a.resolved = 1";
+//                    break;
+//                case "-2":
+//                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                    whereQuery += " a.status = -2 AND a.resolved = 1";
+//                    break;
+//                default:
+//                    break;
+//            }
+//            switch (dispute_type) {
+//                case "charge-back":
+//                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                    whereQuery += " a.logged_by != a.resolved_by";
+//                    break;
+//                case "air":
+//                    whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                    whereQuery += " a.logged_by = a.resolved_by";
+//                    break;
+//                default:
+//                    break;
+//            }
+//            if (!start_date_logged.equals("") && !end_date_logged.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.date_created BETWEEN '" + start_date_logged + "' AND '" + end_date_logged + "'";
+//            }
+//            if (!start_date_resolved.equals("") && !end_date_resolved.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.date_modified BETWEEN '" + start_date_resolved + "' AND '" + end_date_resolved + "'";
+//            }
+//            if (!start_timeline_date.equals("") && !end_timeline_date.equals("")) {
+//                whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
+//                whereQuery += " a.timeline_date BETWEEN '" + start_timeline_date + "' AND '" + end_timeline_date + "'";
+//            }
+//            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+//                    + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
+//                    + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
+//                    + "FROM sparkpayweb_db.tbl_disputes a "
+//                    //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
+//                    //                    + "ON a.id = b.id " 
+//                    + whereQuery
+//                    + " ORDER BY a.date_created DESC LIMIT ? OFFSET ?";
+//            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
+//
+//            SQL = "SELECT "
+//                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+//                    + "FROM sparkpayweb_db.tbl_disputes a "
+//                    //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
+//                    //                    + "ON a.id = b.id " 
+//                    + whereQuery;
+//            agg = jdbcTemplate.queryForList(SQL);
+//            Map<String, Object> row = agg.get(0);
+//            Double tValue = (Double) row.get("totalValue");
+//            totalValue = tValue != null ? tValue / 100 : 0;
+//            Long tRecords = (Long) row.get("totalRecords");
+//            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+//            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + 1 + ", \"limit\": " + null + "}";
+//
+//            networkResponse.setCode(200);
+//            networkResponse.setStatus("success");
+//            networkResponse.setMessage("Searched Disputes Results");
+//            networkResponse.setData((ArrayList) transactions);
+//            networkResponse.setMeta(meta);
+//
+//            return responseManager.ResponseOk(networkResponse);
+//        } catch (DataAccessException ex) {
+//            System.out.println("error>>>>" + ex.getMessage());
+//            return responseManager.ResponseInternalServerError();
+//        }
+//    }
 //    @Override
 //    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String username) {
 //        try {
@@ -1672,7 +2099,8 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setDate_arbitrated(rs.getString("date_arbitrated"));
             tnx.setCardholder_acct_nuban(rs.getString("cardholder_acct_nuban"));
             tnx.setResponse_code(rs.getString("response_code"));
-            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? formatter.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : "");
+            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number"));
+//            tnx.setCardholder_acct_number(rs.getString("cardholder_acct_number") != null && rs.getString("cardholder_acct_number").length() > 17 ? formatter.FormatCardHolderAcctNum(rs.getString("cardholder_acct_number")) : "");
             tnx.setStatus_code_message(rs.getString("response_code") != null && rs.getString("response_code").toLowerCase() != "null" && rs.getString("response_code") != "" ? transactionsCodeInterpreter.GetResponse(rs.getString("response_code")) : "");
             if (hasColumn(rs, "arbitration_closed_date")) {
                 tnx.setArbitration_closed_by(rs.getString("arbitration_closed_date"));

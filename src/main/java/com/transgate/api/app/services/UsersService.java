@@ -26,6 +26,7 @@ import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -41,6 +42,7 @@ import org.springframework.security.crypto.bcrypt.BCrypt;
 public class UsersService implements UsersInterface {
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
     ResponseManager responseManager = new ResponseManager();
@@ -332,36 +334,77 @@ public class UsersService implements UsersInterface {
 
     @Override
     public boolean LoginExternal(String username, String password) {
-        LoginResponse response = new LoginResponse();
+        logger.info(String.format("LoginExternal called with username='%s'", username));
         try {
-            String SQL;
-            SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
+            String SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
             int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
+            logger.info(String.format("Attempts left for user '%s': %d", username, attemptsLeft));
+
             if (attemptsLeft == 0) {
+                logger.info(String.format("No attempts left; locking account for 15 minutes for user '%s'", username));
                 SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
                 jdbcTemplate.update(SQL, new Object[]{username});
-                response.setCode(404);
-                response.setStatus("failed");
-                response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
+                logger.info("Returning false due to account lock");
                 return false;
             }
-            SQL = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret from sparkpayweb_db.tbl_users a "
-                    + "LEFT JOIN tbl_user_details b "
-                    + "ON a.username = b.email_address "
+
+            SQL = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret "
+                    + "FROM sparkpayweb_db.tbl_users a "
+                    + "LEFT JOIN tbl_user_details b ON a.username = b.email_address "
                     + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
-            String security = "";
+            logger.info(String.format("Querying credentials for user '%s'", username));
             List<Map<String, Object>> users = jdbcTemplate.queryForList(SQL, new Object[]{username});
-            if (users.size() == 1) {
-                security = (String) users.get(0).get("password");
-            } else {
+            logger.info(String.format("Query returned %d record(s) for username='%s'", users.size(), username));
+
+            if (users.size() != 1) {
+                logger.info(String.format("Invalid user count (%d) for '%s', returning false", users.size(), username));
                 return false;
             }
+
+            String security = (String) users.get(0).get("password");
+            logger.info("Password hash retrieved, verifying password");
             boolean comparePassword = BCrypt.checkpw(password, security);
+            logger.info(String.format("Password match for user '%s': %b", username, comparePassword));
             return comparePassword;
+
         } catch (DataAccessException ex) {
+            logger.info(String.format("DataAccessException during LoginExternal for '%s': %s", username, ex.getMessage()));
             return false;
         }
     }
+    
+    @Override
+    public boolean LoginExternal2(String username, String sessionToken) {
+        int isSuccessful = 0;
+        logger.info(String.format("LoginExternal called with username='%s'", username));
+        try {
+            String SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
+            int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{username}, int.class);
+            logger.info(String.format("Attempts left for user '%s': %d", username, attemptsLeft));
+
+            if (attemptsLeft == 0) {
+                logger.info(String.format("No attempts left; locking account for 15 minutes for user '%s'", username));
+                SQL = "UPDATE tbl_user_details SET unlock_account_in = 15 WHERE email_address = ?";
+                jdbcTemplate.update(SQL, new Object[]{username});
+                logger.info("Returning false due to account lock");
+                return false;
+            }
+            
+                SQL = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
+                logger.info("{} : sql query to reset password{}.", username, SQL);
+                isSuccessful = jdbcTemplate.update(SQL, new Object[]{sessionToken, username});
+                logger.info("User {} authenticated successfully.", username);
+
+                return isSuccessful == 1;
+
+           
+
+        } catch (DataAccessException ex) {
+            logger.info(String.format("DataAccessException during LoginExternal for '%s': %s", username, ex.getMessage()));
+            return false;
+        }
+    }
+
 
     @Override
     public ResponseEntity Login(String username, String password) {

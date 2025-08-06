@@ -17,6 +17,8 @@ public interface UsersInterface {
     
     public boolean LoginExternal(String username, String password);
     
+    public boolean LoginExternal2(String username, String sessionToken);
+    
     public ResponseEntity SetUp2FA(String sessiontoken, String username, int enable);
     
     public ResponseEntity Login2FA(String sessiontoken, String username, String password);

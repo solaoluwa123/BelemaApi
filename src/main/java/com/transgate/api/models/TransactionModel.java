@@ -5,21 +5,23 @@
  */
 package com.transgate.api.models;
 
+import java.math.BigInteger;
+
 /**
  *
  * @author Makintola
  */
 public class TransactionModel {
-    int id;
+    BigInteger id;
     String srcSessionid, paymentReference, srcAccountNumber, srcAccountName, srcKycLevel, srcBvn, srcAmount, srcInstitutioncode, destSessionId, srcResponsecode, destAccountNumber;
     String destAccountName, destKycLevel, destBvn, destAmount, destInstitutioncode, destResponseCode, narration, transactiondate, username;
     String responseCodeDefinition, txnDuration, responsedatetime, channelCode;
     
-    public int getId() {
+    public BigInteger getId() {
         return id;
     }
 
-    public void setId(int id) {
+    public void setId(BigInteger id) {
         this.id = id;
     }
 

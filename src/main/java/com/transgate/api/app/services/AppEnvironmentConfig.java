@@ -1,14 +1,18 @@
 package com.transgate.api.app.services;
 
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Component;
 
 /**
- * Class to fetch environment variables configured in the application's properties.
- * 
- * The variables are injected from the environment using Spring's Environment abstraction.
- * 
+ * Class to fetch environment variables configured in the application's
+ * properties.
+ *
+ * The variables are injected from the environment using Spring's Environment
+ * abstraction.
+ *
  * @author Makintola
  */
 @Component
@@ -70,5 +74,16 @@ public class AppEnvironmentConfig {
     // Method to get 'app.apiheaderexternal'
     public String getAPIHeaderExternal() {
         return env.getProperty("app.apiheaderexternal");
+    }
+
+    // Method to get 'app.tippingpoint'
+    public String getTippingPoint() {
+        String tippingPoint = env.getProperty("app.tippingpoint");
+        if (tippingPoint == null || tippingPoint.isEmpty()) {
+            // Formatter for ISO 8601 up to seconds
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+            return LocalDateTime.now().format(fmt);
+        }
+        return tippingPoint;
     }
 }

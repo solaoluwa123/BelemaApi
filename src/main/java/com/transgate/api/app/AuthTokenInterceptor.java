@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.HandlerInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -22,6 +23,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 public class AuthTokenInterceptor implements HandlerInterceptor {
 
     @Autowired
+    @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
     
     private final Validators validators;
@@ -92,5 +94,5 @@ public class AuthTokenInterceptor implements HandlerInterceptor {
         response.setContentType("application/json");
         response.getWriter().write(objectMapper.writeValueAsString(entity.getBody()));
     }
-    
+   
 }
