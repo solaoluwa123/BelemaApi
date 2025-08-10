@@ -82,7 +82,15 @@ public interface CardsTransactionsInterface {
 //    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String username);
     
     public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String selectedDisputes, String type, String username);
-    
+
+    public ResponseEntity respondToBulkDisputes(
+            int unusedId,                    // no longer used
+            int status,
+            String proof_of_reject_uri,
+            String selectedDisputes,         // now holds unique_log_code(s)
+            String type,
+            String username
+    );
     public ResponseEntity UpdateCardsDisputesNUBAN();
     
     public ResponseEntity UpdateDisputesData();

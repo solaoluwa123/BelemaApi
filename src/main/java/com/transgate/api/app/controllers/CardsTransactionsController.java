@@ -12,15 +12,11 @@ import com.transgate.api.util.ResponseManager;
 import com.transgate.api.app.services.Validators;
 import java.util.Optional;
 import java.util.logging.Logger;
+
+import org.json.JSONException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 /**
  *
@@ -501,6 +497,61 @@ public class CardsTransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return CardsTransactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getStatus(), dispute.getProof_of_reject_uri(), dispute.getSelectedDisputes(), dispute.getType(), dispute.getResolved_by());
+    }
+
+    @PostMapping("/cards/transactions/disputes/approve_reject_bulk")
+    public @ResponseBody String respondToBulkDisputes(
+            @RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestParam("unique_log_code")    String uniqueLogCode,
+            @RequestParam("status")             int status,
+            @RequestParam("proof_of_reject_uri")String proofUri,
+            @RequestParam("selectedDisputes")   String selectedDisputes,
+            @RequestParam("type")               String type,
+            @RequestParam("username")           String username
+    ) throws JSONException {
+
+        // Step 1: Log entry and all params
+        logger.info(String.format(
+                "🟢 Step 1: Received request: header=%s, unique_log_code=%s, status=%d, proof_of_reject_uri=%s, selectedDisputes=%s, type=%s, username=%s",
+                header, uniqueLogCode, status, proofUri, selectedDisputes, type, username
+        ));
+
+        // Step 2: Validate header
+        String expected = validators.validHeader();
+        logger.info(String.format(
+                "🟢 Step 2: validators.validHeader() -> %s",
+                expected
+        ));
+        if (!expected.equals(header)) {
+            logger.info(String.format(
+                    "🔴 Step 3: Header validation failed. Provided='%s' Expected='%s'",
+                    header, expected
+            ));
+            return "";  // or a JSON error payload
+        }
+        logger.info("🟢 Step 3: Header validated successfully");
+
+        // Step 4: Call business logic
+        logger.info("🟢 Step 4: Calling CardsTransactionsInterface.respondToBulkDisputes");
+        String result = CardsTransactionsInterface
+                .respondToBulkDisputes(
+                        0,                    // id unused for bulk
+                        status,
+                        proofUri,
+                        selectedDisputes,
+                        type,
+                        username
+                )
+                .toString();
+        logger.info(String.format(
+                "🟢 Step 5: Business logic returned: %s",
+                result
+        ));
+
+        // Step 6: Return to client
+        logger.info("🟢 Step 6: Returning response to caller");
+        return result;
     }
 
     @RequestMapping(value = "/app/crons/cards/disputes/update-nuban", method = RequestMethod.GET, headers = "Accept=application/json")

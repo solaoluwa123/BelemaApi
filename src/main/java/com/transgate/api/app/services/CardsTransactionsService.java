@@ -952,220 +952,332 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     }
 
     private boolean CheckDisputeExist(String terminalid, String rrn, String stan) {
-        boolean found;
+        logger.info(String.format(
+                "🟢 EXIST 1: CheckDisputeExist() | terminalid=%s, rrn=%s, stan=%s",
+                terminalid, rrn, stan
+        ));
         try {
-            String SQL;
-            SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_disputes WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
-            int totalRows = jdbcTemplate.queryForObject(SQL, new Object[]{terminalid, rrn, stan}, int.class);
-
-            found = totalRows > 0;
-
+            String SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_disputes " +
+                    "WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+            logger.info(String.format("🟢 EXIST 2: SQL → %s", SQL));
+            Integer totalRows = jdbcTemplate.queryForObject(
+                    SQL, new Object[]{ terminalid, rrn, stan }, Integer.class
+            );
+            boolean found = (totalRows != null && totalRows > 0);
+            logger.info(String.format("🟢 EXIST 3: found=%s (count=%d)", found, (totalRows == null ? 0 : totalRows)));
             return found;
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("🔴 EXIST ERR: %s", ex.getMessage()));
             return false;
+        }
+    }
+
+    private boolean isTxnAlreadyReversed(String terminalid, String rrn, String stan) {
+        logger.info(String.format(
+                "🟢 REV 1: isTxnAlreadyReversed() called | terminalid=%s, rrn=%s, stan=%s",
+                terminalid, rrn, stan
+        ));
+        try {
+            String SQL = "SELECT COUNT(*) " +
+                    "FROM sparkpay.transaction_hist_s " +
+                    "WHERE terminal_id = ? " +
+                    "  AND retrieval_ref_number = ? " +
+                    "  AND system_trace_number = ? " +
+                    "  AND COALESCE(isTxnReversed,'') = '00'";
+            logger.info(String.format("🟢 REV 2: SQL → %s", SQL));
+            Integer totalRows = jdbcTemplate.queryForObject(
+                    SQL, new Object[]{ terminalid, rrn, stan }, Integer.class
+            );
+            boolean reversed = (totalRows != null && totalRows > 0);
+            logger.info(String.format(
+                    "🟢 REV 3: Result → reversed=%s (count=%d)",
+                    reversed, (totalRows == null ? 0 : totalRows)
+            ));
+            return reversed;
+        } catch (DataAccessException ex) {
+            logger.info(String.format("🔴 REV ERR: %s", ex.getMessage()));
+            return false; // fail-open (treat as not reversed) or flip to true if you prefer fail-closed
         }
     }
 
     @Override
     public ResponseEntity LogDisputesBulk(String sessiontoken, String records, String username) {
+        long t0 = System.currentTimeMillis();
+        logger.info(String.format("🟢 Step 1: LogDisputesBulk() called | username=%s, sessiontokenPresent=%s",
+                username, (sessiontoken != null)));
+
         try {
-            logger.info(String.format("LogDisputesBulk() called by user='%s' with sessiontoken='%s'", username, sessiontoken));
+            // 🟢 Step 2: Parse input JSON array
             JSONArray jsonRecords = new JSONArray(records);
-            logger.info(String.format("Parsed %d records from input JSON", jsonRecords.length()));
+            logger.info(String.format("🟢 Step 2: Parsed %d record(s) from input JSON", jsonRecords.length()));
 
-            int found = 0;
-            int recorded = 0;
+            int found = 0;                 // valid for logging
+            int recorded = 0;              // actually inserted
+            int skippedExists = 0;         // skipped because dispute already exists
+            int skippedReversed = 0;       // skipped because txn already reversed (isTxnReversed='00')
+            int skippedOldOrResp = 0;      // skipped due to age/respCode gate
+
             int userrole = GetUserRole(sessiontoken);
-            logger.info(String.format("User '%s' has role %d", username, userrole));
+            logger.info(String.format("🟢 Step 3: User role resolved → user=%s, role=%d", username, userrole));
 
+            // 🟢 Step 4: Iterate rows
             for (int i = 0; i < jsonRecords.length(); i++) {
                 JSONObject rec = jsonRecords.getJSONObject(i);
-                String terminalid = rec.getString("terminalid");
-                String rrn = rec.getString("rrn");
-                String stan = rec.getString("stan");
-                logger.info(String.format("Processing record #%d: terminalid=%s, rrn=%s, stan=%s", i + 1, terminalid, rrn, stan));
+                // tolerate whitespace and BOM if any
+                String terminalid = rec.getString("terminalid").trim().replace("\uFEFF", "");
+                String rrn        = rec.getString("rrn").trim();
+                String stan       = rec.getString("stan").trim();
 
-                boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
-                logger.info(String.format("CheckDisputeExist: %s (terminalid=%s, rrn=%s, stan=%s) => %s",
-                        username, terminalid, rrn, stan, sessionIdExist));
+                logger.info(String.format("🟢 Step 4.%d: Processing | terminalid=%s, rrn=%s, stan=%s",
+                        (i + 1), terminalid, rrn, stan));
 
-                if (!sessionIdExist) {
-                    List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan, false);
-                    logger.info(String.format("GetTransaction returned %d records for terminalid=%s, rrn=%s, stan=%s",
-                            getTransaction.size(), terminalid, rrn, stan));
-                    if (getTransaction.size() > 0) {
-                        String tnxDate = getTransaction.get(0).getNcs_date_time();
-                        int daysAgo = dateUtil.daysAgo(tnxDate);
-                        logger.info(String.format("Transaction date: %s, daysAgo=%d", tnxDate, daysAgo));
+                // 4.A — Already logged?
+                boolean exists = CheckDisputeExist(terminalid, rrn, stan);
+                logger.info(String.format("🟢 Step 4.%d.A: CheckDisputeExist → %s", (i + 1), exists));
+                if (exists) {
+                    skippedExists++;
+                    logger.info(String.format("🟡 Step 4.%d.A1: Skipping — dispute already exists", (i + 1)));
+                    continue;
+                }
 
-                        String respCode = getTransaction.get(0).getResponse_code();
-                        if (respCode.equals("00") && (daysAgo <= 120 || userrole == 8)) {
-                            found++;
-                            String SQL;
-                            int additionalDays = dateUtil.getDisputeTimeLineDate();
-                            logger.info(String.format("additionalDays for timeline: %d", additionalDays));
+                // 4.B — Already reversed?
+                boolean reversed = isTxnAlreadyReversed(terminalid, rrn, stan);
+                logger.info(String.format("🟢 Step 4.%d.B: isTxnAlreadyReversed → %s", (i + 1), reversed));
+                if (reversed) {
+                    skippedReversed++;
+                    logger.info(String.format("🟡 Step 4.%d.B1: Skipping — transaction reversed (isTxnReversed='00')", (i + 1)));
+                    continue;
+                }
 
-                            String unique_log_code = terminalid + stan + rrn;
-                            String nuban = "";
-                            // logger.info(String.format("Cardholder_acct_number: %s", getTransaction.get(0).getCardholder_acct_number()));
+                // 4.C — Fetch original txn
+                List<CardsTransactionModel> txns = GetTransaction(terminalid, rrn, stan, false);
+                logger.info(String.format("🟢 Step 4.%d.C: GetTransaction returned %d record(s)",
+                        (i + 1), txns.size()));
 
-                            String disputeType = !respCode.equals("00") ? "habari" : "institution";
-                            logger.info(String.format("DisputeType determined: %s", disputeType));
+                if (txns.isEmpty()) {
+                    logger.info(String.format("🟡 Step 4.%d.C1: No matching transaction found — skipping", (i + 1)));
+                    continue;
+                }
 
-                            SQL = "INSERT into sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                            logger.info(String.format("INSERT dispute SQL: %s", SQL));
-                            logger.info(String.format("Insert params: id=%s, unique_log_code=%s, terminalid=%s, merchant_id=%s, stan=%s, rrn=%s, username=%s, owner_institution=%s, type=%s, additionalDays=%d, nuban=%s, message_type=%s, pan=%s, amount=%s, destination_acquiring_institution_id=%s, acquirer_institution_id=%s, bin=%s, ncs_date_time=%s, response_code=%s, cardholder_acct_number=%s",
-                                    getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(),
-                                    stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType, additionalDays,
-                                    nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(),
-                                    getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(),
-                                    getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(),
-                                    getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(),
-                                    getTransaction.get(0).getCardholder_acct_number()));
+                CardsTransactionModel t = txns.get(0);
 
-                            int retval = jdbcTemplate.update(SQL, new Object[]{
-                                getTransaction.get(0).getId(), unique_log_code, terminalid, getTransaction.get(0).getMerchant_id(),
-                                stan, rrn, username, getTransaction.get(0).getAcquirer_institution_id(), disputeType,
-                                additionalDays, nuban, getTransaction.get(0).getMessage_type(), getTransaction.get(0).getPan(),
-                                getTransaction.get(0).getRawAmount(), getTransaction.get(0).getDestination_acquiring_institution_id(),
-                                getTransaction.get(0).getAcquirer_institution_id(), getTransaction.get(0).getBin(),
-                                getTransaction.get(0).getNcs_date_time(), getTransaction.get(0).getResponse_code(),
-                                getTransaction.get(0).getCardholder_acct_number()
-                            });
-                            logger.info(String.format("Dispute record inserted, retval=%d", retval));
+                String tnxDate = t.getNcs_date_time();
+                int daysAgo = dateUtil.daysAgo(tnxDate);
+                String respCode = t.getResponse_code();
 
-                            if (userrole == 8) {
-                                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
-                                logger.info(String.format("Userrole==8, auto-resolving with UPDATE: %s", SQL));
-                                logger.info(String.format("Update params: username=%s, terminalid=%s, rrn=%s, stan=%s", username, terminalid, rrn, stan));
-                                jdbcTemplate.update(SQL, new Object[]{username, terminalid, rrn, stan});
-                            }
-                            if (retval > 0) {
-                                recorded++;
-                                logger.info(String.format("recorded incremented to %d", recorded));
-                            }
-                        }
-                    } else {
-                        logger.info(String.format("No valid transaction found for terminalid=%s, rrn=%s, stan=%s", terminalid, rrn, stan));
+                logger.info(String.format("🟢 Step 4.%d.D: Txn snapshot → ncs_date_time=%s, daysAgo=%d, respCode=%s",
+                        (i + 1), tnxDate, daysAgo, respCode));
+
+                // You previously allowed logging if respCode == "00" AND (days<=120 OR role==8)
+                if (respCode.equals("00") && (daysAgo <= 120 || userrole == 8)) {
+                    found++;
+
+                    int additionalDays = dateUtil.getDisputeTimeLineDate();
+                    logger.info(String.format("🟢 Step 4.%d.E: Valid for logging → additionalDays=%d", (i + 1), additionalDays));
+
+                    String unique_log_code = terminalid + stan + rrn;
+                    String nuban = ""; // kept as in your original
+                    String disputeType = !respCode.equals("00") ? "habari" : "institution";
+                    logger.info(String.format("🟢 Step 4.%d.F: unique_log_code=%s, disputeType=%s", (i + 1), unique_log_code, disputeType));
+
+                    String SQL = "INSERT INTO sparkpayweb_db.tbl_disputes(" +
+                            "id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, " +
+                            "logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, " +
+                            "message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, " +
+                            "ncs_date_time, response_code, cardholder_acct_number) " +
+                            "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', NOW(), ADDDATE(NOW(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+                    logger.info(String.format("🟢 Step 4.%d.G: INSERT SQL → %s", (i + 1), SQL));
+                    logger.info(String.format("🟢 Step 4.%d.G1: INSERT params → id=%s, unique_log_code=%s, terminalid=%s, merchant_id=%s, stan=%s, rrn=%s, username=%s, owner_institution=%s, type=%s, addDays=%d, nuban=%s, message_type=%s, pan=%s, amount=%s, dest_acq_id=%s, acq_id=%s, bin=%s, ncs_date_time=%s, response_code=%s, cardholder_acct_number=%s",
+                            (i + 1),
+                            t.getId(), unique_log_code, terminalid, t.getMerchant_id(),
+                            stan, rrn, username, t.getAcquirer_institution_id(), disputeType, additionalDays, nuban,
+                            t.getMessage_type(), t.getPan(), t.getRawAmount(), t.getDestination_acquiring_institution_id(),
+                            t.getAcquirer_institution_id(), t.getBin(), t.getNcs_date_time(), t.getResponse_code(),
+                            t.getCardholder_acct_number()
+                    ));
+
+                    int retval = jdbcTemplate.update(SQL, new Object[]{
+                            t.getId(), unique_log_code, terminalid, t.getMerchant_id(),
+                            stan, rrn, username, t.getAcquirer_institution_id(), disputeType,
+                            additionalDays, nuban, t.getMessage_type(), t.getPan(),
+                            t.getRawAmount(), t.getDestination_acquiring_institution_id(),
+                            t.getAcquirer_institution_id(), t.getBin(),
+                            t.getNcs_date_time(), t.getResponse_code(), t.getCardholder_acct_number()
+                    });
+
+                    logger.info(String.format("🟢 Step 4.%d.H: INSERT retval=%d", (i + 1), retval));
+
+                    // auto-resolve for role==8 (kept from your original logic)
+                    if (userrole == 8) {
+                        String autoSql = "UPDATE sparkpayweb_db.tbl_disputes " +
+                                "SET resolved_by = ?, status = '0', resolved = '0', date_modified = NOW() " +
+                                "WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                        logger.info(String.format("🟢 Step 4.%d.I: Role==8, auto-resolve UPDATE → %s", (i + 1), autoSql));
+                        logger.info(String.format("🟢 Step 4.%d.I1: params → username=%s, terminalid=%s, rrn=%s, stan=%s",
+                                (i + 1), username, terminalid, rrn, stan));
+                        jdbcTemplate.update(autoSql, new Object[]{ username, terminalid, rrn, stan });
+                    }
+
+                    if (retval > 0) {
+                        recorded++;
+                        logger.info(String.format("🟢 Step 4.%d.J: recorded++ → %d", (i + 1), recorded));
                     }
                 } else {
-                    logger.info(String.format("Dispute already exists for terminalid=%s, rrn=%s, stan=%s; skipping insert.", terminalid, rrn, stan));
+                    skippedOldOrResp++;
+                    logger.info(String.format("🟡 Step 4.%d.Z: Skipping — respCode=%s, daysAgo=%d, role=%d (rule: respCode=='00' && (days<=120 || role==8))",
+                            (i + 1), respCode, daysAgo, userrole));
                 }
             }
+
+            // 🟢 Step 5: Build response summary
+            String summary = String.format(
+                    "Total Records: %d%nValid Records: %d%nRecorded: %d%nSkipped (exists): %d%nSkipped (reversed): %d%nSkipped (age/resp): %d",
+                    jsonRecords.length(), found, recorded, skippedExists, skippedReversed, skippedOldOrResp
+            );
+            logger.info(String.format("🟢 Step 5: Summary → %s", summary));
 
             NetworkResponse networkResponse = new NetworkResponse();
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage(String.format("Total Records: %d\nValid Records: %d\nRecorded: %d", jsonRecords.length(), found, recorded));
-            logger.info(String.format("LogDisputesBulk() completed: %s", networkResponse.getMessage()));
+            networkResponse.setMessage(summary);
+
+            logger.info(String.format("🟢 Step 6: Returning OK | elapsed=%d ms", (System.currentTimeMillis() - t0)));
             return responseManager.ResponseOk(networkResponse);
 
         } catch (DataAccessException ex) {
-            logger.info(String.format("LogDisputesBulk() DataAccessException: %s", ex.getMessage()));
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("🔴 Step ERR: DataAccessException → %s", ex.getMessage()));
             return responseManager.ResponseInternalServerError();
         } catch (JSONException ex) {
-            logger.info(String.format("LogDisputesBulk() JSONException: %s", ex.getMessage()));
+            logger.info(String.format("🔴 Step ERR: JSONException → %s", ex.getMessage()));
             Logger.getLogger(CardsTransactionsService.class.getName()).log(Level.SEVERE, null, ex);
+            return responseManager.ResponseBadRequest(); // better than returning null
         }
-        return null;
     }
 
     @Override
     public ResponseEntity LogDisputesBulkExternal(String sessiontoken, String records, String username) {
-        logger.info(String.format("LogDisputesBulkExternal called with sessiontoken='%s', username='%s', rawRecordsLength=%d",
-                "", username, records != null ? records.length() : 0));
+        logger.info(String.format("🟢 Step 1: LogDisputesBulkExternal called | sessiontokenPresent=%s, username=%s, rawRecordsLength=%d",
+                (sessiontoken != null), username, records != null ? records.length() : 0));
         try {
             JSONArray jsonRecords = new JSONArray(records);
             int found = 0;
             int recorded = 0;
+            int skippedExists = 0;
+            int skippedReversed = 0;
+
             int userrole = GetUserRoleExternal(sessiontoken);
-            logger.info(String.format("Parsed %d records; userrole=%d", jsonRecords.length(), userrole));
+            logger.info(String.format("🟢 Step 2: Parsed %d records; userrole=%d", jsonRecords.length(), userrole));
             if (userrole == -100) {
+                logger.info(String.format("🔴 Step 2.1: Unauthorized userrole=%d → returning 401", userrole));
                 return responseManager.ResponseUnathorized();
             }
 
             for (int i = 0; i < jsonRecords.length(); i++) {
-
                 JSONObject obj = jsonRecords.getJSONObject(i);
-                String terminalid = obj.getString("terminalid");
-                String merchantid = obj.getString("merchantid");
-                String rrn = obj.getString("rrn");
-                String stan = obj.getString("stan");
-                logger.info(String.format("Processing record #%d: terminalid='%s', merchantid='%s', rrn='%s', stan='%s'",
-                        i, terminalid, merchantid, rrn, stan));
+                String terminalid = obj.getString("terminalid").trim().replace("\uFEFF", "");
+                String merchantid = obj.getString("merchantid").trim();
+                String rrn        = obj.getString("rrn").trim();
+                String stan       = obj.getString("stan").trim();
 
-                boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
-                logger.info(String.format("CheckDisputeExist returned %s for terminalid='%s', rrn='%s', stan='%s'",
-                        sessionIdExist, terminalid, rrn, stan));
+                logger.info(String.format("🟢 Step 3.%d: Processing | terminalid=%s, merchantid=%s, rrn=%s, stan=%s",
+                        i + 1, terminalid, merchantid, rrn, stan));
 
-                if (!sessionIdExist) {
-                    List<CardsTransactionModel> txns = getTransactionExternal(terminalid, rrn, stan, merchantid, false);
-                    logger.info(String.format("getTransactionExternal returned %d records for terminalid='%s'", txns.size(), terminalid));
-                    if (!txns.isEmpty()) {
-                        CardsTransactionModel txn = txns.get(0);
-                        String tnxDate = txn.getNcs_date_time();
-                        int daysAgo = dateUtil.daysAgo(tnxDate);
-                        logger.info(String.format("Transaction date='%s' is %d days ago; response_code='%s'",
-                                tnxDate, daysAgo, txn.getResponse_code()));
+                boolean exists = CheckDisputeExist(terminalid, rrn, stan);
+                logger.info(String.format("🟢 Step 3.%d.A: CheckDisputeExist → %s", i + 1, exists));
+                if (exists) {
+                    skippedExists++;
+                    logger.info(String.format("🟡 Step 3.%d.A1: Skipping — dispute already exists", i + 1));
+                    continue;
+                }
 
-                        if ("00".equals(txn.getResponse_code()) && (daysAgo <= 120 || userrole == 8)) {
-                            found++;
-                            int additionalDays = dateUtil.getDisputeTimeLineDate();
-                            String uniqueLogCode = terminalid + stan + rrn;
-                            String disputeType = "00".equals(txn.getResponse_code()) ? "institution" : "habari";
-                            logger.info(String.format("Valid dispute: uniqueLogCode='%s', disputeType='%s', additionalDays=%d",
-                                    uniqueLogCode, disputeType, additionalDays));
+                boolean reversed = isTxnAlreadyReversed(terminalid, rrn, stan);
+                logger.info(String.format("🟢 Step 3.%d.B: isTxnAlreadyReversed → %s", i + 1, reversed));
+                if (reversed) {
+                    skippedReversed++;
+                    logger.info(String.format("🟡 Step 3.%d.B1: Skipping — transaction already reversed (isTxnReversed='00')", i + 1));
+                    continue;
+                }
 
-                            String insertSql
-                                    = "INSERT INTO sparkpayweb_db.tbl_disputes(id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                            Object[] insertParams = {txn.getId(), uniqueLogCode, terminalid, txn.getMerchant_id(), stan, rrn,
-                                username, txn.getAcquirer_institution_id(), disputeType, additionalDays,
-                                "", txn.getMessage_type(), txn.getPan(), txn.getRawAmount(),
-                                txn.getDestination_acquiring_institution_id(), txn.getAcquirer_institution_id(),
-                                txn.getBin(), txn.getNcs_date_time(), txn.getResponse_code(), txn.getCardholder_acct_number()};
+                List<CardsTransactionModel> txns = getTransactionExternal(terminalid, rrn, stan, merchantid, false);
+                logger.info(String.format("🟢 Step 3.%d.C: getTransactionExternal returned %d record(s)", i + 1, txns.size()));
+                if (txns.isEmpty()) {
+                    logger.info(String.format("🟡 Step 3.%d.C1: No matching transaction found — skipping", i + 1));
+                    continue;
+                }
 
-                            logger.info(String.format("Executing INSERT, params=%s", Arrays.toString(insertParams)));
-                            logger.info(String.format("INSERT query = %s", insertSql));
+                CardsTransactionModel txn = txns.get(0);
+                String tnxDate = txn.getNcs_date_time();
+                int daysAgo = dateUtil.daysAgo(tnxDate);
+                logger.info(String.format("🟢 Step 3.%d.D: Txn snapshot → ncs_date_time=%s, daysAgo=%d, response_code=%s",
+                        i + 1, tnxDate, daysAgo, txn.getResponse_code()));
 
-                            int retval = jdbcTemplate.update(insertSql, insertParams);
-                            logger.info(String.format("INSERT returned %d", retval));
+                if ("00".equals(txn.getResponse_code()) && (daysAgo <= 120 || userrole == 8)) {
+                    found++;
+                    int additionalDays = dateUtil.getDisputeTimeLineDate();
+                    String uniqueLogCode = terminalid + stan + rrn;
+                    String disputeType = "institution";
+                    logger.info(String.format("🟢 Step 3.%d.E: Valid for logging → uniqueLogCode=%s, disputeType=%s, additionalDays=%d",
+                            i + 1, uniqueLogCode, disputeType, additionalDays));
 
-                            if (userrole == 8) {
-                                String updateSql
-                                        = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by=?, status='0', resolved='0', date_modified=now() WHERE terminal_id=? AND retrieval_ref_number=? AND system_trace_number=?";
-                                Object[] updateParams = {username, terminalid, rrn, stan};
-                                logger.info(String.format("Executing UPDATE for resolver, params=%s", Arrays.toString(updateParams)));
-                                jdbcTemplate.update(updateSql, updateParams);
-                            }
+                    String insertSql =
+                            "INSERT INTO sparkpayweb_db.tbl_disputes(" +
+                                    "id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, " +
+                                    "logged_by, owner_institution, type, status, date_created, timeline_date, cardholder_acct_nuban, " +
+                                    "message_type, pan, amount, destination_acquiring_institution_id, acquirer_institution_id, bin, " +
+                                    "ncs_date_time, response_code, cardholder_acct_number) " +
+                                    "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', NOW(), ADDDATE(NOW(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
 
-                            if (retval > 0) {
-                                recorded++;
-                            }
-                        }
+                    Object[] insertParams = {
+                            txn.getId(), uniqueLogCode, terminalid, txn.getMerchant_id(), stan, rrn,
+                            username, txn.getAcquirer_institution_id(), disputeType, additionalDays,
+                            "", txn.getMessage_type(), txn.getPan(), txn.getRawAmount(),
+                            txn.getDestination_acquiring_institution_id(), txn.getAcquirer_institution_id(),
+                            txn.getBin(), txn.getNcs_date_time(), txn.getResponse_code(), txn.getCardholder_acct_number()
+                    };
+
+                    logger.info(String.format("🟢 Step 3.%d.F: INSERT SQL → %s", i + 1, insertSql));
+                    logger.info(String.format("🟢 Step 3.%d.F1: INSERT params → %s", i + 1, java.util.Arrays.toString(insertParams)));
+
+                    int retval = jdbcTemplate.update(insertSql, insertParams);
+                    logger.info(String.format("🟢 Step 3.%d.G: INSERT returned %d", i + 1, retval));
+
+                    if (userrole == 8) {
+                        String updateSql =
+                                "UPDATE sparkpayweb_db.tbl_disputes " +
+                                        "SET resolved_by=?, status='0', resolved='0', date_modified=NOW() " +
+                                        "WHERE terminal_id=? AND retrieval_ref_number=? AND system_trace_number=?";
+                        Object[] updateParams = { username, terminalid, rrn, stan };
+                        logger.info(String.format("🟢 Step 3.%d.H: Auto-resolve UPDATE → %s", i + 1, updateSql));
+                        logger.info(String.format("🟢 Step 3.%d.H1: UPDATE params → %s", i + 1, java.util.Arrays.toString(updateParams)));
+                        jdbcTemplate.update(updateSql, updateParams);
+                    }
+
+                    if (retval > 0) {
+                        recorded++;
                     }
                 }
             }
 
-            logger.info(String.format("Loop complete: total=%d, valid=%d, recorded=%d",
-                    jsonRecords.length(), found, recorded));
+            logger.info(String.format("🟢 Step 4: Loop complete | total=%d, valid=%d, recorded=%d, skippedExists=%d, skippedReversed=%d",
+                    jsonRecords.length(), found, recorded, skippedExists, skippedReversed));
 
             NetworkResponse networkResponse = new NetworkResponse();
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage(
-                    String.format("Total Records: %d%nValid Records: %d%nRecorded: %d",
-                            jsonRecords.length(), found, recorded));
-            logger.info("Returning success response: " + networkResponse.getMessage());
+            networkResponse.setMessage(String.format(
+                    "Total Records: %d%nValid Records: %d%nRecorded: %d%nSkipped (exists): %d%nSkipped (reversed): %d",
+                    jsonRecords.length(), found, recorded, skippedExists, skippedReversed
+            ));
+            logger.info(String.format("🟢 Step 5: Returning success response → %s", networkResponse.getMessage()));
             return responseManager.ResponseOk(networkResponse);
 
         } catch (DataAccessException ex) {
-            logger.info(String.format("DataAccessException: %s", ex.getMessage() + ": " + ex));
+            logger.info(String.format("🔴 Step ERR: DataAccessException → %s", ex.getMessage()));
             ex.printStackTrace();
             return responseManager.ResponseInternalServerError();
         } catch (JSONException ex) {
-            logger.info("JSONException while parsing records " + ex);
+            logger.info(String.format("🔴 Step ERR: JSONException → %s", ex.toString()));
             ex.printStackTrace();
             return responseManager.ResponseInternalServerError();
         }
@@ -1256,16 +1368,24 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     }
 
     @Override
-    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan, String proof_of_debit_uri, String username, boolean isExternal) {
-        logger.info(String.format("Entering LogDispute: sessiontoken=, terminalid=%s, rrn=%s, stan=%s, username=%s, isExternal=%b",
-                terminalid, rrn, stan, username, isExternal));
-        try {
-            boolean sessionIdExist = CheckDisputeExist(terminalid, rrn, stan);
-            String unique_log_code = terminalid + stan + rrn;
-            logger.info(String.format("CheckDisputeExist returned %b for unique_log_code=%s", sessionIdExist, unique_log_code));
+    public ResponseEntity LogDispute(String sessiontoken, String terminalid, String rrn, String stan,
+                                     String proof_of_debit_uri, String username, boolean isExternal) {
 
-            if (sessionIdExist) {
-                logger.info(String.format("Dispute already exists, aborting. unique_log_code=%s", unique_log_code));
+        logger.info(String.format(
+                "🟢 Step 1: Entering LogDispute | sessiontokenPresent=%s, terminalid=%s, rrn=%s, stan=%s, username=%s, isExternal=%b",
+                (sessiontoken != null), terminalid, rrn, stan, username, isExternal
+        ));
+
+        try {
+            // 1) Duplicate check
+            boolean exists = CheckDisputeExist(terminalid, rrn, stan);
+            String unique_log_code = terminalid + stan + rrn;
+            logger.info(String.format(
+                    "🟢 Step 2: CheckDisputeExist → %b | unique_log_code=%s",
+                    exists, unique_log_code
+            ));
+            if (exists) {
+                logger.info(String.format("🟡 Step 2.1: Dispute already exists → aborting | %s", unique_log_code));
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
                 networkResponse.setStatus("failed");
@@ -1273,134 +1393,163 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 return responseManager.ResponseOk(networkResponse);
             }
 
-            List<CardsTransactionModel> getTransaction = GetTransaction(terminalid, rrn, stan, false);
-            logger.info(String.format("Retrieved %d transactions for terminalid=%s, rrn=%s, stan=%s",
-                    getTransaction.size(), terminalid, rrn, stan));
+            // 2) Reversal check — if reversed ('00'), not eligible
+            boolean reversed = isTxnAlreadyReversed(terminalid, rrn, stan);
+            logger.info(String.format(
+                    "🟢 Step 3: isTxnAlreadyReversed → %s | terminalid=%s, rrn=%s, stan=%s",
+                    reversed, terminalid, rrn, stan
+            ));
+            if (reversed) {
+                logger.info("🟡 Step 3.1: Transaction already reversed (isTxnReversed='00') → not eligible for dispute");
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Transaction has already been reversed and cannot be logged for dispute");
+                return responseManager.ResponseOk(networkResponse);
+            }
 
-            if (getTransaction.size() > 0) {
-                int userrole = GetUserRole(sessiontoken);
-                logger.info(String.format("User role for sessiontoken %s is %d", sessiontoken, userrole));
-
-                if (!"00".equals(getTransaction.get(0).getResponse_code())) {
-                    logger.info(String.format("Transaction response_code=%s is not '00', cannot log for dispute",
-                            getTransaction.get(0).getResponse_code()));
-                    NetworkResponse networkResponse = new NetworkResponse();
-                    networkResponse.setCode(200);
-                    networkResponse.setStatus("failed");
-                    networkResponse.setMessage("Only completely processed or approved transactions can be logged for dispute");
-                    return responseManager.ResponseOk(networkResponse);
-                }
-
-                int additionalDays = dateUtil.getDisputeTimeLineDate();
-                String tnxDate = getTransaction.get(0).getNcs_date_time();
-                int daysAgo = dateUtil.daysAgo(tnxDate);
-                logger.info(String.format("Transaction date %s is %d days ago; allowed window=%d days",
-                        tnxDate, daysAgo, additionalDays));
-
-                if (daysAgo > 120 && userrole != 8) {
-                    logger.info(String.format("Transaction older than 120 days and userrole=%d is not 8; rejecting", userrole));
-                    NetworkResponse networkResponse = new NetworkResponse();
-                    networkResponse.setCode(200);
-                    networkResponse.setStatus("failed");
-                    networkResponse.setMessage("Transaction occured more than 120 days ago and cannot be logged");
-                    return responseManager.ResponseOk(networkResponse);
-                }
-
-                String disputeType = "institution";
-                if ("habari".equals(disputeType = (!"00".equals(getTransaction.get(0).getResponse_code()) ? "habari" : "institution"))) {
-                    // dead code in this branch, but left for fidelity to original
-                }
-                logger.info(String.format("Determined disputeType=%s", disputeType));
-
-                String SQL = "INSERT INTO sparkpayweb_db.tbl_disputes("
-                        + "id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, "
-                        + "logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, "
-                        + "cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, "
-                        + "acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number"
-                        + ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                logger.info(String.format("Executing INSERT SQL: %s", SQL));
-
-                Object[] params = {
-                    getTransaction.get(0).getId(),
-                    unique_log_code,
-                    terminalid,
-                    getTransaction.get(0).getMerchant_id(),
-                    stan,
-                    rrn,
-                    username,
-                    getTransaction.get(0).getAcquirer_institution_id(),
-                    disputeType,
-                    additionalDays,
-                    proof_of_debit_uri,
-                    "", // nuban placeholder
-                    getTransaction.get(0).getMessage_type(),
-                    getTransaction.get(0).getPan(),
-                    getTransaction.get(0).getRawAmount(),
-                    getTransaction.get(0).getDestination_acquiring_institution_id(),
-                    getTransaction.get(0).getAcquirer_institution_id(),
-                    getTransaction.get(0).getBin(),
-                    getTransaction.get(0).getNcs_date_time(),
-                    getTransaction.get(0).getResponse_code(),
-                    getTransaction.get(0).getCardholder_acct_number()
-                };
-                logger.info(String.format("INSERT parameters: %s", Arrays.toString(params)));
-
-                int retval = jdbcTemplate.update(SQL, params);
-                logger.info(String.format("INSERT affected %d rows", retval));
-
-                if (userrole == 8 || isExternal) {
-                    String updateSQL = "UPDATE sparkpayweb_db.tbl_disputes "
-                            + "SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() "
-                            + "WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
-                    logger.info(String.format("Executing UPDATE SQL: %s", updateSQL));
-                    jdbcTemplate.update(updateSQL, new Object[]{username, terminalid, rrn, stan});
-                    logger.info("Marked dispute as immediately resolved for external/PTSP user");
-                }
-
-                if (retval > 0) {
-                    String ptspSQL = "SELECT ptsp_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
-                    String ptspid = jdbcTemplate.queryForObject(ptspSQL, new Object[]{getTransaction.get(0).getMerchant_id()}, String.class);
-                    logger.info(String.format("Found ptsp_id=%s for merchant_id=%s", ptspid, getTransaction.get(0).getMerchant_id()));
-
-                    String userSQL = "SELECT user_email FROM tbl_map_card_users_institution WHERE institution_id = ? LIMIT 3";
-                    List<Map<String, Object>> ptspUsers = jdbcTemplate.queryForList(userSQL, new Object[]{ptspid});
-                    logger.info(String.format("Fetched %d PTSP user emails", ptspUsers.size()));
-
-                    for (Map<String, Object> row : ptspUsers) {
-                        String toEmail = (String) row.get("user_email");
-                        String message = "<html><body>Dear Team, <br/><br/>Please be informed that a new dispute has been logged against your institution. "
-                                + "Please login to sparkpay and find the dispute under the unique log code " + unique_log_code
-                                + "<br/><br/>Sparkpay,<br/>Cheers</body></html>";
-                        logger.info(String.format("Sending email to %s with subject='New Dispute Log'", toEmail));
-                        try {
-                            mailers.SendMailWithHabariOkHttpClient(
-                                    "New Dispute Log",
-                                    "no-reply@habaripay.com",
-                                    toEmail,
-                                    message
-                            );
-                            logger.info(String.format("Email sent successfully to %s", toEmail));
-                        } catch (Exception e) {
-                            logger.info(String.format("Mailer error for %s: %s", toEmail, e.toString()));
-                        }
-                    }
-
-                    logger.info("LogDispute completed: returning 202 Accepted");
-                    return responseManager.ResponseAccepted();
-                } else {
-                    logger.info("INSERT returned zero affected rows: internal server error");
-                    return responseManager.ResponseInternalServerError();
-                }
-            } else {
-                logger.info(String.format("No transaction found for terminalid=%s, rrn=%s, stan=%s", terminalid, rrn, stan));
+            // 3) Fetch original transaction
+            List<CardsTransactionModel> txns = GetTransaction(terminalid, rrn, stan, false);
+            logger.info(String.format(
+                    "🟢 Step 4: GetTransaction returned %d record(s) | terminalid=%s, rrn=%s, stan=%s",
+                    txns.size(), terminalid, rrn, stan
+            ));
+            if (txns.isEmpty()) {
+                logger.info("🟡 Step 4.1: No transaction found → returning 404-style payload");
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(404);
                 networkResponse.setStatus("failed");
                 networkResponse.setMessage("Transaction not found");
                 return responseManager.ResponseOk(networkResponse);
             }
+
+            CardsTransactionModel t = txns.get(0);
+
+            // 4) Role + eligibility checks
+            int userrole = GetUserRole(sessiontoken);
+            logger.info(String.format("🟢 Step 5: User role resolved → %d", userrole));
+
+            if (!"00".equals(t.getResponse_code())) {
+                logger.info(String.format(
+                        "🟡 Step 5.1: response_code=%s != '00' → not eligible",
+                        t.getResponse_code()
+                ));
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Only completely processed or approved transactions can be logged for dispute");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            int additionalDays = dateUtil.getDisputeTimeLineDate();
+            String tnxDate = t.getNcs_date_time();
+            int daysAgo = dateUtil.daysAgo(tnxDate);
+            logger.info(String.format(
+                    "🟢 Step 6: Txn age check → ncs_date_time=%s, daysAgo=%d, windowAllowed=%d",
+                    tnxDate, daysAgo, additionalDays
+            ));
+
+            if (daysAgo > 120 && userrole != 8) {
+                logger.info(String.format(
+                        "🟡 Step 6.1: Too old (>%d days) and userrole=%d != 8 → reject",
+                        120, userrole
+                ));
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Transaction occured more than 120 days ago and cannot be logged");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            // 5) Prepare insert
+            String disputeType = "institution"; // resp_code is '00' here
+            logger.info(String.format("🟢 Step 7: disputeType=%s | unique_log_code=%s", disputeType, unique_log_code));
+
+            String SQL = "INSERT INTO sparkpayweb_db.tbl_disputes(" +
+                    "id, unique_log_code, terminal_id, merchant_id, system_trace_number, retrieval_ref_number, " +
+                    "logged_by, owner_institution, type, status, date_created, timeline_date, proof_of_debit_uri, " +
+                    "cardholder_acct_nuban, message_type, pan, amount, destination_acquiring_institution_id, " +
+                    "acquirer_institution_id, bin, ncs_date_time, response_code, cardholder_acct_number" +
+                    ") VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, '-1', now(), ADDDATE(now(), ?), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+            logger.info(String.format("🟢 Step 7.1: INSERT SQL → %s", SQL));
+
+            Object[] params = {
+                    t.getId(),
+                    unique_log_code,
+                    terminalid,
+                    t.getMerchant_id(),
+                    stan,
+                    rrn,
+                    username,
+                    t.getAcquirer_institution_id(),
+                    disputeType,
+                    additionalDays,
+                    proof_of_debit_uri,
+                    "", // nuban placeholder
+                    t.getMessage_type(),
+                    t.getPan(),
+                    t.getRawAmount(),
+                    t.getDestination_acquiring_institution_id(),
+                    t.getAcquirer_institution_id(),
+                    t.getBin(),
+                    t.getNcs_date_time(),
+                    t.getResponse_code(),
+                    t.getCardholder_acct_number()
+            };
+            logger.info(String.format("🟢 Step 7.2: INSERT params → %s", java.util.Arrays.toString(params)));
+
+            int retval = jdbcTemplate.update(SQL, params);
+            logger.info(String.format("🟢 Step 8: INSERT affected rows → %d", retval));
+
+            // 6) Auto-resolve for role==8 (or external)
+            if (userrole == 8 || isExternal) {
+                String updateSQL = "UPDATE sparkpayweb_db.tbl_disputes " +
+                        "SET resolved_by = ?, status = '0', resolved = '0', date_modified = now() " +
+                        "WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
+                logger.info(String.format("🟢 Step 9: Auto-resolve UPDATE → %s", updateSQL));
+                jdbcTemplate.update(updateSQL, new Object[]{ username, terminalid, rrn, stan });
+                logger.info("🟢 Step 9.1: Dispute marked resolved (PTSP/external or role==8)");
+            }
+
+            if (retval > 0) {
+                // 7) Notify PTSP users (kept from your code)
+                String ptspSQL = "SELECT ptsp_id FROM sparkpayweb_db.tbl_map_merchants_ptsps WHERE merchant_id = ?";
+                String ptspid = jdbcTemplate.queryForObject(ptspSQL, new Object[]{ t.getMerchant_id() }, String.class);
+                logger.info(String.format("🟢 Step 10: ptsp_id lookup → ptsp_id=%s, merchant_id=%s", ptspid, t.getMerchant_id()));
+
+                String userSQL = "SELECT user_email FROM tbl_map_card_users_institution WHERE institution_id = ? LIMIT 3";
+                java.util.List<java.util.Map<String, Object>> ptspUsers =
+                        jdbcTemplate.queryForList(userSQL, new Object[]{ ptspid });
+                logger.info(String.format("🟢 Step 10.1: PTSP user emails fetched → %d", ptspUsers.size()));
+
+                for (java.util.Map<String, Object> row : ptspUsers) {
+                    String toEmail = (String) row.get("user_email");
+                    String message = "<html><body>Dear Team, <br/><br/>Please be informed that a new dispute has been logged against your institution. " +
+                            "Please login to sparkpay and find the dispute under the unique log code " + unique_log_code +
+                            "<br/><br/>Sparkpay,<br/>Cheers</body></html>";
+                    logger.info(String.format("🟢 Step 10.2: Sending email → %s", toEmail));
+                    try {
+                        mailers.SendMailWithHabariOkHttpClient(
+                                "New Dispute Log",
+                                "no-reply@habaripay.com",
+                                toEmail,
+                                message
+                        );
+                        logger.info(String.format("🟢 Step 10.3: Mail sent → %s", toEmail));
+                    } catch (Exception e) {
+                        logger.info(String.format("🔴 Step 10.3: Mailer error for %s → %s", toEmail, e.toString()));
+                    }
+                }
+
+                logger.info("🟢 Step 11: Returning 202 Accepted");
+                return responseManager.ResponseAccepted();
+            } else {
+                logger.info("🔴 Step 11: INSERT returned 0 rows → internal error");
+                return responseManager.ResponseInternalServerError();
+            }
+
         } catch (DataAccessException ex) {
-            logger.info(String.format("DataAccessException in LogDispute: %s", ex.getMessage()));
+            logger.info(String.format("🔴 Step ERR: DataAccessException in LogDispute → %s", ex.getMessage()));
             return responseManager.ResponseInternalServerError();
         }
     }
@@ -2067,7 +2216,144 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         }
     }
 
-    class CardsTransactionsDisputesMapper implements RowMapper<CardsDisputeModel> {
+    @Override
+    public ResponseEntity respondToBulkDisputes(
+            int unusedId,                    // no longer used
+            int status,
+            String proof_of_reject_uri,
+            String selectedDisputes,         // now holds unique_log_code(s)
+            String type,
+            String username
+    ) {
+        long t0 = System.currentTimeMillis();
+        logger.info(String.format(
+                "🟢 Step 1: respondToBulkDisputes() called | params → unusedId=%d, status=%d, proof_of_reject_uri=%s, selectedDisputes=%s, type=%s, username=%s",
+                unusedId, status, proof_of_reject_uri, selectedDisputes, type, username
+        ));
+
+        try {
+            String SQL;
+            int retVal = 0;
+            int resolved = (status == 0) ? 0 : 1;
+            logger.info(String.format("🟢 Step 2: Computed resolved flag → resolved=%d (status=%d)", resolved, status));
+
+            if ("bulk".equals(type)) {
+                logger.info("🟢 Step 3: Entering BULK path");
+                String[] codes = (selectedDisputes == null ? new String[0] : selectedDisputes.split(","));
+                logger.info(String.format("🟢 Step 3.1: Total unique_log_code items parsed → count=%d", codes.length));
+
+                int idx = 1;
+                for (String raw : codes) {
+                    String code = (raw == null ? "" : raw.trim());
+                    if (code.isEmpty()) {
+                        logger.info(String.format("⚠️ Step 3.2.%d: Skipping empty unique_log_code entry", idx));
+                        idx++;
+                        continue;
+                    }
+
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
+                            "SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? " +
+                            "WHERE unique_log_code = ? AND status = ? AND resolved = ?";
+
+                    logger.info(String.format(
+                            "🟢 Step 3.3.%d: Executing UPDATE (bulk) | unique_log_code=%s | params=[resolved_by=%s, status=%d, resolved=%d, proof_of_reject_uri=%s]",
+                            idx, code, username, status, resolved, proof_of_reject_uri
+                    ));
+
+                    int rows = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, code, "-1", "0"});
+                    retVal += rows;
+
+                    logger.info(String.format(
+                            "🟢 Step 3.4.%d: Update result → rowsAffected=%d | cumulativeUpdated=%d | code=%s",
+                            idx, rows, retVal, code
+                    ));
+                    idx++;
+                }
+
+                logger.info(String.format("🟢 Step 3.5: BULK path completed | totalRowsUpdated=%d", retVal));
+            } else {
+                logger.info("🟢 Step 3: Entering SINGLE-RECORD path");
+
+                if (status == -2) {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
+                            "SET arbitrated_by = ?, status = ?, date_arbitrated = now() " +
+                            "WHERE unique_log_code = ?";
+
+                    logger.info(String.format(
+                            "🟢 Step 3A: Arbitrated branch | unique_log_code=%s | params=[arbitrated_by=%s, status=%d]",
+                            selectedDisputes, username, status
+                    ));
+
+                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, selectedDisputes});
+                    logger.info(String.format("🟢 Step 3A.1: Update result → rowsAffected=%d", retVal));
+                } else if (status < -2) {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
+                            "SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() " +
+                            "WHERE unique_log_code = ?";
+
+                    logger.info(String.format(
+                            "🟢 Step 3B: Arbitration CLOSED branch | unique_log_code=%s | params=[arbitration_closed_by=%s, arbitrated_proof_uri=%s, status=%d]",
+                            selectedDisputes, username, proof_of_reject_uri, status
+                    ));
+
+                    retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, selectedDisputes});
+                    logger.info(String.format("🟢 Step 3B.1: Update result → rowsAffected=%d", retVal));
+                } else {
+                    SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
+                            "SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? " +
+                            "WHERE unique_log_code = ?";
+
+                    logger.info(String.format(
+                            "🟢 Step 3C: Default resolve/reject branch | unique_log_code=%s | params=[resolved_by=%s, status=%d, resolved=%d, proof_of_reject_uri=%s]",
+                            selectedDisputes, username, status, resolved, proof_of_reject_uri
+                    ));
+
+                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, selectedDisputes});
+                    logger.info(String.format("🟢 Step 3C.1: Update result → rowsAffected=%d", retVal));
+                }
+                logger.info(String.format("🟢 Step 3Z: SINGLE-RECORD path completed | totalRowsUpdated=%d", retVal));
+            }
+
+            String action = (status == 0) ? "accepted"
+                    : (status == -1) ? "arbitrated"
+                    : "rejected";
+            logger.info(String.format("🟢 Step 4: Derived action label → action=%s (status=%d)", action, status));
+
+            if (retVal > 0) {
+                if ("bulk".equals(type)) {
+                    String msg = String.format("Total of %d dispute(s) have been %s", retVal, action);
+                    logger.info(String.format("🟢 Step 5: Success (BULK) → %s", msg));
+                    ResponseEntity res = responseManager.ResponseAccepted(msg);
+                    logger.info(String.format("🟢 Step 6: Returning ResponseEntity (BULK) → %s", res));
+                    logger.info(String.format("🟢 Step 7: Elapsed=%d ms", (System.currentTimeMillis() - t0)));
+                    return res;
+                } else {
+                    logger.info("🟢 Step 5: Success (SINGLE) → ResponseAccepted()");
+                    ResponseEntity res = responseManager.ResponseAccepted();
+                    logger.info(String.format("🟢 Step 6: Returning ResponseEntity (SINGLE) → %s", res));
+                    logger.info(String.format("🟢 Step 7: Elapsed=%d ms", (System.currentTimeMillis() - t0)));
+                    return res;
+                }
+            } else {
+                logger.info("🟡 Step 5: No rows updated → ResponseBadRequest()");
+                ResponseEntity res = responseManager.ResponseBadRequest();
+                logger.info(String.format("🟢 Step 6: Returning ResponseEntity (BAD REQUEST) → %s", res));
+                logger.info(String.format("🟢 Step 7: Elapsed=%d ms", (System.currentTimeMillis() - t0)));
+                return res;
+            }
+
+        } catch (org.springframework.dao.DataAccessException ex) {
+            logger.info(String.format("🔴 Step ERR: DataAccessException → message=%s", ex.getMessage()));
+            ResponseEntity res = responseManager.ResponseInternalServerError();
+            logger.info(String.format("🟢 Step END: Returning ResponseEntity (INTERNAL ERROR) → %s | Elapsed=%d ms",
+                    res, (System.currentTimeMillis() - t0)));
+            return res;
+        }
+    }
+
+
+
+      class CardsTransactionsDisputesMapper implements RowMapper<CardsDisputeModel> {
 
         @Override
         public CardsDisputeModel mapRow(ResultSet rs, int arg1) throws SQLException {
