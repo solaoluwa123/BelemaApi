@@ -13,6 +13,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.logging.Logger;
 import javax.sql.DataSource;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -161,13 +163,47 @@ public class MerchantsService implements MerchantsInterface {
             logger.info(String.format("Executing SQL for max date: %s", SQL));
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
             logger.info(String.format("Max date_created: %s", maxDate));
+//
+//            String meta = String.format("{\"minDate\": \"%s\", \"maxDate\": \"%s\"}", minDate, maxDate);
+            SQL = "SELECT COUNT(DISTINCT a.id) as totalRecords,\n" +
+                    "       COALESCE(SUM(t.amount), 0) as totalValue,\n" +
+                    "       COALESCE(AVG(t.response_code = '00') * 100, 0) as successRate\n" +
+                    "FROM sparkpay.merchants a\n" +
+                    "LEFT JOIN sparkpayweb_db.tbl_map_merchants_ptsps b\n" +
+                    "ON a.merchant_id = b.merchant_id\n" +
+                    "LEFT JOIN sparkpay.transactions t\n" +
+                    "ON a.merchant_id = t.merchant_id\n" +
+                    "WHERE b.ptsp_id = ?";
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{ptsp});
+            if (agg.isEmpty()) {
+                logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
+                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": 1, \"limit\": 500, \"successRate\": 0, \"minDate\": \"2025-10-01\", \"maxDate\": \"2025-10-07\"}");
+            } else {
 
-            String meta = String.format("{\"minDate\": \"%s\", \"maxDate\": \"%s\"}", minDate, maxDate);
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+                int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
+                        .map(Number::intValue)
+                        .orElse(0);
+                double successRate = Optional.ofNullable((Number) row.get("successRate"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+
+                String meta = String.format(
+                        "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d, \"minDate\": \"%s\", \"maxDate\": \"%s\"}",
+                        totalValue, totalRecords, successRate, 1, 500, minDate, maxDate
+                );
+                networkResponse.setMeta(meta);
+                logger.info("Aggregation results processed: " + meta);
+            }
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage(String.format("Get Merchant by ptsp: %s", ptsp));
             networkResponse.setData((ArrayList) merchants);
-            networkResponse.setMeta(meta);
+//            networkResponse.setMeta(meta);
 
             logger.info(String.format("GetByPTSP completed successfully for PTSP %s", ptsp));
             return responseManager.ResponseOk(networkResponse);

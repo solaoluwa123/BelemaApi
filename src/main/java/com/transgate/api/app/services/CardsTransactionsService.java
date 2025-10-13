@@ -21,10 +21,7 @@ import java.sql.SQLException;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.function.BiConsumer;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -96,60 +93,117 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     @Override
     public ResponseEntity Get(String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
+        String correlationId = UUID.randomUUID().toString();
+        long startTime = System.currentTimeMillis();
         try {
-            String SQL;
+            logger.info(String.format("Step 1 | correlationId=%s | Entering Get(startDate=%s, endDate=%s, page=%d, limit=%d, isCurrent=%s)", correlationId, startDate, endDate, page, limit, isCurrent));
+
             int offset = page > 1 ? (page - 1) * limit : 0;
-            List<CardsTransactionModel> transactions;
+            logger.info(String.format("Step 2 | correlationId=%s | Calculated offset=%d", correlationId, offset));
+
             String table = isCurrent ? "sparkpay.transactions a " : "sparkpay.transaction_hist_s a ";
-            SQL = "SELECT a.*, b.station_name FROM " + table
+            String SQL = "SELECT a.*, b.station_name FROM " + table
                     + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                     + "WHERE a.ncs_date_time >= ? AND a.ncs_date_time <= ? "
                     + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
-            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
+            logger.info(String.format("Step 3 | correlationId=%s | Executing transactions SQL: %s | params=[%s, %s, %d, %d]", correlationId, SQL, startDate, endDate, limit, offset));
+            List<CardsTransactionModel> transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
+            logger.info(String.format("Step 4 | correlationId=%s | Retrieved transactions count=%d", correlationId, transactions != null ? transactions.size() : 0));
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM " + table
                     + "WHERE a.ncs_date_time >= ? AND a.ncs_date_time <= ?";
+            logger.info(String.format("Step 5 | correlationId=%s | Executing aggregation SQL: %s | params=[%s, %s]", correlationId, SQL, startDate, endDate));
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            Double totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
-            networkResponse.setMeta(meta);
+            logger.info(String.format("Step 6 | correlationId=%s | Aggregation rows returned=%d", correlationId, agg != null ? agg.size() : 0));
+
+            if (agg == null || agg.isEmpty()) {
+                logger.info(String.format("Step 7 | correlationId=%s | Aggregation query returned no results — using defaults", correlationId));
+                String defaultMeta = String.format("{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}", 0.0, 0, 0.0, page, limit);
+                networkResponse.setMeta(defaultMeta);
+                logger.info(String.format("Step 7a | correlationId=%s | Set meta: %s", correlationId, defaultMeta));
+            } else {
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = 0.0;
+                Object tvObj = row.get("totalValue");
+                if (tvObj instanceof Number) {
+                    totalValue = ((Number) tvObj).doubleValue() / 100.0; // adjust cents to major units if amount stored in cents
+                } else if (tvObj != null) {
+                    try {
+                        totalValue = Double.parseDouble(tvObj.toString()) / 100.0;
+                    } catch (NumberFormatException nfe) {
+                        logger.info(String.format("Step 8 | correlationId=%s | Unable to parse totalValue=%s", correlationId, tvObj));
+                    }
+                }
+
+                int totalRecords = 0;
+                Object trObj = row.get("totalRecords");
+                if (trObj instanceof Number) totalRecords = ((Number) trObj).intValue();
+                else if (trObj != null) {
+                    try { totalRecords = Integer.parseInt(trObj.toString()); } catch (NumberFormatException ignore) { logger.info(String.format("Step 8a | correlationId=%s | Unable to parse totalRecords=%s", correlationId, trObj)); }
+                }
+
+                double successRate = 0.0;
+                Object srObj = row.get("successRate");
+                if (srObj instanceof Number) successRate = ((Number) srObj).doubleValue();
+                else if (srObj != null) {
+                    try { successRate = Double.parseDouble(srObj.toString()); } catch (NumberFormatException ignore) { logger.info(String.format("Step 8b | correlationId=%s | Unable to parse successRate=%s", correlationId, srObj)); }
+                }
+
+                String meta = String.format("{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}", totalValue, totalRecords, successRate, page, limit);
+                networkResponse.setMeta(meta);
+                logger.info(String.format("Step 9 | correlationId=%s | Aggregation results processed: %s", correlationId, meta));
+            }
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Transactions");
             networkResponse.setData((ArrayList) transactions);
-            networkResponse.setMeta(meta);
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("Step 10 | correlationId=%s | Get() completed successfully | transactions=%d | elapsedMs=%d", correlationId, transactions != null ? transactions.size() : 0, elapsed));
 
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("Step 99 | correlationId=%s | DataAccessException in Get() | message=%s | elapsedMs=%d", correlationId, ex.getMessage(), elapsed));
             return responseManager.ResponseInternalServerError();
         }
     }
+
 
     @Override
     public ResponseEntity Get() {
         NetworkResponse networkResponse = new NetworkResponse();
+        String correlationId = UUID.randomUUID().toString();
+        long startTime = System.currentTimeMillis();
         try {
-            String SQL;
-            List<CardsTransactionModel> transactions;
-            SQL = "SELECT * FROM sparkpay.transactions ORDER BY id DESC";
-            transactions = jdbcTemplate.query(SQL, new CardsTransactionsMapper());
+            logger.info(String.format("Step 1 | correlationId=%s | Starting Get() - fetching all transactions", correlationId));
 
-            SQL = "SELECT SUM(a.amount) as totalValue "
-                    + "FROM sparkpay.transactions a";
+            String SQL = "SELECT * FROM sparkpay.transactions ORDER BY id DESC";
+            logger.info(String.format("Step 2 | correlationId=%s | Executing SQL: %s", correlationId, SQL));
+            List<CardsTransactionModel> transactions = jdbcTemplate.query(SQL, new CardsTransactionsMapper());
+            logger.info(String.format("Step 3 | correlationId=%s | Retrieved transactions count: %d", correlationId, transactions != null ? transactions.size() : 0));
+
+            SQL = "SELECT SUM(a.amount) as totalValue FROM sparkpay.transactions a";
+            logger.info(String.format("Step 4 | correlationId=%s | Executing SQL: %s", correlationId, SQL));
             Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
             totalValue = totalValue != null ? totalValue / 100 : 0;
+            logger.info(String.format("Step 5 | correlationId=%s | Computed totalValue (divided by 100): %s", correlationId, totalValue));
+
             SQL = "SELECT MIN(ncs_date_time) from sparkpay.transactions";
+            logger.info(String.format("Step 6 | correlationId=%s | Executing SQL: %s", correlationId, SQL));
             String minDate = jdbcTemplate.queryForObject(SQL, String.class);
+            logger.info(String.format("Step 7 | correlationId=%s | minDate: %s", correlationId, minDate));
+
             SQL = "SELECT MAX(ncs_date_time) from sparkpay.transactions";
+            logger.info(String.format("Step 8 | correlationId=%s | Executing SQL: %s", correlationId, SQL));
             String maxDate = jdbcTemplate.queryForObject(SQL, String.class);
-            String meta = "{\"totalValue\": " + totalValue + ", \"minDate\": \"" + minDate + "\", \"maxDate\": \"" + maxDate + "\"}";
+            logger.info(String.format("Step 9 | correlationId=%s | maxDate: %s", correlationId, maxDate));
+
+            String meta = String.format("{\"totalValue\": %s, \"minDate\": \"%s\", \"maxDate\": \"%s\"}", totalValue, minDate, maxDate);
+            logger.info(String.format("Step 10 | correlationId=%s | Built meta: %s", correlationId, meta));
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -157,12 +211,17 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             networkResponse.setData((ArrayList) transactions);
             networkResponse.setMeta(meta);
 
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("Step 11 | correlationId=%s | Get() completed successfully | transactions=%d | totalValue=%s | elapsedMs=%d", correlationId, transactions != null ? transactions.size() : 0, totalValue, elapsed));
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("Step 99 | correlationId=%s | DataAccessException in Get() | message=%s | elapsedMs=%d", correlationId, ex.getMessage(), elapsed));
             return responseManager.ResponseInternalServerError();
         }
     }
+
 
     @Override
     public ResponseEntity Get(int id) {
@@ -266,7 +325,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM " + table + " WHERE a.terminal_id IN " + inString.toString() + " "
                     + "AND ncs_date_time >= ? AND ncs_date_time <= ? ";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
@@ -316,7 +375,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT * FROM sparkpay.transactions WHERE terminal_id IN " + inString.toString() + " ORDER BY id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM sparkpay.transactions a WHERE a.terminal_id IN " + inString.toString();
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
@@ -370,17 +429,33 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM " + table + " WHERE a.merchant_id IN " + inString.toString() + " "
                     + "AND ncs_date_time >= ? AND ncs_date_time <= ? ";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            Double totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
-            networkResponse.setMeta(meta);
+            if (agg.isEmpty()) {
+                logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
+                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": " + page + ", \"limit\": " + limit + ", \"successRate\": 0");
+            } else {
+
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+                int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
+                        .map(Number::intValue)
+                        .orElse(0);
+                double successRate = Optional.ofNullable((Number) row.get("successRate"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+
+                String meta = String.format(
+                        "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}",
+                        totalValue, totalRecords, successRate, page, limit);
+                networkResponse.setMeta(meta);
+                logger.info("Aggregation results processed: " + meta);
+            }
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -420,16 +495,39 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id IN " + inString.toString() + " ORDER BY id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM sparkpay.transactions a WHERE a.merchant_id IN " + inString.toString();
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            Double totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
-            networkResponse.setMeta(meta);
+//            Map<String, Object> row = agg.get(0);
+//            Double tValue = (Double) row.get("totalValue");
+//            Double totalValue = tValue != null ? tValue / 100 : 0;
+//            Long tRecords = (Long) row.get("totalRecords");
+//            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+//            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
+//            networkResponse.setMeta(meta);
+            if (agg.isEmpty()) {
+                logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
+                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": " + page + ", \"limit\": " + limit + ", \"successRate\": 0");
+            } else {
+
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+                int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
+                        .map(Number::intValue)
+                        .orElse(0);
+                double successRate = Optional.ofNullable((Number) row.get("successRate"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+
+                String meta = String.format(
+                        "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}",
+                        totalValue, totalRecords, successRate, page, limit);
+                networkResponse.setMeta(meta);
+                logger.info("Aggregation results processed: " + meta);
+            }
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -504,17 +602,33 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM " + table + " WHERE a.merchant_id IN " + inString.toString() + " "
                     + "AND ncs_date_time >= ? AND ncs_date_time <= ? ";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            Double totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
-            networkResponse.setMeta(meta);
+            if (agg.isEmpty()) {
+                logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
+                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": " + page + ", \"limit\": " + limit + ", \"successRate\": 0");
+            } else {
+
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+                int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
+                        .map(Number::intValue)
+                        .orElse(0);
+                double successRate = Optional.ofNullable((Number) row.get("successRate"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+
+                String meta = String.format(
+                        "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}",
+                        totalValue, totalRecords, successRate, page, limit);
+                networkResponse.setMeta(meta);
+                logger.info("Aggregation results processed: " + meta);
+            }
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -552,7 +666,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT * FROM sparkpay.transactions WHERE merchant_id IN " + inString.toString() + " ORDER BY id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM sparkpay.transactions a WHERE a.merchant_id IN " + inString.toString();
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
             Map<String, Object> row = agg.get(0);
@@ -589,17 +703,33 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institution, institution, limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM " + table
                     + "WHERE (ncs_date_time >= ? AND ncs_date_time <= ?) AND (a.acquirer_institution_id = ? OR destination_acquiring_institution_id = ?)";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution, institution});
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            Double totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
-            networkResponse.setMeta(meta);
+            if (agg.isEmpty()) {
+                logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
+                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": " + page + ", \"limit\": " + limit + ", \"successRate\": 0");
+            } else {
+
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+                int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
+                        .map(Number::intValue)
+                        .orElse(0);
+                double successRate = Optional.ofNullable((Number) row.get("successRate"))
+                        .map(Number::doubleValue)
+                        .orElse(0.0);
+
+                String meta = String.format(
+                        "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}",
+                        totalValue, totalRecords, successRate, page, limit);
+                networkResponse.setMeta(meta);
+                logger.info("Aggregation results processed: " + meta);
+            }
 
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -623,7 +753,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             SQL = "SELECT * FROM sparkpay.transactions WHERE acquirer_institution_id = ? OR destination_acquiring_institution_id = ? ORDER BY id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.query(SQL, new Object[]{institution, institution, limit, offset}, new CardsTransactionsMapper());
 
-            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+            SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM sparkpay.transactions a WHERE a.acquirer_institution_id = ? OR destination_acquiring_institution_id = ?";
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institution, institution});
             Map<String, Object> row = agg.get(0);
@@ -648,239 +778,145 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 
     @Override
     public ResponseEntity SearchTransactions(String message_type,
-            String bin,
-            String processing_code,
-            String min_amount,
-            String max_amount,
-            String system_trace_number,
-            String response_code,
-            String start_date,
-            String end_date,
-            String retrieval_ref_number,
-            String acquirer_institution_id,
-            String destination_acquiring_institution_id,
-            String pan,
-            String rrn,
-            String terminal_id,
-            String merchant_id,
-            String location_name_address,
-            String approval_code,
-            int page,
-            int limit,
-            boolean isCurrent) {
+                                             String bin,
+                                             String processing_code,
+                                             String min_amount,
+                                             String max_amount,
+                                             String system_trace_number,
+                                             String response_code,
+                                             String start_date,
+                                             String end_date,
+                                             String retrieval_ref_number,
+                                             String acquirer_institution_id,
+                                             String destination_acquiring_institution_id,
+                                             String pan,
+                                             String rrn,
+                                             String terminal_id,
+                                             String merchant_id,
+                                             String location_name_address,
+                                             String approval_code,
+                                             int page,
+                                             int limit,
+                                             boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
+        String correlationId = UUID.randomUUID().toString();
+        long startTime = System.currentTimeMillis();
         try {
-            // Log entry with parameters.
-            logger.info("SearchTransactions invoked with parameters: "
-                    + "message_type=" + message_type + ", "
-                    + "bin=" + bin + ", "
-                    + "processing_code=" + processing_code + ", "
-                    + "system_trace_number=" + system_trace_number + ", "
-                    + "response_code=" + response_code + ", "
-                    + "min_amount=" + min_amount + ", "
-                    + "max_amount=" + max_amount + ", "
-                    + "start_date=" + start_date + ", "
-                    + "end_date=" + end_date + ", "
-                    + "retrieval_ref_number=" + retrieval_ref_number + ", "
-                    + "acquirer_institution_id=" + acquirer_institution_id + ", "
-                    + "destination_acquiring_institution_id=" + destination_acquiring_institution_id + ", "
-                    + "pan=" + pan + ", "
-                    + "rrn=" + rrn + ", "
-                    + "terminal_id=" + terminal_id + ", "
-                    + "merchant_id=" + merchant_id + ", "
-                    + "location_name_address=" + location_name_address + ", "
-                    + "approval_code=" + approval_code + ", "
-                    + "page=" + page + ", "
-                    + "limit=" + limit + ", "
-                    + "isCurrent=" + isCurrent);
+            logger.info(String.format("Step 1 | correlationId=%s | Entering SearchTransactions with page=%d limit=%d isCurrent=%s", correlationId, page, limit, isCurrent));
+            logger.info(String.format("Step 1a | correlationId=%s | Params: message_type=%s, bin=%s, processing_code=%s, system_trace_number=%s, response_code=%s, min_amount=%s, max_amount=%s, start_date=%s, end_date=%s, retrieval_ref_number=%s, acquirer_institution_id=%s, destination_acquiring_institution_id=%s, pan=%s, rrn=%s, terminal_id=%s, merchant_id=%s, location_name_address=%s, approval_code=%s", correlationId, message_type, bin, processing_code, system_trace_number, response_code, min_amount, max_amount, start_date, end_date, retrieval_ref_number, acquirer_institution_id, destination_acquiring_institution_id, pan, rrn, terminal_id, merchant_id, location_name_address, approval_code));
 
             // Build the WHERE clause using StringBuilder.
             StringBuilder whereClause = new StringBuilder();
             boolean firstCondition = true;
 
-            if (!message_type.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (message_type != null && !message_type.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.message_type = '").append(message_type).append("'");
+                logger.info(String.format("Step 2 | correlationId=%s | Added condition: a.message_type = '%s'", correlationId, message_type));
             }
-            if (!bin.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (bin != null && !bin.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.bin = ").append(bin);
+                logger.info(String.format("Step 2a | correlationId=%s | Added condition: a.bin = %s", correlationId, bin));
             }
-            if (!processing_code.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (processing_code != null && !processing_code.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.processing_code = ").append(processing_code);
+                logger.info(String.format("Step 2b | correlationId=%s | Added condition: a.processing_code = %s", correlationId, processing_code));
             }
-            if (!system_trace_number.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (system_trace_number != null && !system_trace_number.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.system_trace_number = '").append(system_trace_number).append("'");
+                logger.info(String.format("Step 2c | correlationId=%s | Added condition: a.system_trace_number = '%s'", correlationId, system_trace_number));
             }
-            if (!response_code.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (response_code != null && !response_code.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 if (response_code.equals("111")) {
                     whereClause.append("a.response_code != '00'");
+                    logger.info(String.format("Step 2d | correlationId=%s | Added condition: a.response_code != '00' (special code 111)", correlationId));
                 } else {
                     whereClause.append("a.response_code = ").append(response_code);
+                    logger.info(String.format("Step 2d | correlationId=%s | Added condition: a.response_code = %s", correlationId, response_code));
                 }
             }
-            if (!retrieval_ref_number.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (retrieval_ref_number != null && !retrieval_ref_number.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.retrieval_ref_number = '").append(retrieval_ref_number).append("'");
+                logger.info(String.format("Step 2e | correlationId=%s | Added condition: a.retrieval_ref_number = '%s'", correlationId, retrieval_ref_number));
             }
-            if (!acquirer_institution_id.isEmpty()) {
+            if (acquirer_institution_id != null && !acquirer_institution_id.isEmpty()) {
                 if (acquirer_institution_id.equals(destination_acquiring_institution_id)) {
-                    if (firstCondition) {
-                        whereClause.append(" WHERE ");
-                        firstCondition = false;
-                    } else {
-                        whereClause.append(" AND ");
-                    }
+                    if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                     whereClause.append("(a.acquirer_institution_id = '").append(acquirer_institution_id)
                             .append("' OR a.destination_acquiring_institution_id = '").append(destination_acquiring_institution_id).append("')");
+                    logger.info(String.format("Step 2f | correlationId=%s | Added combined acquirer/destination condition for id=%s", correlationId, acquirer_institution_id));
                 } else {
-                    if (firstCondition) {
-                        whereClause.append(" WHERE ");
-                        firstCondition = false;
-                    } else {
-                        whereClause.append(" AND ");
-                    }
+                    if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                     whereClause.append("a.destination_acquiring_institution_id = '").append(acquirer_institution_id).append("'");
+                    logger.info(String.format("Step 2f | correlationId=%s | Added condition: a.destination_acquiring_institution_id = '%s'", correlationId, acquirer_institution_id));
                 }
             } else {
-                if (!destination_acquiring_institution_id.isEmpty()) {
-                    if (firstCondition) {
-                        whereClause.append(" WHERE ");
-                        firstCondition = false;
-                    } else {
-                        whereClause.append(" AND ");
-                    }
+                if (destination_acquiring_institution_id != null && !destination_acquiring_institution_id.isEmpty()) {
+                    if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                     whereClause.append("a.destination_acquiring_institution_id = '").append(destination_acquiring_institution_id).append("'");
+                    logger.info(String.format("Step 2g | correlationId=%s | Added condition: a.destination_acquiring_institution_id = '%s'", correlationId, destination_acquiring_institution_id));
                 }
             }
-            if (!pan.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (pan != null && !pan.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.pan = '").append(pan).append("'");
+                logger.info(String.format("Step 2h | correlationId=%s | Added condition: a.pan = '%s'", correlationId, pan));
             }
-            if (!rrn.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (rrn != null && !rrn.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.retrieval_ref_number = '").append(rrn).append("'");
+                logger.info(String.format("Step 2i | correlationId=%s | Added condition: a.retrieval_ref_number = '%s'", correlationId, rrn));
             }
-            if (!terminal_id.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
-                whereClause.append("a.terminal_id IN (").append(terminal_id).append(")");
+            if (terminal_id != null && !terminal_id.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
+                whereClause.append("a.terminal_id IN ('").append(terminal_id).append("')");
+                logger.info(String.format("Step 2j | correlationId=%s | Added condition: a.terminal_id IN (%s)", correlationId, terminal_id));
             }
-            if (!merchant_id.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (merchant_id != null && !merchant_id.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.merchant_id IN (").append(merchant_id).append(")");
+                logger.info(String.format("Step 2k | correlationId=%s | Added condition: a.merchant_id IN (%s)", correlationId, merchant_id));
             }
-            if (!location_name_address.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (location_name_address != null && !location_name_address.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.location_name_address = '").append(location_name_address).append("'");
+                logger.info(String.format("Step 2l | correlationId=%s | Added condition: a.location_name_address = '%s'", correlationId, location_name_address));
             }
-            if (!approval_code.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (approval_code != null && !approval_code.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.approval_code = '").append(approval_code).append("'");
+                logger.info(String.format("Step 2m | correlationId=%s | Added condition: a.approval_code = '%s'", correlationId, approval_code));
             }
-            if (!min_amount.isEmpty() && Double.parseDouble(min_amount) > 0) {
+            if (min_amount != null && !min_amount.isEmpty() && Double.parseDouble(min_amount) > 0) {
                 Double minAmountVal = Double.parseDouble(min_amount) * 100;
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.amount LIKE '%").append(minAmountVal.toString().replace(".0", "")).append("'");
+                logger.info(String.format("Step 2n | correlationId=%s | Added condition for min_amount -> %s (cents)", correlationId, minAmountVal));
             }
-            if (!max_amount.isEmpty() && Double.parseDouble(max_amount) > 0) {
+            if (max_amount != null && !max_amount.isEmpty() && Double.parseDouble(max_amount) > 0) {
                 Double maxAmountVal = Double.parseDouble(max_amount) * 100;
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.amount LIKE '%").append(maxAmountVal.toString().replace(".0", "")).append("'");
+                logger.info(String.format("Step 2o | correlationId=%s | Added condition for max_amount -> %s (cents)", correlationId, maxAmountVal));
             }
-            if (!start_date.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (start_date != null && !start_date.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.ncs_date_time >= '").append(start_date).append("'");
+                logger.info(String.format("Step 2p | correlationId=%s | Added condition: a.ncs_date_time >= '%s'", correlationId, start_date));
             }
-            if (!end_date.isEmpty()) {
-                if (firstCondition) {
-                    whereClause.append(" WHERE ");
-                    firstCondition = false;
-                } else {
-                    whereClause.append(" AND ");
-                }
+            if (end_date != null && !end_date.isEmpty()) {
+                if (firstCondition) { whereClause.append(" WHERE "); firstCondition = false; } else { whereClause.append(" AND "); }
                 whereClause.append("a.ncs_date_time < '").append(end_date).append("'");
+                logger.info(String.format("Step 2q | correlationId=%s | Added condition: a.ncs_date_time < '%s'", correlationId, end_date));
             }
 
             String whereQuery = whereClause.toString();
-            logger.info("Constructed WHERE clause: " + whereQuery);
+            logger.info(String.format("Step 3 | correlationId=%s | Constructed WHERE clause: %s", correlationId, whereQuery));
 
             String SQL;
             List<CardsTransactionModel> transactions;
@@ -888,83 +924,135 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 
             // Determine which table to query based on the flag.
             if (isCurrent) {
-                logger.info("Querying current transactions.");
+                logger.info(String.format("Step 4 | correlationId=%s | Querying current transactions with limit=%d offset=%d", correlationId, limit, offset));
                 SQL = "SELECT a.*, b.station_name FROM sparkpay.transactions a "
                         + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                         + whereQuery
                         + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
-                logger.info("Current transactions SQL: " + SQL);
+                logger.info(String.format("Step 4a | correlationId=%s | Current transactions SQL: %s", correlationId, SQL));
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
-                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                         + "FROM sparkpay.transactions a " + whereQuery;
             } else {
-                logger.info("Querying historical transactions.");
+                logger.info(String.format("Step 5 | correlationId=%s | Querying historical transactions with limit=%d offset=%d", correlationId, limit, offset));
                 SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
                         + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                         + whereQuery
                         + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
-                logger.info("Historical transactions SQL: " + SQL);
+                logger.info(String.format("Step 5a | correlationId=%s | Historical transactions SQL: %s", correlationId, SQL));
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
-                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                         + "FROM sparkpay.transaction_hist_s a " + whereQuery;
             }
 
             LocalTime currentTime = LocalTime.now();
             int hour = currentTime.getHour();
-            logger.info("Current hour: " + hour);
-            if (isCurrent && transactions.size() < 1 && hour >= 12) {
-                logger.info("No current transactions found and hour >= 12; switching to historical transactions.");
+            logger.info(String.format("Step 6 | correlationId=%s | Current hour: %d", correlationId, hour));
+            if (isCurrent && (transactions == null || transactions.size() < 1) && hour >= 12) {
+                logger.info(String.format("Step 7 | correlationId=%s | No current transactions found and hour >= 12; switching to historical transactions.", correlationId));
                 SQL = "SELECT a.*, b.station_name FROM sparkpay.transaction_hist_s a "
                         + "LEFT JOIN sparkpay.station_pcis b ON a.destination_acquiring_institution_id = b.acquiring_institution_id "
                         + whereQuery
                         + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
-                logger.info("Historical transactions SQL (fallback): " + SQL);
+                logger.info(String.format("Step 7a | correlationId=%s | Historical transactions SQL (fallback): %s", correlationId, SQL));
                 transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsMapper());
 
-                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                         + "FROM sparkpay.transaction_hist_s a " + whereQuery;
             }
 
-            logger.info("Executing aggregation query: " + SQL);
+            logger.info(String.format("Step 8 | correlationId=%s | Executing aggregation SQL: %s", correlationId, SQL));
             List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL);
-            Map<String, Object> row = agg.get(0);
-            Double tValue = (Double) row.get("totalValue");
-            Double totalValue = tValue != null ? tValue / 100 : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            logger.info(String.format("Step 9 | correlationId=%s | Aggregation rows returned=%d", correlationId, agg != null ? agg.size() : 0));
 
-            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords
-                    + ", \"page\": " + page + ", \"limit\": " + limit + "}";
-            networkResponse.setMeta(meta);
+            if (agg == null || agg.isEmpty()) {
+                logger.info(String.format("Step 10 | correlationId=%s | Aggregation query returned no results. Using defaults.", correlationId));
+                String defaultMeta = String.format("{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}", 0.0, 0, 0.0, page, limit);
+                networkResponse.setMeta(defaultMeta);
+                logger.info(String.format("Step 10a | correlationId=%s | Set meta: %s", correlationId, defaultMeta));
+            } else {
+                Map<String, Object> row = agg.get(0);
+
+                double totalValue = 0.0;
+                Object tvObj = row.get("totalValue");
+                if (tvObj instanceof Number) {
+                    totalValue = ((Number) tvObj).doubleValue() / 100.0;
+                } else if (tvObj != null) {
+                    try { totalValue = Double.parseDouble(tvObj.toString()) / 100.0; } catch (NumberFormatException nfe) { logger.info(String.format("Step 11 | correlationId=%s | Unable to parse totalValue=%s", correlationId, tvObj)); }
+                }
+
+                int totalRecords = 0;
+                Object trObj = row.get("totalRecords");
+                if (trObj instanceof Number) totalRecords = ((Number) trObj).intValue();
+                else if (trObj != null) {
+                    try { totalRecords = Integer.parseInt(trObj.toString()); } catch (NumberFormatException nfe) { logger.info(String.format("Step 11a | correlationId=%s | Unable to parse totalRecords=%s", correlationId, trObj)); }
+                }
+
+                double successRate = 0.0;
+                Object srObj = row.get("successRate");
+                if (srObj instanceof Number) successRate = ((Number) srObj).doubleValue();
+                else if (srObj != null) {
+                    try { successRate = Double.parseDouble(srObj.toString()); } catch (NumberFormatException nfe) { logger.info(String.format("Step 11b | correlationId=%s | Unable to parse successRate=%s", correlationId, srObj)); }
+                }
+
+                String meta = String.format("{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}", totalValue, totalRecords, successRate, page, limit);
+                networkResponse.setMeta(meta);
+                logger.info(String.format("Step 12 | correlationId=%s | Aggregation results processed: %s", correlationId, meta));
+            }
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("Searched transactions");
             networkResponse.setData((ArrayList) transactions);
 
-            logger.info("SearchTransactions completed successfully with " + transactions.size() + " records found.");
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("Step 13 | correlationId=%s | SearchTransactions completed successfully | transactions=%d | elapsedMs=%d", correlationId, transactions != null ? transactions.size() : 0, elapsed));
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            logger.info("DataAccessException in SearchTransactions: " + ex.getMessage());
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("Step 99 | correlationId=%s | DataAccessException in SearchTransactions | message=%s | elapsedMs=%d", correlationId, ex.getMessage(), elapsed));
             return responseManager.ResponseInternalServerError();
         }
     }
 
+
     private boolean CheckDisputeExist(String terminalid, String rrn, String stan) {
+        // Normalize inputs
+        String t = normalizeId(terminalid);
+        String r = normalizeId(rrn);
+        String s = normalizeId(stan);
+
         logger.info(String.format(
-                "🟢 EXIST 1: CheckDisputeExist() | terminalid=%s, rrn=%s, stan=%s",
-                terminalid, rrn, stan
+                "🟢 EXIST 1: checkDisputeExist() | terminalid=%s, rrn=%s, stan=%s | lens t=%d r=%d s=%d",
+                t, r, s,
+                t == null ? -1 : t.length(),
+                r == null ? -1 : r.length(),
+                s == null ? -1 : s.length()
         ));
+
+        // Bail early if any identifier is missing
+        if (t == null || r == null || s == null) {
+            logger.info("🟡 EXIST 1a: One or more IDs are null/empty after normalization → false");
+            return false;
+        }
+
         try {
-            String SQL = "SELECT COUNT(*) FROM sparkpayweb_db.tbl_disputes " +
-                    "WHERE terminal_id = ? AND retrieval_ref_number = ? AND system_trace_number = ?";
-            logger.info(String.format("🟢 EXIST 2: SQL → %s", SQL));
-            Integer totalRows = jdbcTemplate.queryForObject(
-                    SQL, new Object[]{ terminalid, rrn, stan }, Integer.class
+            String SQL = "SELECT EXISTS(SELECT 1 FROM sparkpayweb_db.tbl_disputes "
+                    + "WHERE terminal_id = ? "
+                    + "AND retrieval_ref_number = ? "
+                    + "AND system_trace_number = ?)";
+
+            logger.info("🟢 EXIST 2: SQL → " + SQL);
+
+            Integer exists = jdbcTemplate.queryForObject(
+                    SQL,
+                    new Object[]{ t, r, s },
+                    Integer.class
             );
-            boolean found = (totalRows != null && totalRows > 0);
-            logger.info(String.format("🟢 EXIST 3: found=%s (count=%d)", found, (totalRows == null ? 0 : totalRows)));
+
+            boolean found = (exists != null && exists == 1);
+            logger.info(String.format("🟢 EXIST 3: found=%s (existsRaw=%s)", found, exists));
             return found;
         } catch (DataAccessException ex) {
             logger.info(String.format("🔴 EXIST ERR: %s", ex.getMessage()));
@@ -972,32 +1060,45 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         }
     }
 
+
     private boolean isTxnAlreadyReversed(String terminalid, String rrn, String stan) {
-        logger.info(String.format(
-                "🟢 REV 1: isTxnAlreadyReversed() called | terminalid=%s, rrn=%s, stan=%s",
-                terminalid, rrn, stan
-        ));
+        String t = normalizeId(terminalid);
+        String r = normalizeId(rrn);
+        String s = normalizeId(stan);
+
+        logger.info(String.format("🟢 REV 1: normalized | t=%s r=%s s=%s", t, r, s));
+        if (t == null || r == null || s == null) return false;
         try {
-            String SQL = "SELECT COUNT(*) " +
-                    "FROM sparkpay.transaction_hist_s " +
-                    "WHERE terminal_id = ? " +
-                    "  AND retrieval_ref_number = ? " +
-                    "  AND system_trace_number = ? " +
-                    "  AND COALESCE(isTxnReversed,'') = '00'";
-            logger.info(String.format("🟢 REV 2: SQL → %s", SQL));
-            Integer totalRows = jdbcTemplate.queryForObject(
-                    SQL, new Object[]{ terminalid, rrn, stan }, Integer.class
+            final String SQL =
+                    "SELECT EXISTS(" +
+                            "  SELECT 1 FROM sparkpay.transaction_hist_s " +
+                            "  WHERE terminal_id = ? " +
+                            "    AND retrieval_ref_number = ? " +
+                            "    AND system_trace_number = ? " +
+                            "    AND isTxnReversed = '00'" +
+                            ")";
+            logger.info("🟢 REV 2: SQL (EXISTS) → " + SQL);
+
+            Integer exists = jdbcTemplate.queryForObject(
+                    SQL,
+                    new Object[]{ t, r, s },
+                    Integer.class
             );
-            boolean reversed = (totalRows != null && totalRows > 0);
-            logger.info(String.format(
-                    "🟢 REV 3: Result → reversed=%s (count=%d)",
-                    reversed, (totalRows == null ? 0 : totalRows)
-            ));
+            boolean reversed = (exists != null && exists == 1);
+            logger.info(String.format("🟢 REV 3: reversed=%s (existsRaw=%s)", reversed, exists));
             return reversed;
         } catch (DataAccessException ex) {
             logger.info(String.format("🔴 REV ERR: %s", ex.getMessage()));
-            return false; // fail-open (treat as not reversed) or flip to true if you prefer fail-closed
+            return false;
         }
+    }
+
+
+    private String normalizeId(String input) {
+        if (input == null) return null;
+        // Keep only letters + digits
+        String cleaned = input.trim().replaceAll("[^A-Za-z0-9]", "");
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     @Override
@@ -1286,7 +1387,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
     @Override
     public ResponseEntity UpdateCardsDisputesNUBAN() {
         try {
-            String SQL = "SELECT a.id, a.cardholder_acct_number, a.date_created FROM sparkpayweb_db.tbl_disputes a "
+            String SQL = "SELECT a.id, a.retrieval_ref_number,a.system_trace_number,a.terminal_id, a.cardholder_acct_number, a.date_created FROM sparkpayweb_db.tbl_disputes a "
                     + "WHERE a.date_created > ? AND (a.cardholder_acct_nuban IS NULL || a.cardholder_acct_nuban = '') "
                     + "ORDER BY date_created ASC "
                     + "LIMIT 1";
@@ -1295,12 +1396,16 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             if (agg.size() > 0) {
                 Map<String, Object> row = agg.get(0);
                 String cardholder_acct_number = (String) row.get("cardholder_acct_number");
+                String retrieval_ref_number = (String) row.get("retrieval_ref_number");
+                String system_trace_number = (String) row.get("system_trace_number");
+                String terminal_id = (String) row.get("terminal_id");
                 int _id = (int) row.get("id");
                 _temp_date = (String) row.get("date_created").toString();
                 String nuban = cardholder_acct_number != null && cardholder_acct_number.length() > 17 ? restCall.getNuban(formatter.FormatCardHolderAcctNum(cardholder_acct_number)) : cardholder_acct_number;
 //                System.out.println("Last Dispute Updated Date: " + _temp_date + " Old Acct: " + cardholder_acct_number + " NUBAN: " + nuban);
-                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET cardholder_acct_nuban = ? WHERE id = ?";
-                int update = jdbcTemplate.update(SQL, new Object[]{nuban, _id});
+                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET cardholder_acct_nuban = ? WHERE retrieval_ref_number = ? " +
+                        "AND system_trace_number = ? AND terminal_id = ?";
+                int update = jdbcTemplate.update(SQL, new Object[]{nuban, retrieval_ref_number, system_trace_number, terminal_id});
                 if (update > 0) {
                     NetworkResponse networkResponse = new NetworkResponse();
                     networkResponse.setCode(200);
@@ -1576,7 +1681,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                 inString = inString.append("(-1");
             }
             inString = inString.append(")");
-            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+            SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                     + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                     + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                     + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1586,7 +1691,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
 
             SQL = "SELECT "
-                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                     + "FROM sparkpayweb_db.tbl_disputes a "
                     //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
                     //                    + "ON a.id = b.id "
@@ -1623,7 +1728,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             switch (institutioncode) {
                 case "":
                 case "-1":
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number, a.arbitrated_proof_uri, a.arbitration_closed_date, a.arbitration_closed_by "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1641,7 +1746,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
                     break;
                 default:
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number, a.arbitrated_proof_uri, a.arbitration_closed_date, a.arbitration_closed_by "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1693,7 +1798,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             String placeholders = idArray.stream()
                     .map(id -> "?")
                     .collect(Collectors.joining(","));
-            String SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, "
+            String SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, "
                     + "a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, "
                     + "a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, a.message_type, "
                     + "a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, "
@@ -1723,7 +1828,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             String SQL;
-            SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+            SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                     + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                     + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                     + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1755,7 +1860,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             switch (institutioncode) {
                 case "":
                 case "-1":
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1765,7 +1870,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
-                            + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                            + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                             + "FROM sparkpayweb_db.tbl_disputes a "
                             //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
                             //                            + "ON a.id = b.id "
@@ -1773,7 +1878,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     agg = jdbcTemplate.queryForList(SQL);
                     break;
                 case "000000":
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1783,7 +1888,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
-                            + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                            + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                             + "FROM sparkpayweb_db.tbl_disputes a "
                             //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
                             //                            + "ON a.id = b.id "
@@ -1791,7 +1896,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     agg = jdbcTemplate.queryForList(SQL);
                     break;
                 default:
-                    SQL = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
+                    SQL = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved, a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri, a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated, a.cardholder_acct_nuban, "
                             + "a.message_type, a.pan, a.amount, a.system_trace_number, a.retrieval_ref_number, a.destination_acquiring_institution_id, a.acquirer_institution_id, "
                             + "a.terminal_id, a.merchant_id, a.bin, a.ncs_date_time, a.response_code, a.cardholder_acct_number "
                             + "FROM sparkpayweb_db.tbl_disputes a "
@@ -1801,7 +1906,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
                     transactions = jdbcTemplate.query(SQL, new Object[]{institutioncode, limit, offset}, new CardsTransactionsDisputesMapper());
 
                     SQL = "SELECT "
-                            + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+                            + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
                             + "FROM sparkpayweb_db.tbl_disputes a "
                             //                            + "LEFT JOIN sparkpay.transaction_hist_s b "
                             //                            + "ON a.id = b.id "
@@ -1939,7 +2044,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             logger.info(String.format("Where query: %s", where));
 
             // main query
-            String sql = "SELECT a.id, a.logged_by, a.resolved_by, a.status, a.resolved,"
+            String sql = "SELECT a.id, a.unique_log_code, a.logged_by, a.resolved_by, a.status, a.resolved,"
                     + " a.date_modified, a.date_created, a.timeline_date, a.proof_of_debit_uri,"
                     + " a.proof_of_reject_uri, a.arbitrated_by, a.date_arbitrated,"
                     + " a.cardholder_acct_nuban, a.message_type, a.pan, a.amount,"
@@ -1958,7 +2063,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             logger.info(String.format("SearchDisputes returned %d rows", transactions.size()));
 
             // aggregate query
-            String aggSql = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords"
+            String aggSql = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate"
                     + " FROM sparkpayweb_db.tbl_disputes a" + where;
             Object[] aggParams = params.subList(0, params.size() - 2).toArray();
             Map<String, Object> row = jdbcTemplate.queryForMap(aggSql, aggParams);
@@ -2124,7 +2229,7 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 //            transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new CardsTransactionsDisputesMapper());
 //
 //            SQL = "SELECT "
-//                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
+//                    + "SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
 //                    + "FROM sparkpayweb_db.tbl_disputes a "
 //                    //                    + "LEFT JOIN sparkpay.transaction_hist_s b "
 //                    //                    + "ON a.id = b.id " 
@@ -2175,190 +2280,259 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
 //            return responseManager.ResponseInternalServerError();
 //        }
 //    }
-    @Override
-    public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String selectedDisputes, String type, String username) {
-        try {
-            String SQL;
-            int retVal = 0;
-            int resolved = status == 0 ? 0 : 1;
-            if (type.equals("bulk")) {
-                String[] idS = selectedDisputes.split(",");
-                for (String _id : idS) {
-                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
-                    int _retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, _id});
-                    retVal = retVal + _retVal;
-                }
-            } else {
-                if (status == -2) {
-                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitrated_by = ?, status = ?, date_arbitrated = now() WHERE id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, id});
-                } else if (status < -2) {
-                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, id});
-                } else {
-                    SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, id});
-                }
+@Override
+public ResponseEntity ApproveSettlement(String sessiontoken, int id, int status, String proof_of_reject_uri, String selectedDisputes, String type, String username) {
+    long t0 = System.currentTimeMillis();
+    String cid = UUID.randomUUID().toString().substring(0,8);
+    logger.info(String.format("🟢 %s Step 1: ApproveSettlement called | cid=%s | sessiontokenPresent=%s | id=%d | status=%d | type=%s | selectedDisputes=%s | username=%s", "1.0", cid, (sessiontoken != null), id, status, type, selectedDisputes, username));
+    try {
+        String SQL;
+        int retVal = 0;
+        int resolved = status == 0 ? 0 : 1;
+        long tStart = System.currentTimeMillis();
+
+        if ("bulk".equals(type)) {
+            String[] idS = selectedDisputes == null ? new String[0] : selectedDisputes.split(",");
+            logger.info(String.format("🟢 %s Step 2: Bulk path selected | cid=%s | ids_count=%d", "2.0", cid, idS.length));
+            for (int idx = 0; idx < idS.length; idx++) {
+                String _id = idS[idx].trim();
+                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE unique_log_code = ?";
+                logger.info(String.format("🟢 %s Step 3.%d: Executing UPDATE | cid=%s | sql=%s | params=[resolved_by=%s,status=%d,resolved=%d,proof_of_reject_uri=%s,id=%s]", "3.0", (idx+1), cid, SQL, username, status, resolved, proof_of_reject_uri, _id));
+                int _retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, _id});
+                logger.info(String.format("🟢 %s Step 3.%d.A: UPDATE result | cid=%s | id=%s | rows_affected=%d", "3.1", (idx+1), cid, _id, _retVal));
+                retVal += _retVal;
             }
-            String action = status == 0 ? "accepted" : status == -1 ? "arbitrated" : "rejected";
-            if (retVal > 0) {
-                if (type.equals("bulk")) {
-                    return responseManager.ResponseAccepted("Total of " + retVal + " dispute has been " + action);
-                } else {
-                    return responseManager.ResponseAccepted();
-                }
+            long bulkElapsed = System.currentTimeMillis() - tStart;
+            logger.info(String.format("🟢 %s Step 4: Bulk updates complete | cid=%s | total_rows_updated=%d | elapsed_ms=%d", "4.0", cid, retVal, bulkElapsed));
+        } else {
+            logger.info(String.format("🟢 %s Step 2: Single path selected | cid=%s | id=%d | status=%d", "2.0", cid, id, status));
+            if (status == -2) {
+                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitrated_by = ?, status = ?, date_arbitrated = now() WHERE unique_log_code = ?";
+                logger.info(String.format("🟢 %s Step 3: Executing arbitrated UPDATE | cid=%s | sql=%s | params=[arbitrated_by=%s,status=%d,id=%s]", "3.0", cid, SQL, username, status, selectedDisputes));
+                retVal = jdbcTemplate.update(SQL, new Object[]{username, status, selectedDisputes});
+                logger.info(String.format("🟢 %s Step 3.A: UPDATE result | cid=%s | id=%s | rows_affected=%d", "3.1", cid, selectedDisputes, retVal));
+            } else if (status < -2) {
+                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE unique_log_code = ?";
+                logger.info(String.format("🟢 %s Step 3: Executing arbitration_closed UPDATE | cid=%s | sql=%s | params=[arbitration_closed_by=%s,arbitrated_proof_uri=%s,status=%d,id=%s]", "3.0", cid, SQL, username, proof_of_reject_uri, status, selectedDisputes));
+                retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, selectedDisputes});
+                logger.info(String.format("🟢 %s Step 3.A: UPDATE result | cid=%s | id=%s | rows_affected=%d", "3.1", cid, selectedDisputes, retVal));
             } else {
-                return responseManager.ResponseBadRequest();
+                SQL = "UPDATE sparkpayweb_db.tbl_disputes SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? WHERE unique_log_code = ?";
+                logger.info(String.format("🟢 %s Step 3: Executing resolved UPDATE | cid=%s | sql=%s | params=[resolved_by=%s,status=%d,resolved=%d,proof_of_reject_uri=%s,id=%s]", "3.0", cid, SQL, username, status, resolved, proof_of_reject_uri, selectedDisputes));
+                retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, selectedDisputes});
+                logger.info(String.format("🟢 %s Step 3.A: UPDATE result | cid=%s | id=%s | rows_affected=%d", "3.1", cid, selectedDisputes, retVal));
             }
-        } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
-            return responseManager.ResponseInternalServerError();
         }
+
+        String action = status == 0 ? "accepted" : status == -1 ? "arbitrated" : "rejected";
+        long totalElapsed = System.currentTimeMillis() - t0;
+        logger.info(String.format("🟢 %s Step 5: Completed updates | cid=%s | retVal=%d | action=%s | total_elapsed_ms=%d", "5.0", cid, retVal, action, totalElapsed));
+
+        if (retVal > 0) {
+            if ("bulk".equals(type)) {
+                logger.info(String.format("🟢 %s Step 6: Returning accepted (bulk) | cid=%s | message=Total of %d dispute(s) has been %s", "6.0", cid, retVal, action));
+                return responseManager.ResponseAccepted("Total of " + retVal + " dispute has been " + action);
+            } else {
+                logger.info(String.format("🟢 %s Step 6: Returning accepted (single) | cid=%s | id=%d", "6.0", cid, id));
+                return responseManager.ResponseAccepted();
+            }
+        } else {
+            logger.info(String.format("🟡 %s Step 6: No rows updated → returning BadRequest | cid=%s | retVal=%d", "6.1", cid, retVal));
+            return responseManager.ResponseBadRequest();
+        }
+    } catch (DataAccessException ex) {
+        logger.info(String.format("🔴 %s Step ERR: DataAccessException | cid=%s | ex=%s", "ERR.1", cid, ex.toString()));
+        return responseManager.ResponseInternalServerError();
     }
+}
+
 
     @Override
     public ResponseEntity respondToBulkDisputes(
-            int unusedId,                    // no longer used
+            int unusedId,
             int status,
             String proof_of_reject_uri,
-            String selectedDisputes,         // now holds unique_log_code(s)
+            String selectedDisputes,
             String type,
             String username
     ) {
         long t0 = System.currentTimeMillis();
-        logger.info(String.format(
-                "🟢 Step 1: respondToBulkDisputes() called | params → unusedId=%d, status=%d, proof_of_reject_uri=%s, selectedDisputes=%s, type=%s, username=%s",
-                unusedId, status, proof_of_reject_uri, selectedDisputes, type, username
-        ));
+        logger.info(String.format("🟢 Step 1: respondToBulkDisputes() called | params → unusedId=%d, status=%d, proof_of_reject_uri=%s, selectedDisputes=%s, type=%s, username=%s",
+                unusedId, status, proof_of_reject_uri, selectedDisputes, type, username));
+
+        // ── Summary counters
+        int slatedAccept = 0, successAccept = 0, failedAccept = 0;
+        int slatedReject = 0, successReject = 0, failedReject = 0;
+        int arbitratedSucceeded = 0, arbitratedFailed = 0;
+        int arbitrationClosedSucceeded = 0, arbitrationClosedFailed = 0;
+        int skippedEmptyCodes = 0;
 
         try {
             String SQL;
-            int retVal = 0;
+            int totalRowsUpdated = 0;
             int resolved = (status == 0) ? 0 : 1;
             logger.info(String.format("🟢 Step 2: Computed resolved flag → resolved=%d (status=%d)", resolved, status));
 
             if ("bulk".equals(type)) {
                 logger.info("🟢 Step 3: Entering BULK path");
-                String[] codes = (selectedDisputes == null ? new String[0] : selectedDisputes.split(","));
-                logger.info(String.format("🟢 Step 3.1: Total unique_log_code items parsed → count=%d", codes.length));
+                // Parse and sanitize codes
+                String[] codesRaw = (selectedDisputes == null ? new String[0] : selectedDisputes.split(","));
+                List<String> codes = new ArrayList<>();
+                for (String r : codesRaw) {
+                    if (r != null) {
+                        String c = r.trim();
+                        if (!c.isEmpty()) codes.add(c);
+                        else skippedEmptyCodes++;
+                    } else {
+                        skippedEmptyCodes++;
+                    }
+                }
+                logger.info(String.format("🟢 Step 3.1: unique_log_code parsed → count=%d | skippedEmpty=%d", codes.size(), skippedEmptyCodes));
+
+                // Decide slated buckets from incoming status (bulk uses one status for all)
+                if (status == 0) slatedAccept = codes.size();
+                else if (status != -1) slatedReject = codes.size(); // keep -1 out of accept/reject buckets
 
                 int idx = 1;
-                for (String raw : codes) {
-                    String code = (raw == null ? "" : raw.trim());
-                    if (code.isEmpty()) {
-                        logger.info(String.format("⚠️ Step 3.2.%d: Skipping empty unique_log_code entry", idx));
-                        idx++;
-                        continue;
-                    }
-
+                for (String code : codes) {
                     SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
                             "SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? " +
                             "WHERE unique_log_code = ? AND status = ? AND resolved = ?";
-
-                    logger.info(String.format(
-                            "🟢 Step 3.3.%d: Executing UPDATE (bulk) | unique_log_code=%s | params=[resolved_by=%s, status=%d, resolved=%d, proof_of_reject_uri=%s]",
-                            idx, code, username, status, resolved, proof_of_reject_uri
-                    ));
+                    logger.info(code + "::-> " + SQL);
+                    logger.info(String.format("🟢 Step 3.2.%d: UPDATE bulk | code=%s | params=[resolved_by=%s, status=%d, resolved=%d, proof_of_reject_uri=%s, statusPre=-1, resolvedPre=0]",
+                            idx, code, username, status, resolved, proof_of_reject_uri));
 
                     int rows = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, code, "-1", "0"});
-                    retVal += rows;
+                    totalRowsUpdated += rows;
 
-                    logger.info(String.format(
-                            "🟢 Step 3.4.%d: Update result → rowsAffected=%d | cumulativeUpdated=%d | code=%s",
-                            idx, rows, retVal, code
-                    ));
+                    if (status == 0) { if (rows > 0) successAccept++; else failedAccept++; }
+                    else if (status != -1) { if (rows > 0) successReject++; else failedReject++; }
+
+                    logger.info(String.format("🟢 Step 3.3.%d: rows=%d | accept{slated=%d,ok=%d,fail=%d} | reject{slated=%d,ok=%d,fail=%d}",
+                            idx, rows, slatedAccept, successAccept, failedAccept, slatedReject, successReject, failedReject));
                     idx++;
                 }
+                logger.info(String.format("🟢 Step 3.9: BULK completed | totalRowsUpdated=%d", totalRowsUpdated));
 
-                logger.info(String.format("🟢 Step 3.5: BULK path completed | totalRowsUpdated=%d", retVal));
             } else {
                 logger.info("🟢 Step 3: Entering SINGLE-RECORD path");
+                int rows = 0;
 
                 if (status == -2) {
+                    // Arbitrated branch
+                    String code = selectedDisputes;
                     SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
                             "SET arbitrated_by = ?, status = ?, date_arbitrated = now() " +
                             "WHERE unique_log_code = ?";
+                    logger.info(String.format("🟢 Step 3A: Arbitrated | code=%s | params=[arbitrated_by=%s, status=%d]", code, username, status));
+                    rows = jdbcTemplate.update(SQL, new Object[]{username, status, code});
+                    if (rows > 0) arbitratedSucceeded++; else arbitratedFailed++;
+                    logger.info(String.format("🟢 Step 3A.1: Arbitrated rows=%d | ok=%d | fail=%d", rows, arbitratedSucceeded, arbitratedFailed));
 
-                    logger.info(String.format(
-                            "🟢 Step 3A: Arbitrated branch | unique_log_code=%s | params=[arbitrated_by=%s, status=%d]",
-                            selectedDisputes, username, status
-                    ));
-
-                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, selectedDisputes});
-                    logger.info(String.format("🟢 Step 3A.1: Update result → rowsAffected=%d", retVal));
                 } else if (status < -2) {
+                    // Arbitration closed branch
+                    String code = selectedDisputes;
                     SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
                             "SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() " +
                             "WHERE unique_log_code = ?";
+                    logger.info(String.format("🟢 Step 3B: Arbitration CLOSED | code=%s | params=[closed_by=%s, proofUri=%s, status=%d]",
+                            code, username, proof_of_reject_uri, status));
+                    rows = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, code});
+                    if (rows > 0) arbitrationClosedSucceeded++; else arbitrationClosedFailed++;
+                    logger.info(String.format("🟢 Step 3B.1: Closed rows=%d | ok=%d | fail=%d", rows, arbitrationClosedSucceeded, arbitrationClosedFailed));
 
-                    logger.info(String.format(
-                            "🟢 Step 3B: Arbitration CLOSED branch | unique_log_code=%s | params=[arbitration_closed_by=%s, arbitrated_proof_uri=%s, status=%d]",
-                            selectedDisputes, username, proof_of_reject_uri, status
-                    ));
-
-                    retVal = jdbcTemplate.update(SQL, new Object[]{username, proof_of_reject_uri, status, selectedDisputes});
-                    logger.info(String.format("🟢 Step 3B.1: Update result → rowsAffected=%d", retVal));
                 } else {
+                    // Default accept/reject
+                    String code = selectedDisputes;
                     SQL = "UPDATE sparkpayweb_db.tbl_disputes " +
                             "SET resolved_by = ?, status = ?, resolved = ?, date_modified = now(), proof_of_reject_uri = ? " +
                             "WHERE unique_log_code = ?";
+                    logger.info(String.format("🟢 Step 3C: Default resolve/reject | code=%s | params=[resolved_by=%s, status=%d, resolved=%d, proofUri=%s]",
+                            code, username, status, resolved, proof_of_reject_uri));
+                    rows = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, code});
 
-                    logger.info(String.format(
-                            "🟢 Step 3C: Default resolve/reject branch | unique_log_code=%s | params=[resolved_by=%s, status=%d, resolved=%d, proof_of_reject_uri=%s]",
-                            selectedDisputes, username, status, resolved, proof_of_reject_uri
-                    ));
+                    if (status == 0) { slatedAccept = 1; if (rows > 0) successAccept = 1; else failedAccept = 1; }
+                    else if (status != -1) { slatedReject = 1; if (rows > 0) successReject = 1; else failedReject = 1; }
 
-                    retVal = jdbcTemplate.update(SQL, new Object[]{username, status, resolved, proof_of_reject_uri, selectedDisputes});
-                    logger.info(String.format("🟢 Step 3C.1: Update result → rowsAffected=%d", retVal));
+                    logger.info(String.format("🟢 Step 3C.1: rows=%d | accept{slated=%d,ok=%d,fail=%d} | reject{slated=%d,ok=%d,fail=%d}",
+                            rows, slatedAccept, successAccept, failedAccept, slatedReject, successReject, failedReject));
                 }
-                logger.info(String.format("🟢 Step 3Z: SINGLE-RECORD path completed | totalRowsUpdated=%d", retVal));
+
+                totalRowsUpdated = successAccept + successReject + arbitratedSucceeded + arbitrationClosedSucceeded;
+                logger.info(String.format("🟢 Step 3Z: SINGLE completed | totalRowsUpdated=%d", totalRowsUpdated));
             }
 
-            String action = (status == 0) ? "accepted"
-                    : (status == -1) ? "arbitrated"
-                    : "rejected";
-            logger.info(String.format("🟢 Step 4: Derived action label → action=%s (status=%d)", action, status));
+            // ── Step 4: Build neat summary payload (plain Map → auto-JSON)
+            int totalRequested = ((slatedAccept + slatedReject) == 0)
+                    ? (arbitratedSucceeded + arbitratedFailed + arbitrationClosedSucceeded + arbitrationClosedFailed)
+                    : (slatedAccept + slatedReject);
 
-            if (retVal > 0) {
-                if ("bulk".equals(type)) {
-                    String msg = String.format("Total of %d dispute(s) have been %s", retVal, action);
-                    logger.info(String.format("🟢 Step 5: Success (BULK) → %s", msg));
-                    ResponseEntity res = responseManager.ResponseAccepted(msg);
-                    logger.info(String.format("🟢 Step 6: Returning ResponseEntity (BULK) → %s", res));
-                    logger.info(String.format("🟢 Step 7: Elapsed=%d ms", (System.currentTimeMillis() - t0)));
-                    return res;
-                } else {
-                    logger.info("🟢 Step 5: Success (SINGLE) → ResponseAccepted()");
-                    ResponseEntity res = responseManager.ResponseAccepted();
-                    logger.info(String.format("🟢 Step 6: Returning ResponseEntity (SINGLE) → %s", res));
-                    logger.info(String.format("🟢 Step 7: Elapsed=%d ms", (System.currentTimeMillis() - t0)));
-                    return res;
-                }
-            } else {
-                logger.info("🟡 Step 5: No rows updated → ResponseBadRequest()");
-                ResponseEntity res = responseManager.ResponseBadRequest();
-                logger.info(String.format("🟢 Step 6: Returning ResponseEntity (BAD REQUEST) → %s", res));
-                logger.info(String.format("🟢 Step 7: Elapsed=%d ms", (System.currentTimeMillis() - t0)));
-                return res;
-            }
+            Map<String, Object> totals = new LinkedHashMap<>();
+            totals.put("requested", totalRequested);
+            totals.put("rowsUpdated", totalRowsUpdated);
+            totals.put("skippedEmptyCodes", skippedEmptyCodes);
+            totals.put("elapsedMs", (System.currentTimeMillis() - t0));
+
+            Map<String, Object> accepted = new LinkedHashMap<>();
+            accepted.put("slated", slatedAccept);
+            accepted.put("succeeded", successAccept);
+            accepted.put("failed", failedAccept);
+
+            Map<String, Object> rejected = new LinkedHashMap<>();
+            rejected.put("slated", slatedReject);
+            rejected.put("succeeded", successReject);
+            rejected.put("failed", failedReject);
+
+            Map<String, Object> arbitrated = new LinkedHashMap<>();
+            arbitrated.put("succeeded", arbitratedSucceeded);
+            arbitrated.put("failed", arbitratedFailed);
+
+            Map<String, Object> arbitrationClosed = new LinkedHashMap<>();
+            arbitrationClosed.put("succeeded", arbitrationClosedSucceeded);
+            arbitrationClosed.put("failed", arbitrationClosedFailed);
+
+            Map<String, Object> others = new LinkedHashMap<>();
+            others.put("arbitrated", arbitrated);
+            others.put("arbitrationClosed", arbitrationClosed);
+
+            Map<String, Object> summary = new LinkedHashMap<>();
+            summary.put("totals", totals);
+            summary.put("accepted", accepted);
+            summary.put("rejected", rejected);
+            summary.put("others", others);
+
+            logger.info(String.format("🟢 Step 5: Summary → %s", summary.toString()));
+            logger.info(String.format("🟢 Step 6: Returning ResponseEntity(OK) | Elapsed=%d ms", (System.currentTimeMillis() - t0)));
+
+            // If you prefer your responseManager wrapper and it accepts a Map:
+            // return responseManager.ResponseAccepted(summary);
+            return ResponseEntity.ok(summary);
 
         } catch (org.springframework.dao.DataAccessException ex) {
             logger.info(String.format("🔴 Step ERR: DataAccessException → message=%s", ex.getMessage()));
-            ResponseEntity res = responseManager.ResponseInternalServerError();
-            logger.info(String.format("🟢 Step END: Returning ResponseEntity (INTERNAL ERROR) → %s | Elapsed=%d ms",
-                    res, (System.currentTimeMillis() - t0)));
-            return res;
+
+            Map<String, Object> err = new LinkedHashMap<>();
+            err.put("message", "Internal error while processing disputes.");
+            err.put("error", ex.getMessage());
+            err.put("elapsedMs", (System.currentTimeMillis() - t0));
+
+            logger.info(String.format("🟢 Step END: Returning ResponseEntity (INTERNAL ERROR) → %s", err.toString()));
+            // return responseManager.ResponseInternalServerError(); // if preferred
+            return ResponseEntity.status(500).body(err);
         }
     }
 
 
 
-      class CardsTransactionsDisputesMapper implements RowMapper<CardsDisputeModel> {
+
+
+    class CardsTransactionsDisputesMapper implements RowMapper<CardsDisputeModel> {
 
         @Override
         public CardsDisputeModel mapRow(ResultSet rs, int arg1) throws SQLException {
             CardsDisputeModel tnx = new CardsDisputeModel();
             tnx.setId(rs.getInt("id"));
+            tnx.setUnique_log_code(rs.getString("unique_log_code"));
             tnx.setLogged_by(rs.getString("logged_by"));
             tnx.setResolved_by(rs.getString("resolved_by"));
             tnx.setTransaction_id(rs.getInt("id"));
@@ -2441,6 +2615,10 @@ public class CardsTransactionsService implements CardsTransactionsInterface {
             tnx.setStatus_code_message(transactionsCodeInterpreter.GetResponse(rs.getString("response_code")));
             tnx.setDestination_acquiring_institution_name(rs.getString("station_name") != null ? rs.getString("station_name") : "");
             tnx.setIsTxnReversed(rs.getString("isTxnReversed"));
+            tnx.setTxn_duration(rs.getString("txn_duration"));
+            tnx.setResponse_time(rs.getString("response_time"));
+            tnx.setTxn_uuid(rs.getString("txn_uuid"));
+
 //            tnx.setDestination_acquiring_institution_name(hasColumn(rs, "station_name") ? rs.getString("station_name") : "");
             return tnx;
         }

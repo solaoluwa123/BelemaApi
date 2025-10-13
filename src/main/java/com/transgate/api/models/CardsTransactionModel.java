@@ -20,6 +20,10 @@ public class CardsTransactionModel{
     String rawAmount;
     String destination_acquiring_institution_name;
 
+    String txn_duration;
+    String response_time;
+    String txn_uuid;
+
     public int getId() {
         return id;
     }
@@ -219,5 +223,28 @@ public class CardsTransactionModel{
     public void setDestination_acquiring_institution_name(String destination_acquiring_institution_name) {
         this.destination_acquiring_institution_name = destination_acquiring_institution_name;
     }
-    
-}   
+
+    public String getTxn_duration() {
+        return txn_duration;
+    }
+
+    public void setTxn_duration(String txn_duration) {
+        this.txn_duration = txn_duration;
+    }
+
+    public String getResponse_time() {
+        return response_time;
+    }
+
+    public void setResponse_time(String response_time) {
+        this.response_time = response_time;
+    }
+
+    public String getTxn_uuid() {
+        return txn_uuid;
+    }
+
+    public void setTxn_uuid(String txn_uuid) {
+        this.txn_uuid = txn_uuid;
+    }
+}

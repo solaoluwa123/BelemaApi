@@ -493,14 +493,16 @@ public class CardsTransactionsController {
     @RequestMapping(value = "/cards/transactions/disputes/approve", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity ApproveCardsSettlement(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestBody CardsDisputeModel dispute) {
+        logger.info(String.format("🔎 ApproveCardsSettlement called | Authorization='%s' | Accept='%s' | auth-token present=%s | body=%s", header, "", (sessiontoken!=null), dispute==null?"null":dispute.toString()));
         if (!validators.validHeader().equals(header)) {
+            logger.info("🔴 Authorization mismatch: expected="+validators.validHeader());
             return responseManager.InvalidAuthorizationHeader();
         }
         return CardsTransactionsInterface.ApproveSettlement(sessiontoken, dispute.getId(), dispute.getStatus(), dispute.getProof_of_reject_uri(), dispute.getSelectedDisputes(), dispute.getType(), dispute.getResolved_by());
     }
 
     @PostMapping("/cards/transactions/disputes/approve_reject_bulk")
-    public @ResponseBody String respondToBulkDisputes(
+    public @ResponseBody ResponseEntity<?>  respondToBulkDisputes(
             @RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestParam("unique_log_code")    String uniqueLogCode,
@@ -528,13 +530,13 @@ public class CardsTransactionsController {
                     "🔴 Step 3: Header validation failed. Provided='%s' Expected='%s'",
                     header, expected
             ));
-            return "";  // or a JSON error payload
+            return  ResponseEntity.status(401).body("Unauthorized");  // or a JSON error payload
         }
         logger.info("🟢 Step 3: Header validated successfully");
 
         // Step 4: Call business logic
         logger.info("🟢 Step 4: Calling CardsTransactionsInterface.respondToBulkDisputes");
-        String result = CardsTransactionsInterface
+        ResponseEntity<?>  result = CardsTransactionsInterface
                 .respondToBulkDisputes(
                         0,                    // id unused for bulk
                         status,
@@ -542,8 +544,7 @@ public class CardsTransactionsController {
                         selectedDisputes,
                         type,
                         username
-                )
-                .toString();
+                );
         logger.info(String.format(
                 "🟢 Step 5: Business logic returned: %s",
                 result

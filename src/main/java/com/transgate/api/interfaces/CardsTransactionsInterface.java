@@ -5,6 +5,7 @@
  */
 package com.transgate.api.interfaces;
 
+import org.json.JSONException;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -90,7 +91,7 @@ public interface CardsTransactionsInterface {
             String selectedDisputes,         // now holds unique_log_code(s)
             String type,
             String username
-    );
+    ) throws JSONException;
     public ResponseEntity UpdateCardsDisputesNUBAN();
     
     public ResponseEntity UpdateDisputesData();

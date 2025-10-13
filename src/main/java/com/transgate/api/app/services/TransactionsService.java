@@ -303,107 +303,109 @@ public class TransactionsService implements TransactionsInterface {
 //            return responseManager.ResponseInternalServerError();
 //        }
 //    }
-    @Override
-    public ResponseEntity Get(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent) {
-        NetworkResponse networkResponse = new NetworkResponse();
-        try {
-            // Log the entry parameters.
-            logger.info("Entering Get transactions method for institution with parameters: startDate=" + startDate
-                    + ", endDate=" + endDate + ", page=" + page
-                    + ", limit=" + limit + ", isCurrent=" + isCurrent + ", institutioncode=" + institutioncode);
+@Override
+public ResponseEntity Get(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent) {
+    NetworkResponse networkResponse = new NetworkResponse();
+    try {
+        // Log the entry parameters.
+        logger.info("Entering Get transactions method for institution with parameters: startDate=" + startDate
+                + ", endDate=" + endDate + ", page=" + page
+                + ", limit=" + limit + ", isCurrent=" + isCurrent + ", institutioncode=" + institutioncode);
 
-            // Calculate pagination offset and log it.
-            int offset = page > 1 ? (page - 1) * limit : 0;
-            logger.info("Computed offset: " + offset);
+        // Calculate pagination offset and log it.
+        int offset = page > 1 ? (page - 1) * limit : 0;
+        logger.info("Computed offset: " + offset);
 
-            List<FullTransactionModel> transactions;
-            List<Map<String, Object>> agg;
-            String SQL;
+        List<FullTransactionModel> transactions;
+        List<Map<String, Object>> agg;
+        String SQL;
 
-            if (isCurrent) {
-                logger.info("Executing query for current transactions for institution from 'tbl_creditfundtransfers'.");
-                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
-                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
-                        + "a.destination_node "
-                        + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
-                        + "ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
-                        + "ON a.destination_institution_code = c.institution_code "
-                        + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
-                        + " ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
-                logger.info("sql query to fetch current day transactions for institution: " + SQL);
-                logger.info("Executing current transactions query with parameters: [startDate, endDate, limit, offset].");
-                transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
-                logger.info("Current transactions query returned " + transactions.size() + " rows.");
+        // Build condition for destination_node when institution_code is 000004
+        String destinationNodeCondition = institutioncode.equals("000004") ? " AND a.destination_node != '9082'" : "";
 
-                SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
-                logger.info("sql query for summary for institution: " + SQL);
-                logger.info("Executing current transactions aggregation query with parameters: [startDate, endDate].");
-                agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
-                logger.info("Aggregation query executed for current transactions.");
-            } else {
-                logger.info("Executing query for historical transactions from 'tbl_creditfundtransfer_hist_s'.");
-                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
-                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
-                        + "a.destination_node "
-                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
-                        + "ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
-                        + "ON a.destination_institution_code = c.institution_code "
-                        + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
-                        + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
-                logger.info("sql query  to fetch older days transactions for institution: " + SQL);
-                logger.info("Executing historical transactions query with parameters: [startDate, endDate, limit, offset].");
-                logger.info("This uses secondJdbc");
-                transactions = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
-                logger.info("Historical transactions query returned for institution " + transactions.size() + " rows.");
+        if (isCurrent) {
+            logger.info("Executing query for current transactions for institution from 'tbl_creditfundtransfers'.");
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
+                    + "a.destination_node "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "ON a.destination_institution_code = c.institution_code "
+                    + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition
+                    + " ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
+            logger.info("sql query to fetch current day transactions for institution: " + SQL);
+            logger.info("Executing current transactions query with parameters: [startDate, endDate, limit, offset].");
+            transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
+            logger.info("Current transactions query returned " + transactions.size() + " rows.");
 
-                SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
-                logger.info("sql query  to fetch hitorical days summary for institution: " + SQL);
-                logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
-                agg = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
-                logger.info("Aggregation query executed for historical transactions.");
-            }
+            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition + ";";
+            logger.info("sql query for summary for institution: " + SQL);
+            logger.info("Executing current transactions aggregation query with parameters: [startDate, endDate].");
+            agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
+            logger.info("Aggregation query executed for current transactions.");
+        } else {
+            logger.info("Executing query for historical transactions from 'tbl_creditfundtransfer_hist_s'.");
+            SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
+                    + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
+                    + "a.destination_node "
+                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "ON a.destination_institution_code = c.institution_code "
+                    + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition
+                    + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
+            logger.info("sql query to fetch older days transactions for institution: " + SQL);
+            logger.info("Executing historical transactions query with parameters: [startDate, endDate, limit, offset].");
+            logger.info("This uses secondJdbc");
+            transactions = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
+            logger.info("Historical transactions query returned for institution " + transactions.size() + " rows.");
 
-            // Process aggregation results.
-            if (agg.isEmpty()) {
-                logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
-                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": " + page + ", \"limit\": " + limit + ", \"successRate\": 0");
-            } else {
-
-                Map<String, Object> row = agg.get(0);
-
-                double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
-                        .map(Number::doubleValue)
-                        .orElse(0.0);
-                int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
-                        .map(Number::intValue)
-                        .orElse(0);
-                double successRate = Optional.ofNullable((Number) row.get("successRate"))
-                        .map(Number::doubleValue)
-                        .orElse(0.0);
-
-                String meta = String.format(
-                        "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}",
-                        totalValue, totalRecords, successRate, page, limit);
-                networkResponse.setMeta(meta);
-                logger.info("Aggregation results processed: " + meta);
-            }
-
-            networkResponse.setCode(200);
-            networkResponse.setStatus("success");
-            networkResponse.setMessage("All Transactions");
-            networkResponse.setData((ArrayList) transactions);
-            logger.info("Transaction response composed successfully. Returning response.");
-
-            return responseManager.ResponseOk(networkResponse);
-        } catch (DataAccessException ex) {
-            logger.info("DataAccessException occurred while retrieving transactions: " + ex.getMessage());
-            return responseManager.ResponseInternalServerError();
+            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition + ";";
+            logger.info("sql query to fetch historical days summary for institution: " + SQL);
+            logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
+            agg = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
+            logger.info("Aggregation query executed for historical transactions.");
         }
+
+        // Process aggregation results.
+        if (agg.isEmpty()) {
+            logger.info("Aggregation query returned no results. Setting default aggregation values for institution.");
+            networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0, \"page\": " + page + ", \"limit\": " + limit + ", \"successRate\": 0}");
+        } else {
+            Map<String, Object> row = agg.get(0);
+
+            double totalValue = Optional.ofNullable((Number) row.get("totalValue"))
+                    .map(Number::doubleValue)
+                    .orElse(0.0);
+            int totalRecords = Optional.ofNullable((Number) row.get("totalRecords"))
+                    .map(Number::intValue)
+                    .orElse(0);
+            double successRate = Optional.ofNullable((Number) row.get("successRate"))
+                    .map(Number::doubleValue)
+                    .orElse(0.0);
+
+            String meta = String.format(
+                    "{\"totalValue\": %.2f, \"totalRecords\": %d, \"successRate\": %.2f, \"page\": %d, \"limit\": %d}",
+                    totalValue, totalRecords, successRate, page, limit);
+            networkResponse.setMeta(meta);
+            logger.info("Aggregation results processed: " + meta);
+        }
+
+        networkResponse.setCode(200);
+        networkResponse.setStatus("success");
+        networkResponse.setMessage("All Transactions");
+        networkResponse.setData((ArrayList) transactions);
+        logger.info("Transaction response composed successfully. Returning response.");
+
+        return responseManager.ResponseOk(networkResponse);
+    } catch (DataAccessException ex) {
+        logger.info("DataAccessException occurred while retrieving transactions: " + ex.getMessage());
+        return responseManager.ResponseInternalServerError();
     }
+}
 
     @Override
     public ResponseEntity getInstitutionTransactionsByDateOnly(String institutioncode, String startDate, String endDate, int page, int limit, boolean isCurrent) {
@@ -2580,41 +2582,49 @@ public class TransactionsService implements TransactionsInterface {
     }
 
 // WHERE builder for all fields except date (so date can be changed for splits)
-    private WhereBuilder buildWhereBuilder(String session_id, String channel_code, String response_code,
-            String source_institution_code, String destination_institution_code,
-            String minAmount, String maxAmount, String originator_account_number, String beneficiary_account_number,
-            String userInstitutionCode
-    ) {
-        WhereBuilder wb = new WhereBuilder();
-        if (!"-1".equals(userInstitutionCode)
-                && (source_institution_code == null || source_institution_code.isEmpty())
-                && (destination_institution_code == null || destination_institution_code.isEmpty())) {
-            wb.addRaw("(a.source_institution_code = ? OR a.destination_institution_code = ?)");
-            wb.params().add(userInstitutionCode);
-            wb.params().add(userInstitutionCode);
-        }
-        wb.add("a.session_id = ?", session_id);
-        wb.add("a.channel_code = ?", channel_code);
-        if (response_code != null && !response_code.isBlank()) {
-            if ("111".equals(response_code)) {
-                wb.addRaw("a.response_code != ?");
-                wb.params().add("00");
-            } else {
-                wb.add("a.response_code = ?", response_code);
-            }
-        }
-        wb.add("a.source_institution_code = ?", source_institution_code);
-        wb.add("a.destination_institution_code = ?", destination_institution_code);
-        wb.add("a.originator_account_number = ?", originator_account_number);
-        wb.add("a.beneficiary_account_number = ?", beneficiary_account_number);
-        if (minAmount != null && !minAmount.isBlank() && Double.parseDouble(minAmount) > 0) {
-            wb.add("a.amount >= ?", Double.parseDouble(minAmount));
-        }
-        if (maxAmount != null && !maxAmount.isBlank() && Double.parseDouble(maxAmount) > 0) {
-            wb.add("a.amount <= ?", Double.parseDouble(maxAmount));
-        }
-        return wb;
+private WhereBuilder buildWhereBuilder(String session_id, String channel_code, String response_code,
+                                       String source_institution_code, String destination_institution_code,
+                                       String minAmount, String maxAmount, String originator_account_number, String beneficiary_account_number,
+                                       String userInstitutionCode
+) {
+    WhereBuilder wb = new WhereBuilder();
+
+    // Add condition for destination_node when userInstitutionCode is 000004
+    if ("000004".equals(userInstitutionCode)) {
+        wb.add("a.destination_node != ?", "9082");
     }
+
+    if (!"-1".equals(userInstitutionCode)
+            && (source_institution_code == null || source_institution_code.isEmpty())
+            && (destination_institution_code == null || destination_institution_code.isEmpty())) {
+        wb.addRaw("(a.source_institution_code = ? OR a.destination_institution_code = ?)");
+        wb.params().add(userInstitutionCode);
+        wb.params().add(userInstitutionCode);
+    }
+
+    wb.add("a.session_id = ?", session_id);
+    wb.add("a.channel_code = ?", channel_code);
+    if (response_code != null && !response_code.isBlank()) {
+        if ("111".equals(response_code)) {
+            wb.addRaw("a.response_code != ?");
+            wb.params().add("00");
+        } else {
+            wb.add("a.response_code = ?", response_code);
+        }
+    }
+    wb.add("a.source_institution_code = ?", source_institution_code);
+    wb.add("a.destination_institution_code = ?", destination_institution_code);
+    wb.add("a.originator_account_number = ?", originator_account_number);
+    wb.add("a.beneficiary_account_number = ?", beneficiary_account_number);
+    if (minAmount != null && !minAmount.isBlank() && Double.parseDouble(minAmount) > 0) {
+        wb.add("a.amount >= ?", Double.parseDouble(minAmount));
+    }
+    if (maxAmount != null && !maxAmount.isBlank() && Double.parseDouble(maxAmount) > 0) {
+        wb.add("a.amount <= ?", Double.parseDouble(maxAmount));
+    }
+
+    return wb;
+}
 
     // Helper for full from clause
     private String buildFullFromCurrent(WhereBuilder wb, String startDate, String endDate) {

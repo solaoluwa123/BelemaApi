@@ -12,7 +12,7 @@ package com.transgate.api.models;
 public class CardsDisputeModel extends CardsTransactionModel {
     String logged_by, date_modified, date_created, type;
     int transaction_id, status, resolved;
-    String resolved_by, records, timeline_date, proof_of_reject_uri, proof_of_debit_uri, cardholder_acct_nuban, cardholder_acct_number;
+    String resolved_by, unique_log_code, records, timeline_date, proof_of_reject_uri, proof_of_debit_uri, cardholder_acct_nuban, cardholder_acct_number;
     String result, arbitrated_by, date_arbitrated, arbitration_closed_by, arbitrated_proof_uri, arbitration_closed_date;
     String selectedDisputes;
     
@@ -175,6 +175,12 @@ public class CardsDisputeModel extends CardsTransactionModel {
     public void setSelectedDisputes(String selectedDisputes) {
         this.selectedDisputes = selectedDisputes;
     }
-    
-    
+
+    public String getUnique_log_code() {
+        return unique_log_code;
+    }
+
+    public void setUnique_log_code(String unique_log_code) {
+        this.unique_log_code = unique_log_code;
+    }
 }
