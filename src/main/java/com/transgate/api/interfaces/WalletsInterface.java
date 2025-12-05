@@ -28,7 +28,7 @@ public interface WalletsInterface {
     
     public ResponseEntity DeleteWallet(String sessiontoken, String walletnumber, String username);
     
-    public ResponseEntity EditWallet(String sessiontoken, String walletnumber, String walletname, String institutionCode, String editor);
+    public ResponseEntity EditWallet(String sessiontoken, String walletnumber, String walletname, String institutionCode, String baseAmount, String editor);
     
     public ResponseEntity GetWalletsForActions();
     

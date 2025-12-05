@@ -142,7 +142,7 @@ public class WalletsController {
             return responseManager.InvalidAuthorizationHeader();
         }
 
-        return walletInterface.EditWallet(sessiontoken, wallet.getWalletnumber(), wallet.getWalletname(), wallet.getFinancialInstitutionCode(), wallet.getCreator());
+        return walletInterface.EditWallet(sessiontoken, wallet.getWalletnumber(), wallet.getWalletname(), wallet.getFinancialInstitutionCode(), wallet.getBaseAmount(), wallet.getCreator());
     }
     
     @RequestMapping(value = "/wallets/approval", method = RequestMethod.PUT, headers = "Accept=application/json")

@@ -5,6 +5,7 @@
  */
 package com.transgate.api.app.services;
 
+import com.transgate.api.app.TransgateApi;
 import com.transgate.api.interfaces.FinancialInstitutionsInterface;
 import com.transgate.api.models.FinancialInstitutionModel;
 import com.transgate.api.models.NetworkResponse;
@@ -24,6 +25,8 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import com.transgate.api.interfaces.WalletsInterface;
 import java.math.BigDecimal;
+import java.util.logging.Logger;
+
 import org.springframework.beans.factory.annotation.Qualifier;
 
 /**
@@ -41,6 +44,7 @@ public class WalletsService implements WalletsInterface {
     
     @Autowired
     private FinancialInstitutionsInterface financialInstitutionsInterface;
+    private static Logger logger = Logger.getLogger(WalletsService.class.getName());
     
     private int GetUserRole(String username, String session_token) {
         try {
@@ -180,13 +184,13 @@ public class WalletsService implements WalletsInterface {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
+            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.baseAmount, a.lien, a.wallettype, a.is_active, "
                     + "b.name as financialInstitutionname "
                     + "FROM ajiswitch_db.tbl_wallets a "
                     + "LEFT JOIN tbl_financial_institutions b "
                     + "ON a.financialinstitutioncode = b.code "
                     + "ORDER BY a.id DESC";
-            List<WalletModel> wallets = jdbcTemplate.query(SQL, new WalletMapper());
+            List<WalletModel> wallets = jdbcTemplate.query(SQL, new WalletMapperAdmin());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All wallets");
@@ -420,45 +424,84 @@ public class WalletsService implements WalletsInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
-    @Override
-    public ResponseEntity EditWallet(String sessiontoken, String walletnumber, String walletname, String institutionCode, String editor) {
+
+    public ResponseEntity EditWallet(String sessiontoken, String walletnumber, String walletname, String institutionCode, String baseAmount, String editor) {
         try {
             String SQL;
+            logger.info(String.format("EditWallet called with sessiontoken=%s, walletnumber=%s, walletname=%s, institutionCode=%s, baseAmount=%s, editor=%s",
+                    sessiontoken, walletnumber, walletname, institutionCode, baseAmount, editor));
+
             int userrole = GetUserRole(editor, sessiontoken);
+            logger.info(String.format("EditWallet - resolved userrole=%d for editor=%s", userrole, editor));
+
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE ajiswitch_db.tbl_wallets SET walletname = ?, financialInstitutioncode = ? WHERE walletnumber = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{walletname, institutionCode, walletnumber});
+                    SQL = "UPDATE ajiswitch_db.tbl_wallets SET walletname = ?, financialInstitutioncode = ?, baseAmount = ? WHERE walletnumber = ?";
+                    logger.info(String.format("EditWallet (case 1) - about to execute SQL: %s | params: walletname=%s, institutionCode=%s, baseAmount=%s, walletnumber=%s",
+                            SQL, walletname, institutionCode, baseAmount, walletnumber));
+
+                    retVal = jdbcTemplate.update(SQL, new Object[]{walletname, institutionCode, baseAmount, walletnumber});
+                    logger.info(String.format("EditWallet (case 1) - update returned retVal=%d", retVal));
+
                     if (retVal > 0) {
                         SQL = "INSERT into ajiswitch_db.tbl_wallet_activities(walletnumber, amount, credit_or_debit, actor, activity_date_time) VALUES(?, ?, ?, ?, now())";
+                        logger.info(String.format("EditWallet (case 1) - about to execute SQL: %s | params: walletnumber=%s, amount=%d, credit_or_debit=%s, actor=%s",
+                                SQL, walletnumber, 0, "ne", editor));
+
                         int retval = jdbcTemplate.update(SQL, new Object[]{walletnumber, 0, "ne", editor});
+                        logger.info(String.format("EditWallet (case 1) - insert activity returned retval=%d", retval));
+
                         return responseManager.ResponseAccepted();
                     }
                     else
                         return responseManager.ResponseInternalServerError();
                 case 2:
                     boolean checkPendingAction = CheckWalletActionPending(walletnumber, "edit");
+                    logger.info(String.format("EditWallet (case 2) - CheckWalletActionPending returned %b for walletnumber=%s", checkPendingAction, walletnumber));
+
                     if (checkPendingAction) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
                         networkResponse.setStatus("failed");
                         networkResponse.setMessage("Wallet already pending edit");
+                        logger.info(String.format("EditWallet (case 2) - wallet already pending edit for walletnumber=%s, returning failed response", walletnumber));
                         return responseManager.ResponseOk(networkResponse);
                     }
+
                     ResponseEntity responseEntity = GetWalletByNumber(walletnumber);
+                    logger.info(String.format("EditWallet (case 2) - GetWalletByNumber called for walletnumber=%s, responseEntity=%s", walletnumber, responseEntity));
+
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     WalletModel wallet = networkResponse != null ? (WalletModel) networkResponse.getData().get(0) : new WalletModel();
-                    SQL = "INSERT INTO tbl_wallets_operations(walletnumber, walletname, creator, financialInstitutionCode, balance, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'edit', ?, now())";
+                    logger.info(String.format("EditWallet (case 2) - loaded wallet: walletnumber=%s, walletname=%s, financialInstitutionCode=%s, balance=%s",
+                            wallet.getWalletnumber(), wallet.getWalletname(), wallet.getFinancialInstitutionCode(), wallet.getBalance()));
+
+                    SQL = "INSERT INTO tbl_wallets_operations(walletnumber, walletname, baseAmount, creator, financialInstitutionCode, balance, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', ?, now())";
                     String nameChange = wallet.getWalletname().equals(walletname) ? wallet.getWalletname() : wallet.getWalletname() + "|" + walletname;
+                    logger.info(String.format("EditWallet (case 2) - computed nameChange=%s", nameChange));
+
                     responseEntity = financialInstitutionsInterface.GetFinancialInstitutionByCode(sessiontoken, institutionCode);
+                    logger.info(String.format("EditWallet (case 2) - GetFinancialInstitutionByCode called for code=%s, responseEntity=%s", institutionCode, responseEntity));
+
                     networkResponse = (NetworkResponse) responseEntity.getBody();
                     FinancialInstitutionModel financialInstitutionModel = networkResponse != null ? (FinancialInstitutionModel) networkResponse.getData().get(0) : new FinancialInstitutionModel();
+                    logger.info(String.format("EditWallet (case 2) - loaded financialInstitutionModel: code=%s, name=%s",
+                            financialInstitutionModel.getCode(), financialInstitutionModel.getName()));
+
                     String institutionChange = wallet.getFinancialInstitutionCode().equals(institutionCode) ? wallet.getFinancialInstitutionCode() : institutionCode;
-                    String note = wallet.getWalletname().equals(walletname) ? "" : "Change wallet name from " +  wallet.getWalletname()+ " to " + walletname;
+                    logger.info(String.format("EditWallet (case 2) - computed institutionChange=%s", institutionChange));
+
+                    String note = wallet.getWalletname().equals(walletname) ? "" : "Change wallet name from " + wallet.getWalletname() + " to " + walletname;
                     note = wallet.getFinancialInstitutionCode().equals(institutionCode) ? note : !note.equals("") ? note + ", change wallet institution from " + wallet.getFinancialInstitutionName() + " to " + financialInstitutionModel.getName() : "Change wallet institution from " + wallet.getFinancialInstitutionName() + " to " + financialInstitutionModel.getName();
-                    retVal = jdbcTemplate.update(SQL, new Object[]{wallet.getWalletnumber(), nameChange, editor, institutionChange, wallet.getBalance(), note});
+                    logger.info(String.format("EditWallet (case 2) - final note=%s", note));
+
+                    logger.info(String.format("EditWallet (case 2) - about to execute SQL: %s | params: walletnumber=%s, walletname=%s, baseAmount=%s, creator=%s, financialInstitutionCode=%s, balance=%s, note=%s",
+                            SQL, wallet.getWalletnumber(), nameChange, baseAmount, editor, institutionChange, wallet.getBalance(), note));
+
+                    retVal = jdbcTemplate.update(SQL, new Object[]{wallet.getWalletnumber(), nameChange, baseAmount, editor, institutionChange, wallet.getBalance(), note});
+                    logger.info(String.format("EditWallet (case 2) - insert operation returned retVal=%d", retVal));
+
                     if (retVal > 0) {
                         return responseManager.ResponseAccepted();
                     }
@@ -466,14 +509,19 @@ public class WalletsService implements WalletsInterface {
                         return responseManager.ResponseInternalServerError();
                     }
                 default:
+                    logger.info(String.format("EditWallet - unauthorized access attempt by editor=%s with userrole=%d", editor, userrole));
                     return responseManager.ResponseUnathorized();
             }
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
+            logger.info(String.format("EditWallet - DataAccessException caught: %s", ex.getMessage()));
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
+
+
+
     @Override
     public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -605,8 +653,64 @@ public class WalletsService implements WalletsInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
-    
+
+
     class WalletMapper implements RowMapper<WalletModel> {
+        @Override
+        public WalletModel mapRow(ResultSet rs, int arg1) throws SQLException {
+            WalletModel response = new WalletModel();
+
+            response.setId(rs.getInt("id"));
+            response.setWalletnumber(rs.getString("walletnumber"));
+            response.setWalletname(rs.getString("walletname"));
+            response.setCreator(rs.getString("creator"));
+            response.setFinancialInstitutionCode(rs.getString("financialinstitutioncode") != null ? rs.getString("financialinstitutioncode") : "");
+            response.setFinancialInstitutionName(rs.getString("financialInstitutionname") != null ? rs.getString("financialInstitutionname") : "");
+            response.setWallettype(rs.getInt("wallettype"));
+            BigDecimal _balance = new BigDecimal(rs.getString("balance"));
+            BigDecimal _lien = new BigDecimal(rs.getString("lien"));
+            BigDecimal balance = _balance.subtract(_lien);
+            response.setBalance(balance);
+            response.setLien(_lien);
+            response.setDate_created(rs.getString("creationdate"));
+            response.setDate_updated(null);
+            switch (rs.getInt("wallettype")) {
+                case 1:
+                    response.setWalletTypeName("Merchant");
+                    break;
+                case 2:
+                    response.setWalletTypeName("PSSP");
+                    break;
+                case 3:
+                    response.setWalletTypeName("PTSP");
+                    break;
+                case 4:
+                    response.setWalletTypeName("Super Agent");
+                    break;
+                case 5:
+                    response.setWalletTypeName("Switch");
+                    break;
+                default:
+                    response.setWalletTypeName("Others");
+                    break;
+            }
+            switch (rs.getInt("is_active")) {
+                case 0:
+                    response.setStatus("Inactive");
+                    break;
+                case 1:
+                    response.setStatus("Active");
+                    break;
+                default:
+                    response.setStatus("Unknown");
+                    break;
+            }
+            return response;
+        }
+    }
+
+
+    class WalletMapperAdmin implements RowMapper<WalletModel> {
         @Override
         public WalletModel mapRow(ResultSet rs, int arg1) throws SQLException {
             WalletModel response = new WalletModel();
@@ -618,6 +722,7 @@ public class WalletsService implements WalletsInterface {
             response.setFinancialInstitutionCode(rs.getString("financialinstitutioncode") != null ? rs.getString("financialinstitutioncode") : "");
             response.setFinancialInstitutionName(rs.getString("financialInstitutionname") != null ? rs.getString("financialInstitutionname") : "");
             response.setWallettype(rs.getInt("wallettype"));
+            response.setBaseAmount(rs.getString("baseAmount"));
             BigDecimal _balance = new BigDecimal(rs.getString("balance"));
             BigDecimal _lien = new BigDecimal(rs.getString("lien"));
             BigDecimal balance = _balance.subtract(_lien);

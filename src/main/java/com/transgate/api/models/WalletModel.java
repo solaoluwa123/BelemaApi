@@ -12,7 +12,7 @@ import java.math.BigDecimal;
  * @author Makintola
  */
 public class WalletModel {
-    String creator, walletname, walletnumber, date_created, date_updated, financialInstitutionCode, financialInstitutionName;
+    String creator, walletname, walletnumber, date_created, date_updated, financialInstitutionCode, financialInstitutionName, baseAmount;
     int id, wallettype;
     BigDecimal amount;
     BigDecimal balance, lien;
@@ -155,5 +155,12 @@ public class WalletModel {
     public void setLien(BigDecimal lien) {
         this.lien = lien;
     }
-    
+
+    public String getBaseAmount() {
+        return baseAmount;
+    }
+
+    public void setBaseAmount(String baseAmount) {
+        this.baseAmount = baseAmount;
+    }
 }

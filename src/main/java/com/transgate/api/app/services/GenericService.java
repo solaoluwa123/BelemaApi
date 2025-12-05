@@ -212,24 +212,42 @@ public class GenericService implements GenericInterface {
     @Override
     public ResponseEntity GetSettlements(String institution, String startDate, String endDate, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
+        final String corrId = java.util.UUID.randomUUID().toString();
+        final long tStart = System.currentTimeMillis();
+
+        logger.info(String.format("🟢 [corr=%s] Entering GetSettlements | institution=%s | startDate=%s | endDate=%s | page=%d | limit=%d",
+                corrId, institution, startDate, endDate, page, limit));
+
         try {
             String SQL;
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<Map<String, Object>> rows;
             String meta;
+
+            logger.info(String.format("🧮 [corr=%s] Calculated offset=%d", corrId, offset));
+
             if (institution.equals(appConfig.getSystemFICode())) {
+                logger.info(String.format("🔀 [corr=%s] Institution is system FI (%s) — using aggregated branch", corrId, institution));
+
                 List<Map<String, Object>> _rows;
                 SQL = "SELECT a.institution_code FROM ajiswitch_db.tbl_nodes a WHERE a.issettlementbank = 0";
+                logger.info(String.format("🧾 [corr=%s] SQL (fetch nodes): %s", corrId, SQL));
                 _rows = jdbcTemplate.queryForList(SQL);
+
+                logger.info(String.format("🔎 [corr=%s] Nodes fetched: %d", corrId, (_rows == null ? 0 : _rows.size())));
 
                 StringBuilder inString = new StringBuilder("(");
                 inString.append("'").append(institution).append("',");
                 for (final Map<String, Object> row : _rows) {
-                    inString.append("'").append(row.get("institution_code")).append("'");
-                    inString.append(",");
+                    inString.append("'").append(row.get("institution_code")).append("',");
                 }
-                inString = inString.deleteCharAt(inString.length() - 1);
-                inString = inString.append(")");
+                // remove trailing comma and close
+                if (inString.charAt(inString.length() - 1) == ',') {
+                    inString.deleteCharAt(inString.length() - 1);
+                }
+                inString.append(")");
+
+                logger.info(String.format("🧩 [corr=%s] Built IN list: %s", corrId, inString.toString()));
 
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
@@ -237,36 +255,57 @@ public class GenericService implements GenericInterface {
                         + "ON a.institution_code = b.code "
                         + "WHERE a.institution_code IN " + inString.toString() + " AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
                         + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
-                rows = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, limit, offset});
+
+                logger.info(String.format("🧾 [corr=%s] SQL (list): %s", corrId, SQL));
+                Object[] paramsList = new Object[]{startDate, endDate, limit, offset};
+                logger.info(String.format("🔢 [corr=%s] JDBC params (list): %s", corrId, java.util.Arrays.toString(paramsList)));
+                rows = jdbcTemplate.queryForList(SQL, paramsList);
+                logger.info(String.format("✅ [corr=%s] List query returned rows=%d", corrId, (rows == null ? 0 : rows.size())));
 
                 SQL = "SELECT COUNT(a.id) as totalRecords "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
                         + "WHERE a.institution_code IN " + inString.toString() + " AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+                logger.info(String.format("🧾 [corr=%s] SQL (agg): %s", corrId, SQL));
+                Object[] paramsAgg = new Object[]{startDate, endDate};
+                logger.info(String.format("🔢 [corr=%s] JDBC params (agg): %s", corrId, java.util.Arrays.toString(paramsAgg)));
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, paramsAgg);
+                logger.info(String.format("✅ [corr=%s] Aggregation query returned rows=%d", corrId, (agg == null ? 0 : agg.size())));
 
-                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
                 Map<String, Object> row = agg.get(0);
                 Long tRecords = (Long) row.get("totalRecords");
                 int totalRecords = tRecords != null ? tRecords.intValue() : 0;
                 meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
+                logger.info(String.format("📊 [corr=%s] Aggregation result: totalRecords=%d", corrId, totalRecords));
 
             } else {
+                logger.info(String.format("🔀 [corr=%s] Institution is not system FI (%s) — using single-institution branch", corrId, institution));
+
                 SQL = "SELECT a.id, a.institution_code, a.institution_name, a.acqVol, a.acqVal, a.issVol, a.issVal, a.net_set_pos, a.settlement_date, a.report_location "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
                         + "LEFT JOIN tbl_financial_institutions b "
                         + "ON a.institution_code = b.code "
                         + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv') "
                         + "ORDER BY a.settlement_date DESC LIMIT ? OFFSET ?";
-                rows = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate, limit, offset});
+                logger.info(String.format("🧾 [corr=%s] SQL (list): %s", corrId, SQL));
+                Object[] paramsList = new Object[]{institution, startDate, endDate, limit, offset};
+                logger.info(String.format("🔢 [corr=%s] JDBC params (list): %s", corrId, java.util.Arrays.toString(paramsList)));
+                rows = jdbcTemplate.queryForList(SQL, paramsList);
+                logger.info(String.format("✅ [corr=%s] List query returned rows=%d", corrId, (rows == null ? 0 : rows.size())));
 
                 SQL = "SELECT COUNT(a.id) as totalRecords "
                         + "FROM ajiswitch_db.tbl_settlement_details a "
                         + "WHERE a.institution_code = ? AND a.settlement_date >= ? AND a.settlement_date < ? AND (a.report_location LIKE '%.xlsx' || a.report_location LIKE '%.csv')";
+                logger.info(String.format("🧾 [corr=%s] SQL (agg): %s", corrId, SQL));
+                Object[] paramsAgg = new Object[]{institution, startDate, endDate};
+                logger.info(String.format("🔢 [corr=%s] JDBC params (agg): %s", corrId, java.util.Arrays.toString(paramsAgg)));
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, paramsAgg);
+                logger.info(String.format("✅ [corr=%s] Aggregation query returned rows=%d", corrId, (agg == null ? 0 : agg.size())));
 
-                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institution, startDate, endDate});
                 Map<String, Object> row = agg.get(0);
                 Long tRecords = (Long) row.get("totalRecords");
                 int totalRecords = tRecords != null ? tRecords.intValue() : 0;
                 meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
+                logger.info(String.format("📊 [corr=%s] Aggregation result: totalRecords=%d", corrId, totalRecords));
             }
 
             networkResponse.setMeta(meta);
@@ -274,12 +313,27 @@ public class GenericService implements GenericInterface {
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Settlements");
             networkResponse.setData((ArrayList) rows);
+
+            long tEnd = System.currentTimeMillis();
+            logger.info(String.format("✅ [corr=%s] Completed GetSettlements in %dms | returnedRows=%d", corrId, (tEnd - tStart), (rows == null ? 0 : rows.size())));
+
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            // log exception details and stacktrace using logger.info per your logging policy
+            logger.info(String.format("❌ [corr=%s] DataAccessException in GetSettlements: %s", corrId, ex.toString()));
+            java.io.StringWriter sw = new java.io.StringWriter();
+            ex.printStackTrace(new java.io.PrintWriter(sw));
+            logger.info(String.format("❌ [corr=%s] Stacktrace: %s", corrId, sw.toString()));
+            return responseManager.ResponseInternalServerError();
+        } catch (Exception ex) {
+            logger.info(String.format("❌ [corr=%s] Unexpected exception in GetSettlements: %s", corrId, ex.toString()));
+            java.io.StringWriter sw = new java.io.StringWriter();
+            ex.printStackTrace(new java.io.PrintWriter(sw));
+            logger.info(String.format("❌ [corr=%s] Stacktrace: %s", corrId, sw.toString()));
             return responseManager.ResponseInternalServerError();
         }
     }
+
 
     @Override
     public ResponseEntity SearchSettlementsByInstitution(String institution, String startDate, String endDate, int page, int limit) {

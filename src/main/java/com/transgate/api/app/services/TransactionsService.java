@@ -77,6 +77,7 @@ public class TransactionsService implements TransactionsInterface {
     DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
+
     private final AppEnvironmentConfig appConfig;
 
     public TransactionsService(AppEnvironmentConfig appConfig) {
@@ -321,7 +322,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
         String SQL;
 
         // Build condition for destination_node when institution_code is 000004
-        String destinationNodeCondition = institutioncode.equals("000004") ? " AND a.destination_node != '9082'" : "";
+//        String destinationNodeCondition = institutioncode.equals("000004") ? " AND a.destination_node != '9082'" : "";
 
         if (isCurrent) {
             logger.info("Executing query for current transactions for institution from 'tbl_creditfundtransfers'.");
@@ -333,14 +334,14 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     + "ON a.source_institution_code = b.institution_code "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
                     + "ON a.destination_institution_code = c.institution_code "
-                    + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition
+                    + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" //+ destinationNodeCondition
                     + " ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
             logger.info("sql query to fetch current day transactions for institution: " + SQL);
             logger.info("Executing current transactions query with parameters: [startDate, endDate, limit, offset].");
             transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
             logger.info("Current transactions query returned " + transactions.size() + " rows.");
 
-            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition + ";";
+            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)";// + destinationNodeCondition + ";";
             logger.info("sql query for summary for institution: " + SQL);
             logger.info("Executing current transactions aggregation query with parameters: [startDate, endDate].");
             agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
@@ -355,7 +356,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     + "ON a.source_institution_code = b.institution_code "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
                     + "ON a.destination_institution_code = c.institution_code "
-                    + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition
+                    + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" //+ destinationNodeCondition
                     + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
             logger.info("sql query to fetch older days transactions for institution: " + SQL);
             logger.info("Executing historical transactions query with parameters: [startDate, endDate, limit, offset].");
@@ -363,7 +364,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             transactions = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
             logger.info("Historical transactions query returned for institution " + transactions.size() + " rows.");
 
-            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" + destinationNodeCondition + ";";
+            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" ;//+ destinationNodeCondition + ";";
             logger.info("sql query to fetch historical days summary for institution: " + SQL);
             logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
             agg = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
@@ -2386,6 +2387,8 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             // --- Transaction Query Logic ---
             if (includeCurrent && !includeHistory) {
                 logger.info(String.format("[%s] Query: ONLY current-day transactions (tbl_creditfundtransfers)", marker));
+                logger.info(String.format("Common: %s\nWHERE: %s", commonSelect, buildFullFromCurrent(wbBase, startDate, endDate), wbBase.params()));
+
                 transactions = queryTrans(
                         jdbcTemplate,
                         commonSelect, buildFullFromCurrent(wbBase, startDate, endDate), wbBase.params(), limit, offset
@@ -2409,6 +2412,8 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                         if (!start.isBefore(threshold)) {
                             // Only primary DB
                             logger.info(String.format("[%s] Querying ONLY primary archive DB [start=%s, end=%s) >= threshold=%s", marker, start, end, threshold));
+//                            logger.info(String.format("SQL: %s", commonSelect, buildFullFromCurrent(wbBase, startDate, endDate), wbBase.params()));
+
                             WhereBuilder wbPri = wbBase.cloneWithDateRange(start.format(fmt), end.format(fmt));
                             histList = queryTrans(
                                     jdbcTemplate,
@@ -2420,6 +2425,8 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                             logger.info(String.format("[%s] Querying BOTH archive DBs: Secondary [start=%s, threshold=%s), Primary [threshold=%s, end=%s)", marker, start, threshold, threshold, end));
                             // 1. Secondary DB: [start, threshold)
                             WhereBuilder wbSec = wbBase.cloneWithDateRange(start.format(fmt), threshold.format(fmt));
+                            logger.info(String.format("Common: %s\nWHERE: %s", commonSelect, buildFullFromCurrent(wbBase, startDate, endDate), wbBase.params()));
+
                             List<FullTransactionModel> secList = queryTrans(
                                     secondJdbcTemplate,
                                     commonSelect, buildFullFromHist(wbSec, wbSec.getStartDate(), wbSec.getEndDate()), wbSec.params(), limit, offset
@@ -2466,6 +2473,8 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                             start, threshold, threshold, end));
                     // 1. Secondary DB: [start, threshold)
                     WhereBuilder wbSec = wbBase.cloneWithDateRange(start.format(fmt), threshold.format(fmt));
+                    logger.info(String.format("His | Common: %s\nWHERE: %s", commonSelect, buildFullFromHist(wbSec, wbSec.getStartDate(), wbSec.getEndDate()), wbSec.params()));
+
                     List<FullTransactionModel> secList = queryTrans(
                             secondJdbcTemplate,
                             commonSelect, buildFullFromHist(wbSec, wbSec.getStartDate(), wbSec.getEndDate()), wbSec.params(), limit, offset
@@ -2474,6 +2483,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
 
                     // 2. Primary DB: [threshold, end)
                     WhereBuilder wbPri = wbBase.cloneWithDateRange(threshold.format(fmt), end.format(fmt));
+                    logger.info(String.format("Pri | Common: %s\nWHERE: %s", commonSelect, buildFullFromHist(wbPri, wbPri.getStartDate(), wbPri.getEndDate()), wbPri.params()));
                     List<FullTransactionModel> priList = queryTrans(
                             jdbcTemplate,
                             commonSelect, buildFullFromHist(wbPri, wbPri.getStartDate(), wbPri.getEndDate()), wbPri.params(), limit, offset
@@ -2590,9 +2600,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     WhereBuilder wb = new WhereBuilder();
 
     // Add condition for destination_node when userInstitutionCode is 000004
-    if ("000004".equals(userInstitutionCode)) {
-        wb.add("a.destination_node != ?", "9082");
-    }
+//    if ("000004".equals(userInstitutionCode)) {
+//        wb.add("a.destination_node != ?", "9082");
+//    }
 
     if (!"-1".equals(userInstitutionCode)
             && (source_institution_code == null || source_institution_code.isEmpty())
@@ -3997,20 +4007,31 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     @Override
     public ResponseEntity GetDisputes(int id, int status, String institutioncode, int page, int limit) {
         NetworkResponse networkResponse = new NetworkResponse();
+        // correlation id to track this request in logs
+        final String corrId = java.util.UUID.randomUUID().toString();
+        final long tStart = System.currentTimeMillis();
         try {
             String code = institutioncode != null ? institutioncode : "";
-            String SQL, SQL2;
+            String SQL = null, SQL2 = null;
             List<DisputeModel> transactions;
             Double totalValue;
             int offset = page > 1 ? (page - 1) * limit : 0;
             List<Map<String, Object>> agg = null;
+
+            logger.info(String.format("🟢 [corr=%s] Entering GetDisputes | id=%d | status=%d | institutioncode='%s' | page=%d | limit=%d | offset=%d",
+                    corrId, id, status, code, page, limit, offset));
+
             if (id > 0) {
                 SQL = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, dispute.proof_of_reject_uri, a.financial_institution_code "
                         + "FROM tbl_disputes dispute "
                         + "LEFT JOIN tbl_financial_institution_contacts a "
                         + "ON dispute.loggedBy = a.email_address "
                         + "WHERE dispute.id = ?";
-                transactions = jdbcTemplate.query(SQL, new Object[]{id}, new DisputeTransactionMapper());
+                logger.info(String.format("🧩 [corr=%s] Built SQL (id path).", corrId));
+                logger.info(String.format("🧾 [corr=%s] SQL: %s", corrId, SQL));
+                Object[] params = new Object[]{id};
+                logger.info(String.format("🔢 [corr=%s] JDBC params: %s", corrId, java.util.Arrays.toString(params)));
+                transactions = jdbcTemplate.query(SQL, params, new DisputeTransactionMapper());
             } else {
                 switch (code) {
                     case "":
@@ -4064,15 +4085,57 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                                     + "WHERE dispute.ownerInstitution = " + code + " OR dispute.destInstitution = " + code + "";
                         }
                         break;
+                } // end switch
+
+                logger.info(String.format("🧩 [corr=%s] Built SQL (non-id path).", corrId));
+                logger.info(String.format("🧾 [corr=%s] SQL: %s", corrId, SQL));
+                if (SQL2 != null) logger.info(String.format("🧾 [corr=%s] SQL2: %s", corrId, SQL2));
+
+                Object[] params = new Object[]{limit, offset};
+                logger.info(String.format("🔢 [corr=%s] JDBC params for list query: %s", corrId, java.util.Arrays.toString(params)));
+
+                transactions = jdbcTemplate.query(SQL, params, new DisputeTransactionMapper());
+                if (SQL2 != null) {
+                    agg = jdbcTemplate.queryForList(SQL2);
+                } else {
+                    agg = new java.util.ArrayList<>();
+                    Map<String, Object> emptyAgg = new java.util.HashMap<>();
+                    emptyAgg.put("totalValue", null);
+                    emptyAgg.put("totalRecords", 0L);
+                    agg.add(emptyAgg);
                 }
-                transactions = jdbcTemplate.query(SQL, new Object[]{limit, offset}, new DisputeTransactionMapper());
-                agg = jdbcTemplate.queryForList(SQL2);
+            } // end id/non-id
+
+            long tAfterQuery = System.currentTimeMillis();
+            logger.info(String.format("⏱ [corr=%s] Query executed in %dms. Retrieved rows: %d", corrId, (tAfterQuery - tStart), (transactions != null ? transactions.size() : 0)));
+
+            // defensive: if agg is null or empty, provide defaults
+            if (agg == null || agg.isEmpty()) {
+                logger.info(String.format("⚠️ [corr=%s] Aggregation result empty or null - setting totalValue=0, totalRecords=0", corrId));
+                agg = new java.util.ArrayList<>();
+                Map<String, Object> emptyAgg = new java.util.HashMap<>();
+                emptyAgg.put("totalValue", null);
+                emptyAgg.put("totalRecords", 0L);
+                agg.add(emptyAgg);
             }
+
             Map<String, Object> row = agg.get(0);
             BigDecimal tValue = (BigDecimal) row.get("totalValue");
             totalValue = tValue != null ? tValue.doubleValue() : 0;
-            Long tRecords = (Long) row.get("totalRecords");
-            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            Object totalRecordsObj = row.get("totalRecords");
+            int totalRecords;
+            if (totalRecordsObj instanceof Number) {
+                totalRecords = ((Number) totalRecordsObj).intValue();
+            } else {
+                try {
+                    totalRecords = Integer.parseInt(String.valueOf(totalRecordsObj));
+                } catch (Exception e) {
+                    totalRecords = 0;
+                }
+            }
+
+            logger.info(String.format("📊 [corr=%s] Aggregation: totalValue=%s totalRecords=%d", corrId, totalValue, totalRecords));
+
             String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + ", \"page\": " + page + ", \"limit\": " + limit + "}";
 
             networkResponse.setCode(200);
@@ -4085,9 +4148,22 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             networkResponse.setData((ArrayList) transactions);
             networkResponse.setMeta(meta);
 
+            long tEnd = System.currentTimeMillis();
+            logger.info(String.format("✅ [corr=%s] Completed GetDisputes successfully in %dms | returnedRows=%d", corrId, (tEnd - tStart), (transactions != null ? transactions.size() : 0)));
             return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
+            // log exception details and stacktrace (but still use logger.info)
+            logger.info(String.format("❌ [corr=%s] DataAccessException in GetDisputes: %s", corrId, ex.toString()));
+            java.io.StringWriter sw = new java.io.StringWriter();
+            ex.printStackTrace(new java.io.PrintWriter(sw));
+            logger.info(String.format("❌ [corr=%s] Stacktrace: %s", corrId, sw.toString()));
+            return responseManager.ResponseInternalServerError();
+        } catch (Exception ex) {
+            // catch-all to ensure stacktrace is logged
+            logger.info(String.format("❌ [corr=%s] Unexpected exception in GetDisputes: %s", corrId, ex.toString()));
+            java.io.StringWriter sw = new java.io.StringWriter();
+            ex.printStackTrace(new java.io.PrintWriter(sw));
+            logger.info(String.format("❌ [corr=%s] Stacktrace: %s", corrId, sw.toString()));
             return responseManager.ResponseInternalServerError();
         }
     }

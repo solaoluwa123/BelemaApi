@@ -95,4 +95,5 @@ public interface CardsTransactionsInterface {
     public ResponseEntity UpdateCardsDisputesNUBAN();
     
     public ResponseEntity UpdateDisputesData();
+    
 }

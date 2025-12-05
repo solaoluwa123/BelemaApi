@@ -39,6 +39,7 @@ public class AuthTokenInterceptor implements HandlerInterceptor {
     // List of excluded endpoints
     private static final List<String> EXCLUDED_PATHS = Arrays.asList(
         "/sparkpayapi/app/crons/autopassdisputesforsettlement",
+        "/sparkpayapi/app/crons/autopassarbitrateddisputesforsettlement",
         "/sparkpayapi/users/crons/reducelocktime",
         "/sparkpayapi/users/crons/unlock",
         "/sparkpayapi/app/crons/cards/disputes/update-nuban",

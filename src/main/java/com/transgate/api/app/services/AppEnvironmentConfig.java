@@ -76,6 +76,14 @@ public class AppEnvironmentConfig {
         return env.getProperty("app.apiheaderexternal");
     }
 
+    public String getAPIBASEURL() {
+        return env.getProperty("app.apibaseurl");
+    }
+
+    public String getAutoacceptdisputes() {
+        return env.getProperty("app.autoacceptdisputes");
+    }
+
     // Method to get 'app.tippingpoint'
     public String getTippingPoint() {
         String tippingPoint = env.getProperty("app.tippingpoint");

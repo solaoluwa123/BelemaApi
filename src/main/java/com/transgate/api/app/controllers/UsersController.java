@@ -69,6 +69,33 @@ public class UsersController {
         return responseManager.ResponseAccepted();
     }
 
+    @RequestMapping(value = "/app/crons/autopassarbitrateddisputesforsettlement", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity autoPassArbitratedDisputesForSettlement() {
+        long startTime = System.currentTimeMillis();
+        String correlationId = java.util.UUID.randomUUID().toString();
+
+        logger.info(String.format("1️⃣ Entering autoPassArbitratedDisputesForSettlement - correlationId=%s", correlationId));
+
+        try {
+            logger.info(String.format("2️⃣ Invoking unlockAccountsInterface.AutoPassArbitratedDisputesForSettlement - correlationId=%s", correlationId));
+            unlockAccountsInterface.AutoPassArbitratedDisputesForSettlement();
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("3️⃣ ✅ Completed autoPassArbitratedDisputesForSettlement successfully - correlationId=%s - elapsedMs=%d",
+                    correlationId, elapsed));
+
+            return responseManager.ResponseAccepted();
+        } catch (Exception ex) {
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("4️⃣ ❌ Exception in autoPassArbitratedDisputesForSettlement - correlationId=%s - message=%s - elapsedMs=%d",
+                    correlationId, ex.getMessage(), elapsed));
+            logger.info(String.format("4️⃣ Exception details - correlationId=%s - exception=%s", correlationId, ex.toString()));
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+
+
     @RequestMapping(value = "/app/crons/sendaccepteddisputes", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity SendAllAcceptedDisputes() {
         unlockAccountsInterface.SendAllAcceptedDisputes();

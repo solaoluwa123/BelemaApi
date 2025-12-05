@@ -5,6 +5,7 @@
  */
 package com.transgate.api.app.services;
 
+import com.transgate.api.app.TransgateApi;
 import com.transgate.api.interfaces.UnlockAccountsInterface;
 import com.transgate.api.util.CSVHelper;
 import static com.transgate.api.util.Constants.FRONTENDURL;
@@ -50,6 +51,7 @@ public class UnlockAccounts implements UnlockAccountsInterface {
     public UnlockAccounts(AppEnvironmentConfig appConfig) {
         this.appConfig = appConfig;
     }
+    private  Logger logger = Logger.getLogger(UnlockAccounts.class.getName());
     
     @Override
     public void AutoPassDisputesForSettlement() {
@@ -73,7 +75,64 @@ public class UnlockAccounts implements UnlockAccountsInterface {
             System.out.println("auto pass disputes for settlements exception " + e.getMessage());
         }
     }
-    
+
+
+    @Override
+    public void AutoPassArbitratedDisputesForSettlement() {
+        long startTime = System.currentTimeMillis();
+        String correlationId = java.util.UUID.randomUUID().toString();
+
+        try {
+            logger.info(String.format("1️⃣ Entering AutoPassArbitratedDisputesForSettlement - correlationId=%s", correlationId));
+
+            List<Map<String, Object>> disputes;
+            String SQL = "SELECT *\n" +
+                    "FROM sparkpayweb_db.tbl_disputes\n" +
+                    "WHERE date_arbitrated IS NOT NULL\n" +
+                    "  AND DATEDIFF(NOW(), date_arbitrated) >= 5\n" +
+                    "  AND status = -2 \n" +
+                    "  AND resolved = 1 \n" +
+                    "  AND `type` != 'habari';";
+
+            logger.info(String.format("2️⃣ Executing SELECT disputes - correlationId=%s - SQL=%s", correlationId, SQL));
+            disputes = jdbcTemplate.queryForList(SQL);
+            logger.info(String.format("3️⃣ Disputes fetched - correlationId=%s - count=%d", correlationId, disputes == null ? 0 : disputes.size()));
+
+            if (disputes.size() > 0) {
+                for (int i = 0; i < disputes.size(); i++) {
+                    SQL = "SELECT * FROM sparkpay.merchants WHERE merchant_id = ?";
+                    String merchant_id = (String) disputes.get(i).get("merchant_id");
+                    String dispute_id = (String) disputes.get(i).get("unique_log_code");
+
+                    logger.info(String.format("4️⃣ Executing SELECT merchant - correlationId=%s - SQL=%s - params=[merchant_id=%s]", correlationId, SQL, merchant_id));
+                    List<Map<String, Object>> merchants = jdbcTemplate.queryForList(SQL, new Object[]{merchant_id});
+                    logger.info(String.format("5️⃣ Merchants fetched - correlationId=%s - merchant_id=%s - count=%d", correlationId, merchant_id, merchants == null ? 0 : merchants.size()));
+
+                    if (merchants.size() > 0) {
+                        //     UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = ?, arbitrated_proof_uri = ?, status = ?, arbitration_closed_date = now() WHERE unique_log_code = ?
+                        SQL = "UPDATE sparkpayweb_db.tbl_disputes SET arbitration_closed_by = 'Auto Resolved', status = '-3', resolved = 1, arbitration_closed_date = now() WHERE unique_log_code = ? AND status = '-2' AND resolved = '1'";
+                        logger.info(String.format("6️⃣ Executing UPDATE dispute - correlationId=%s - SQL=%s - params=[dispute_id=%s]", correlationId, SQL, dispute_id));
+                        int rows = jdbcTemplate.update(SQL, new Object[]{dispute_id});
+                        logger.info(String.format("7️⃣ Update result - correlationId=%s - dispute_id=%s - rowsAffected=%d", correlationId, dispute_id, rows));
+                    } else {
+                        logger.info(String.format("7️⃣ Skipping update (no merchant) - correlationId=%s - dispute_id=%s- merchant_id=%s", correlationId, dispute_id, merchant_id));
+                    }
+                }
+            } else {
+                logger.info(String.format("8️⃣ No disputes to process - correlationId=%s", correlationId));
+            }
+
+            long elapsed = System.currentTimeMillis() - startTime;
+            logger.info(String.format("9️⃣ Completed AutoPassArbitratedDisputesForSettlement - correlationId=%s - elapsedMs=%d", correlationId, elapsed));
+        } catch (DataAccessException e) {
+            long elapsed = System.currentTimeMillis() - startTime;
+            System.out.println("auto pass disputes for settlements exception " + e.getMessage());
+            logger.info(String.format("🔴 Exception in AutoPassArbitratedDisputesForSettlement - correlationId=%s - message=%s - elapsedMs=%d", correlationId, e.getMessage(), elapsed));
+            logger.info(String.format("🔴 Exception details - correlationId=%s - exception=%s", correlationId, e.toString()));
+        }
+    }
+
+
     @Override
     public void ReduceLockTime() {
         try {
