@@ -1003,6 +1003,22 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         }
     }
     
+    private String lookupInstitutionName(String code) {
+        if (code == null || code.isEmpty()) {
+            return "";
+        }
+        try {
+            String name = jdbcTemplate.queryForObject(
+                    "SELECT institution_name FROM tbl_nodes WHERE institution_code = ? LIMIT 1",
+                    String.class,
+                    code);
+            return name != null && !name.isEmpty() ? name : code;
+        } catch (DataAccessException ex) {
+            logger.info("lookupInstitutionName: " + ex.getMessage());
+            return code;
+        }
+    }
+
     @Override
 public ResponseEntity CreateContact(String sessiontoken, String creator, String institution, 
         String firstname, String surname, String phone_number, String email_address, String security) {
@@ -1025,14 +1041,25 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             return responseManager.ResponseOk(networkResponse);
         }
 
-        // Retrieve the role of the creator.
+        if (security == null || security.trim().isEmpty()) {
+            return responseManager.ResponseBadRequest("Password is required to create a contact");
+        }
+        if (institution == null || institution.isEmpty()) {
+            NetworkResponse missingFi = new NetworkResponse();
+            missingFi.setCode(200);
+            missingFi.setStatus("failed");
+            missingFi.setMessage("Financial institution code is required");
+            return responseManager.ResponseOk(missingFi);
+        }
+
         int userrole = GetUserRole(creator, sessiontoken);
         logger.info("Retrieved userrole: " + userrole + " for creator: " + creator);
 
-        // Create login for the contact.
-        ResponseEntity createLoginResponse = usersInterface.Create(
-                sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
-        logger.info("Received response from usersInterface.Create");
+        String institutionName = lookupInstitutionName(institution);
+        ResponseEntity createLoginResponse = usersInterface.CreateOther(
+                sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security,
+                institution, institutionName);
+        logger.info("Received response from usersInterface.CreateOther");
         Object createBody = createLoginResponse.getBody();
         boolean userCreateOk = false;
         if (createBody instanceof LoginResponse) {
@@ -1041,13 +1068,6 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             userCreateOk = "success".equals(((NetworkResponse) createBody).getStatus());
         }
         if (userCreateOk) {
-            if (institution == null || institution.isEmpty()) {
-                NetworkResponse networkResponse = new NetworkResponse();
-                networkResponse.setCode(200);
-                networkResponse.setStatus("failed");
-                networkResponse.setMessage("Financial institution code is required");
-                return responseManager.ResponseOk(networkResponse);
-            }
             jdbcTemplate.update(
                     "UPDATE tbl_user_details_operations SET note = 'Create contact account' WHERE email_address = ? AND actionType = 'create'",
                     email_address);
@@ -1098,16 +1118,15 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
                     return responseManager.ResponseUnathorized();
             }
         } else {
-            String status = createBody instanceof LoginResponse
-                    ? ((LoginResponse) createBody).getStatus()
-                    : createBody instanceof NetworkResponse
-                            ? ((NetworkResponse) createBody).getStatus()
-                            : "unknown";
-            logger.info("User create failed. Status: " + status);
-            return responseManager.ResponseInternalServerError();
+            logger.info("User create failed; returning nested response. Status: "
+                    + (createLoginResponse.getStatusCode() != null ? createLoginResponse.getStatusCode() : "unknown"));
+            return createLoginResponse;
         }
     } catch (DataAccessException ex) {
         logger.info("DataAccessException in CreateContact: " + ex.getMessage());
+        return responseManager.ResponseInternalServerError();
+    } catch (Exception ex) {
+        logger.info("Exception in CreateContact: " + ex.getMessage());
         return responseManager.ResponseInternalServerError();
     }
 }

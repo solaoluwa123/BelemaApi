@@ -1200,6 +1200,25 @@ public class UsersService implements UsersInterface {
         }
     }
 
+    /** Role 4 is an institution contact — login lives on the contact row, not the card-user map. */
+    private void mapOtherUserToInstitution(String email, String institutionid, String institutionname, int roleid) {
+        if (roleid == PlatformRole.OTHER_MIN) {
+            return;
+        }
+        if (roleid == 6 && institutionid != null && !institutionid.isEmpty()) {
+            List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
+            logger.info("Mapping user to merchants: " + merchantIds);
+            MapUserToMerchants(email, merchantIds);
+        }
+        String institutiontype = roleid == 5 ? "financial_institution_user"
+                : roleid == 6 ? "merchant_user"
+                        : roleid == 7 ? "terminal_owner_user"
+                                : roleid == 8 ? "ptsp_user"
+                                        : "";
+        String SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
+        jdbcTemplate.update(SQL, new Object[]{email, institutionid, institutionname, institutiontype});
+    }
+
     @Override
     public ResponseEntity CreateOther(String sessiontoken, String creator, String username,
             String firstname, String surname, String phone_number, String email_address,
@@ -1260,20 +1279,7 @@ public class UsersService implements UsersInterface {
                         logger.info("tbl_user_details insert result: " + retval);
 
                         if (retval > 0) {
-                            if (roleid == 6) {
-                                List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
-                                logger.info("Mapping user to merchants: " + merchantIds);
-                                MapUserToMerchants(email_address, merchantIds);
-                            }
-                            String institutiontype = roleid == 5 ? "financial_institution_user"
-                                    : roleid == 6 ? "merchant_user"
-                                            : roleid == 7 ? "terminal_owner_user"
-                                                    : roleid == 8 ? "ptsp_user"
-                                                            : "";
-                            SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
-                            logger.info("Executing SQL (tbl_map_card_users_institution): " + SQL);
-                            jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
-                            logger.info("User mapping inserted successfully.");
+                            mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
 
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
@@ -1305,26 +1311,30 @@ public class UsersService implements UsersInterface {
                     logger.info("tbl_user_details_operations insert result: " + retval);
 
                     if (retval > 0) {
-                        if (roleid == 6) {
-                            List<String> merchantIds = new ArrayList<>(Arrays.asList(institutionid.split(",")));
-                            logger.info("Mapping user to merchants (pending case): " + merchantIds);
-                            MapUserToMerchants(email_address, merchantIds);
-                        }
-                        String institutiontype = roleid == 5 ? "financial_institution_user"
-                                : roleid == 6 ? "merchant_user"
-                                        : roleid == 7 ? "terminal_owner_user"
-                                                : roleid == 8 ? "ptsp_user"
-                                                        : "";
-                        SQL = "INSERT into tbl_map_card_users_institution(user_email, institution_id, institution_name, institution_type, date_created) VALUES(?, ?, ?, ?, now())";
-                        logger.info("Executing SQL (tbl_map_card_users_institution) for pending creation: " + SQL);
-                        jdbcTemplate.update(SQL, new Object[]{email_address, institutionid, institutionname, institutiontype});
-                        logger.info("Pending account creation mapping inserted successfully.");
-
+                        mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
                         return responseManager.ResponseAccepted();
                     } else {
                         logger.info("Insert into tbl_user_details_operations failed for username: " + username);
                         return responseManager.ResponseInternalServerError();
                     }
+                case 3: {
+                    boolean approverPending = CheckUserPending(username, email_address, "create");
+                    if (approverPending) {
+                        logger.info("User pending creation already exists for username: " + username + " or email: " + email_address);
+                        NetworkResponse pendingResp = new NetworkResponse();
+                        pendingResp.setCode(200);
+                        pendingResp.setStatus("failed");
+                        pendingResp.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
+                        return responseManager.ResponseOk(pendingResp);
+                    }
+                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
+                    if (retval > 0) {
+                        mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
+                        return responseManager.ResponseAccepted();
+                    }
+                    logger.info("Insert into tbl_user_details_operations failed for username: " + username);
+                    return responseManager.ResponseInternalServerError();
+                }
                 default:
                     logger.info("Unauthorized user role: " + userrole + " for creator " + creator);
                     return responseManager.ResponseUnathorized();
