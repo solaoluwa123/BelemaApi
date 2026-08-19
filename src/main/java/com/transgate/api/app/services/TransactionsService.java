@@ -3174,12 +3174,12 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             String SQL;
             List<Map<String, Object>> summary;
             String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
+            SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.destination_institution_code, b.color "
                     + "FROM " + table + " a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
-                    + "ON a.source_institution_code = b.institution_code "
+                    + "ON a.destination_institution_code = b.institution_code "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
-                    + "GROUP BY a.source_institution_code "
+                    + "GROUP BY a.destination_institution_code "
                     + "LIMIT 20";
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});

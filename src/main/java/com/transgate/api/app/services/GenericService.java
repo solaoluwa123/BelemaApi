@@ -1257,12 +1257,72 @@ public class GenericService implements GenericInterface {
         }
     }
 
+    private String toSqlDateTime(String value) {
+        if (value == null) {
+            return "";
+        }
+        String s = value.trim().replace('T', ' ');
+        int cut = s.indexOf('Z');
+        if (cut > 0) {
+            s = s.substring(0, cut);
+        }
+        int plus = s.indexOf('+', 10);
+        if (plus > 0) {
+            s = s.substring(0, plus);
+        }
+        if (s.length() > 19) {
+            s = s.substring(0, 19);
+        }
+        return s;
+    }
+
     @Override
     public ResponseEntity GetTNXStatusChange(String session_id, String startDate, String endDate, int page, int limit, String requested_by, String approved_by, String current_status, String new_status, String status) {
         NetworkResponse networkResponse = new NetworkResponse();
-        networkResponse.setCode(200);
-        networkResponse.setStatus("failed");
-        networkResponse.setMessage("Transaction status change is not available on this Belema schema (tbl_transactions_status is missing)");
-        return responseManager.ResponseOk(networkResponse);
+        try {
+            int safePage = page > 0 ? page : 1;
+            int safeLimit = limit > 0 ? limit : 50;
+            int offset = (safePage - 1) * safeLimit;
+            String sid = session_id == null ? "" : session_id.trim();
+            String from = startDate == null ? "" : startDate.trim();
+            String to = endDate == null ? "" : endDate.trim();
+
+            StringBuilder sql = new StringBuilder();
+            sql.append("SELECT a.id, a.session_id AS srcSessionid, a.originator_account_name AS srcAccountName, ");
+            sql.append("a.beneficiary_account_name AS destAccountName, a.amount, ");
+            sql.append("a.transaction_date_time AS transactiondate, a.response_code AS srcResponsecode, ");
+            sql.append("b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName, ");
+            sql.append("a.source_institution_code AS srcInstitutioncode, a.destination_institution_code AS destInstitutioncode ");
+            sql.append("FROM ajiswitch_db.tbl_creditfundtransfers a ");
+            sql.append("LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code ");
+            sql.append("LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code ");
+            sql.append("WHERE a.response_code = '09'");
+
+            List<Object> args = new ArrayList<>();
+            if (!sid.isEmpty()) {
+                sql.append(" AND a.session_id = ?");
+                args.add(sid);
+            }
+            if (!from.isEmpty() && !to.isEmpty()) {
+                sql.append(" AND a.transaction_date_time BETWEEN ? AND ?");
+                args.add(toSqlDateTime(from));
+                args.add(toSqlDateTime(to));
+            }
+            sql.append(" ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?");
+            args.add(safeLimit);
+            args.add(offset);
+
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), args.toArray());
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage(rows.isEmpty()
+                    ? "No pending transactions awaiting status update"
+                    : "Pending transactions for status update");
+            networkResponse.setData(new ArrayList<>(rows));
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("GetTNXStatusChange: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
 }
