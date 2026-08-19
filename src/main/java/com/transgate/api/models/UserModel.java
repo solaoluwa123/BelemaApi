@@ -10,7 +10,7 @@ package com.transgate.api.models;
  * @author Makintola
  */
 public class UserModel extends LoginResponse {
-    String security, actionType, note, institution, institutionName, institutionid_as_string;
+    String security, actionType, note, institution, institutionName, institutionid_as_string, creator, created_by;
 
     public String getSecurity() {
         return security;
@@ -58,6 +58,22 @@ public class UserModel extends LoginResponse {
 
     public void setInstitutionid_as_string(String institutionid_as_string) {
         this.institutionid_as_string = institutionid_as_string;
+    }
+
+    public String getCreator() {
+        return creator;
+    }
+
+    public void setCreator(String creator) {
+        this.creator = creator;
+    }
+
+    public String getCreated_by() {
+        return created_by;
+    }
+
+    public void setCreated_by(String created_by) {
+        this.created_by = created_by;
     }
     
 }

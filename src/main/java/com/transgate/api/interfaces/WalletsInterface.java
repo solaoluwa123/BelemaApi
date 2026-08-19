@@ -35,4 +35,8 @@ public interface WalletsInterface {
     public ResponseEntity GetWalletByNumber(String walletnumber);
     
     public ResponseEntity WalletApprovals(String sessiontoken, int id, String actionType, String username);
+
+    public ResponseEntity ApproveInstitutionFunding(String sessiontoken, int id, String approver);
+
+    public ResponseEntity RejectInstitutionFunding(String sessiontoken, int id, String approver, String reason);
 }

@@ -63,7 +63,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.Create(sessiontoken, financialInstitutionModel.getName(), financialInstitutionModel.getShortName(), financialInstitutionModel.getPort_number(), financialInstitutionModel.getPublickeylocation(), financialInstitutionModel.getPublickeylocationLinux(), financialInstitutionModel.getCbn_bank_account(), financialInstitutionModel.getColor(), financialInstitutionModel.getCode(), financialInstitutionModel.getBusiness_address(), financialInstitutionModel.getBusinessType(), financialInstitutionModel.getCreated_by(), financialInstitutionModel.getPassword(), financialInstitutionModel.getCharge_amount(), financialInstitutionModel.getVat(), financialInstitutionModel.getHashKey(), financialInstitutionModel.getIsProcessTSQ());
+        return financialInstitutionsInterface.Create(sessiontoken, financialInstitutionModel);
     }
     
     @RequestMapping(value = "/financial-institutions/types", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -150,7 +150,8 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.CreateContact(sessiontoken, user.getRole(), user.getInstitution(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getSecurity());
+        String creator = resolveOperationSubmitter(user);
+        return financialInstitutionsInterface.CreateContact(sessiontoken, creator, user.getInstitution(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getEmail_address(), user.getSecurity());
     }
     
     @RequestMapping(value = "/financial-institutions/contacts/{email}/{username}", method = RequestMethod.DELETE, headers = "Accept=application/json")
@@ -211,5 +212,22 @@ public class FinancialInstitutionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
         return financialInstitutionsInterface.GetAllContactsForActions(code);
+    }
+
+    /** Operator email is sent in `role`/`created_by`; contact login may be in `username`. */
+    private String resolveOperationSubmitter(UserModel user) {
+        if (user.getCreated_by() != null && !user.getCreated_by().isEmpty()) {
+            return user.getCreated_by();
+        }
+        if (user.getRole() != null && user.getRole().contains("@")) {
+            return user.getRole();
+        }
+        if (user.getUsername() != null && user.getUsername().contains("@")) {
+            return user.getUsername();
+        }
+        if (user.getRole() != null && !user.getRole().isEmpty()) {
+            return user.getRole();
+        }
+        return user.getUsername();
     }
 }

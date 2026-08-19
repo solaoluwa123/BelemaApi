@@ -206,5 +206,161 @@ public class FinancialInstitutionModel {
     public void setIsProcessTSQ(int isProcessTSQ) {
         this.isProcessTSQ = isProcessTSQ;
     }
+
+    int issettlementbank, neTimeout, ftTimeout, instWithWallet, wallettype, enableInward;
+    String serverIP, url, urlTSQ, neEnvelope, neResponseStartTag, neResponseEndTag;
+    String ftEnvelope, ftResponseStartTag, ftResponseEndTag, tsqEnvelope, tsqResponseStartTag, tsqResponseEndTag, walletname;
+
+    public int getIssettlementbank() {
+        return issettlementbank;
+    }
+
+    public void setIssettlementbank(int issettlementbank) {
+        this.issettlementbank = issettlementbank;
+    }
+
+    public int getNeTimeout() {
+        return neTimeout;
+    }
+
+    public void setNeTimeout(int neTimeout) {
+        this.neTimeout = neTimeout;
+    }
+
+    public int getFtTimeout() {
+        return ftTimeout;
+    }
+
+    public void setFtTimeout(int ftTimeout) {
+        this.ftTimeout = ftTimeout;
+    }
+
+    public int getInstWithWallet() {
+        return instWithWallet;
+    }
+
+    public void setInstWithWallet(int instWithWallet) {
+        this.instWithWallet = instWithWallet;
+    }
+
+    public int getEnableInward() {
+        return enableInward;
+    }
+
+    public void setEnableInward(int enableInward) {
+        this.enableInward = enableInward;
+    }
+
+    public int getWallettype() {
+        return wallettype;
+    }
+
+    public void setWallettype(int wallettype) {
+        this.wallettype = wallettype;
+    }
+
+    public String getServerIP() {
+        return serverIP;
+    }
+
+    public void setServerIP(String serverIP) {
+        this.serverIP = serverIP;
+    }
+
+    public String getUrl() {
+        return url;
+    }
+
+    public void setUrl(String url) {
+        this.url = url;
+    }
+
+    public String getUrlTSQ() {
+        return urlTSQ;
+    }
+
+    public void setUrlTSQ(String urlTSQ) {
+        this.urlTSQ = urlTSQ;
+    }
+
+    public String getNeEnvelope() {
+        return neEnvelope;
+    }
+
+    public void setNeEnvelope(String neEnvelope) {
+        this.neEnvelope = neEnvelope;
+    }
+
+    public String getNeResponseStartTag() {
+        return neResponseStartTag;
+    }
+
+    public void setNeResponseStartTag(String neResponseStartTag) {
+        this.neResponseStartTag = neResponseStartTag;
+    }
+
+    public String getNeResponseEndTag() {
+        return neResponseEndTag;
+    }
+
+    public void setNeResponseEndTag(String neResponseEndTag) {
+        this.neResponseEndTag = neResponseEndTag;
+    }
+
+    public String getFtEnvelope() {
+        return ftEnvelope;
+    }
+
+    public void setFtEnvelope(String ftEnvelope) {
+        this.ftEnvelope = ftEnvelope;
+    }
+
+    public String getFtResponseStartTag() {
+        return ftResponseStartTag;
+    }
+
+    public void setFtResponseStartTag(String ftResponseStartTag) {
+        this.ftResponseStartTag = ftResponseStartTag;
+    }
+
+    public String getFtResponseEndTag() {
+        return ftResponseEndTag;
+    }
+
+    public void setFtResponseEndTag(String ftResponseEndTag) {
+        this.ftResponseEndTag = ftResponseEndTag;
+    }
+
+    public String getTsqEnvelope() {
+        return tsqEnvelope;
+    }
+
+    public void setTsqEnvelope(String tsqEnvelope) {
+        this.tsqEnvelope = tsqEnvelope;
+    }
+
+    public String getTsqResponseStartTag() {
+        return tsqResponseStartTag;
+    }
+
+    public void setTsqResponseStartTag(String tsqResponseStartTag) {
+        this.tsqResponseStartTag = tsqResponseStartTag;
+    }
+
+    public String getTsqResponseEndTag() {
+        return tsqResponseEndTag;
+    }
+
+    public void setTsqResponseEndTag(String tsqResponseEndTag) {
+        this.tsqResponseEndTag = tsqResponseEndTag;
+    }
+
+    public String getWalletname() {
+        return walletname;
+    }
+
+    public void setWalletname(String walletname) {
+        this.walletname = walletname;
+    }
     
 }

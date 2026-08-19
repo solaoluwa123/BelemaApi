@@ -10,6 +10,7 @@ import com.transgate.api.interfaces.FinancialInstitutionsInterface;
 import com.transgate.api.models.FinancialInstitutionModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.WalletModel;
+import com.transgate.api.util.PlatformRole;
 import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
@@ -28,6 +29,7 @@ import java.math.BigDecimal;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  *
@@ -45,12 +47,101 @@ public class WalletsService implements WalletsInterface {
     @Autowired
     private FinancialInstitutionsInterface financialInstitutionsInterface;
     private static Logger logger = Logger.getLogger(WalletsService.class.getName());
+
+    private BigDecimal parseDecimal(String value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return new BigDecimal(trimmed);
+    }
+
+    private BigDecimal parseDecimal(ResultSet rs, String column) throws SQLException {
+        return parseDecimal(rs.getString(column));
+    }
+
+    /**
+     * Belema stores wallettype as a name (e.g. PSSP); other DBs store a numeric id.
+     * {@code ResultSet.getInt} throws when the column is a non-numeric string.
+     */
+    private int parseWalletTypeId(String raw) {
+        if (raw == null) {
+            return 0;
+        }
+        String value = raw.trim();
+        if (value.isEmpty()) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(value);
+        } catch (NumberFormatException ignored) {
+            switch (value.toLowerCase()) {
+                case "merchant":
+                    return 1;
+                case "pssp":
+                    return 2;
+                case "ptsp":
+                    return 3;
+                case "super agent":
+                case "superagent":
+                    return 4;
+                case "switch":
+                    return 5;
+                default:
+                    return 0;
+            }
+        }
+    }
+
+    private String walletTypeName(int typeId, String raw) {
+        switch (typeId) {
+            case 1:
+                return "Merchant";
+            case 2:
+                return "PSSP";
+            case 3:
+                return "PTSP";
+            case 4:
+                return "Super Agent";
+            case 5:
+                return "Switch";
+            default:
+                if (raw != null && !raw.trim().isEmpty() && !raw.trim().matches("\\d+")) {
+                    return raw.trim();
+                }
+                return "Others";
+        }
+    }
+
+    private void applyWalletType(WalletModel response, ResultSet rs) throws SQLException {
+        String raw = rs.getString("wallettype");
+        int typeId = parseWalletTypeId(raw);
+        response.setWallettype(typeId);
+        response.setWalletTypeName(walletTypeName(typeId, raw));
+    }
+
+    private static final String WALLET_INSTITUTION_NAME_SELECT =
+            "COALESCE(NULLIF(b.name, ''), n.institution_name, '') as financialInstitutionname ";
+
+    private static final String WALLET_INSTITUTION_JOINS =
+            "LEFT JOIN tbl_financial_institutions b ON a.financialinstitutioncode = b.code "
+            + "LEFT JOIN ajiswitch_db.tbl_nodes n ON a.financialinstitutioncode = n.institution_code ";
+
+    private static final String WALLET_OPS_INSTITUTION_NAME_SELECT =
+            "COALESCE(NULLIF(b.name, ''), n.institution_name, '') as financialInstitutionName ";
+
+    private static final String WALLET_OPS_INSTITUTION_JOINS =
+            "LEFT JOIN tbl_financial_institutions b ON a.financialInstitutionCode = b.code "
+            + "LEFT JOIN ajiswitch_db.tbl_nodes n ON a.financialInstitutionCode = n.institution_code ";
     
     private int GetUserRole(String username, String session_token) {
         try {
             int role;
 
-            String SQL = "SELECT role FROM tbl_user_details WHERE email_address = ? OR username = ? AND deleted = 0 AND session_token = ?";
+            String SQL = "SELECT role FROM tbl_user_details WHERE (email_address = ? OR username = ?) AND deleted = 0 AND session_token = ?";
             role = jdbcTemplate.queryForObject(SQL, new Object[]{username, username, session_token}, int.class);
             return role;
         } catch (DataAccessException ex) {
@@ -112,11 +203,10 @@ public class WalletsService implements WalletsInterface {
         try {
             String SQL;
             SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.financialInstitutionCode, a.wallettype, a.balance, a.lien, a.assignee, a.actionType, a.note, a.date_created, "
-                    + "b.name as financialInstitutionName "
+                    + WALLET_OPS_INSTITUTION_NAME_SELECT
                     + "FROM tbl_wallets_operations a "
-                    + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialInstitutionCode = b.code "
-                    + "WHERE a.id = ? AND a.actionType = ?"
+                    + WALLET_OPS_INSTITUTION_JOINS
+                    + "WHERE a.id = ? AND a.actionType = ? "
                     + "ORDER BY a.id DESC";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[]{id, actionType}, new WalletMapper2());
             return wallets;
@@ -160,10 +250,9 @@ public class WalletsService implements WalletsInterface {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
-                    + "b.name as financialInstitutionname "
+                    + WALLET_INSTITUTION_NAME_SELECT
                     + "FROM ajiswitch_db.tbl_wallets a "
-                    + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialinstitutioncode = b.code "
+                    + WALLET_INSTITUTION_JOINS
                     + "WHERE a.financialinstitutioncode = ? "
                     + "ORDER BY a.id DESC";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[]{institutioncode}, new WalletMapper());
@@ -184,11 +273,10 @@ public class WalletsService implements WalletsInterface {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.baseAmount, a.lien, a.wallettype, a.is_active, "
-                    + "b.name as financialInstitutionname "
+            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
+                    + WALLET_INSTITUTION_NAME_SELECT
                     + "FROM ajiswitch_db.tbl_wallets a "
-                    + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialinstitutioncode = b.code "
+                    + WALLET_INSTITUTION_JOINS
                     + "ORDER BY a.id DESC";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new WalletMapperAdmin());
             networkResponse.setCode(200);
@@ -209,10 +297,9 @@ public class WalletsService implements WalletsInterface {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.creationdate, a.financialinstitutioncode, a.balance, a.lien, a.wallettype, a.is_active, "
-                    + "b.name as financialInstitutionname "
+                    + WALLET_INSTITUTION_NAME_SELECT
                     + "FROM ajiswitch_db.tbl_wallets a "
-                    + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialinstitutioncode = b.code "
+                    + WALLET_INSTITUTION_JOINS
                     + "WHERE a.walletnumber = ?";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new Object[]{walletnumber}, new WalletMapper());
             networkResponse.setCode(200);
@@ -233,10 +320,9 @@ public class WalletsService implements WalletsInterface {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.financialInstitutionCode, a.wallettype, a.balance, a.lien, a.assignee, a.actionType, a.note, a.date_created, "
-                    + "b.name as financialInstitutionName "
+                    + WALLET_OPS_INSTITUTION_NAME_SELECT
                     + "FROM tbl_wallets_operations a "
-                    + "LEFT JOIN tbl_financial_institutions b "
-                    + "ON a.financialInstitutionCode = b.code "
+                    + WALLET_OPS_INSTITUTION_JOINS
                     + "ORDER BY a.id DESC";
             List<WalletModel> wallets = jdbcTemplate.query(SQL, new WalletMapper2());
             networkResponse.setCode(200);
@@ -437,11 +523,12 @@ public class WalletsService implements WalletsInterface {
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE ajiswitch_db.tbl_wallets SET walletname = ?, financialInstitutioncode = ?, baseAmount = ? WHERE walletnumber = ?";
-                    logger.info(String.format("EditWallet (case 1) - about to execute SQL: %s | params: walletname=%s, institutionCode=%s, baseAmount=%s, walletnumber=%s",
-                            SQL, walletname, institutionCode, baseAmount, walletnumber));
+                    // Belema tbl_wallets has no baseAmount column
+                    SQL = "UPDATE ajiswitch_db.tbl_wallets SET walletname = ?, financialInstitutioncode = ? WHERE walletnumber = ?";
+                    logger.info(String.format("EditWallet (case 1) - about to execute SQL: %s | params: walletname=%s, institutionCode=%s, walletnumber=%s",
+                            SQL, walletname, institutionCode, walletnumber));
 
-                    retVal = jdbcTemplate.update(SQL, new Object[]{walletname, institutionCode, baseAmount, walletnumber});
+                    retVal = jdbcTemplate.update(SQL, new Object[]{walletname, institutionCode, walletnumber});
                     logger.info(String.format("EditWallet (case 1) - update returned retVal=%d", retVal));
 
                     if (retVal > 0) {
@@ -477,7 +564,8 @@ public class WalletsService implements WalletsInterface {
                     logger.info(String.format("EditWallet (case 2) - loaded wallet: walletnumber=%s, walletname=%s, financialInstitutionCode=%s, balance=%s",
                             wallet.getWalletnumber(), wallet.getWalletname(), wallet.getFinancialInstitutionCode(), wallet.getBalance()));
 
-                    SQL = "INSERT INTO tbl_wallets_operations(walletnumber, walletname, baseAmount, creator, financialInstitutionCode, balance, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', ?, now())";
+                    // Belema tbl_wallets_operations has no baseAmount column
+                    SQL = "INSERT INTO tbl_wallets_operations(walletnumber, walletname, creator, financialInstitutionCode, balance, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'edit', ?, now())";
                     String nameChange = wallet.getWalletname().equals(walletname) ? wallet.getWalletname() : wallet.getWalletname() + "|" + walletname;
                     logger.info(String.format("EditWallet (case 2) - computed nameChange=%s", nameChange));
 
@@ -496,10 +584,10 @@ public class WalletsService implements WalletsInterface {
                     note = wallet.getFinancialInstitutionCode().equals(institutionCode) ? note : !note.equals("") ? note + ", change wallet institution from " + wallet.getFinancialInstitutionName() + " to " + financialInstitutionModel.getName() : "Change wallet institution from " + wallet.getFinancialInstitutionName() + " to " + financialInstitutionModel.getName();
                     logger.info(String.format("EditWallet (case 2) - final note=%s", note));
 
-                    logger.info(String.format("EditWallet (case 2) - about to execute SQL: %s | params: walletnumber=%s, walletname=%s, baseAmount=%s, creator=%s, financialInstitutionCode=%s, balance=%s, note=%s",
-                            SQL, wallet.getWalletnumber(), nameChange, baseAmount, editor, institutionChange, wallet.getBalance(), note));
+                    logger.info(String.format("EditWallet (case 2) - about to execute SQL: %s | params: walletnumber=%s, walletname=%s, creator=%s, financialInstitutionCode=%s, balance=%s, note=%s",
+                            SQL, wallet.getWalletnumber(), nameChange, editor, institutionChange, wallet.getBalance(), note));
 
-                    retVal = jdbcTemplate.update(SQL, new Object[]{wallet.getWalletnumber(), nameChange, baseAmount, editor, institutionChange, wallet.getBalance(), note});
+                    retVal = jdbcTemplate.update(SQL, new Object[]{wallet.getWalletnumber(), nameChange, editor, institutionChange, wallet.getBalance(), note});
                     logger.info(String.format("EditWallet (case 2) - insert operation returned retVal=%d", retVal));
 
                     if (retVal > 0) {
@@ -628,7 +716,7 @@ public class WalletsService implements WalletsInterface {
                         case "create":
                             SQL = "DELETE FROM tbl_wallets_operations WHERE id = ? AND actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            SQL = "INSERT INTO tbl_wallets(walletnumber, walletname, creator, financialInstitutionCode, date_created) VALUES(?, ?, ?, ?, ?)";
+                            SQL = "INSERT INTO ajiswitch_db.tbl_wallets(walletnumber, walletname, creator, financialinstitutioncode, creationdate) VALUES(?, ?, ?, ?, ?)";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{wallets.get(0).getWalletnumber(), wallets.get(0).getWalletname(), wallets.get(0).getCreator(), wallets.get(0).getFinancialInstitutionCode(), wallets.get(0).getDate_created()});
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseAccepted();
@@ -654,6 +742,106 @@ public class WalletsService implements WalletsInterface {
         }
     }
 
+    @Override
+    @Transactional
+    public ResponseEntity ApproveInstitutionFunding(String sessiontoken, int id, String approver) {
+        try {
+            String SQL;
+            int userrole = GetUserRole(approver, sessiontoken);
+            if (userrole != PlatformRole.ADMIN && userrole != PlatformRole.APPROVER) {
+                return responseManager.ResponseUnathorized();
+            }
+
+            SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.financialInstitutionCode, a.wallettype, a.balance, a.lien, a.assignee, a.actionType, a.note, a.date_created, "
+                    + "b.name as financialInstitutionName "
+                    + "FROM transgateweb_db.tbl_wallets_operations a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.financialInstitutionCode = b.code "
+                    + "WHERE a.id = ? AND a.actionType = 'credit' "
+                    + "ORDER BY a.id DESC";
+
+            List<WalletModel> pendings = jdbcTemplate.query(SQL, new Object[]{id}, new WalletMapper2());
+            if (pendings == null || pendings.isEmpty()) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Funding request not found");
+                return responseManager.ResponseNotFound(networkResponse);
+            }
+
+            WalletModel pending = pendings.get(0);
+            SQL = "DELETE FROM transgateweb_db.tbl_wallets_operations WHERE id = ? AND actionType = 'credit'";
+            int removed = jdbcTemplate.update(SQL, new Object[]{id});
+
+            SQL = "UPDATE ajiswitch_db.tbl_wallets SET balance = COALESCE(balance, 0.00) + ? WHERE walletnumber = ?";
+            int updated = jdbcTemplate.update(SQL, new Object[]{pending.getBalance(), pending.getWalletnumber()});
+
+            SQL = "INSERT INTO transgateweb_db.tbl_wallet_funding_approvals(operation_id, walletnumber, approved_amount, initiated_by, approved_by, approved_at, action_type, approval_status, rejection_reason) "
+                    + "VALUES(?, ?, ?, ?, ?, now(), ?, 'approved', NULL)";
+            int logged = jdbcTemplate.update(SQL, new Object[]{id, pending.getWalletnumber(), pending.getBalance(), pending.getCreator(), approver, pending.getActionType()});
+
+            if (removed > 0 && updated > 0 && logged > 0) {
+                return responseManager.ResponseAccepted();
+            }
+            return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    @Transactional
+    public ResponseEntity RejectInstitutionFunding(String sessiontoken, int id, String approver, String reason) {
+        try {
+            if (reason == null || reason.trim().isEmpty()) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Rejection reason is required");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            int userrole = GetUserRole(approver, sessiontoken);
+            if (userrole != PlatformRole.ADMIN && userrole != PlatformRole.APPROVER) {
+                return responseManager.ResponseUnathorized();
+            }
+
+            String SQL = "SELECT a.id, a.walletnumber, a.walletname, a.creator, a.financialInstitutionCode, a.wallettype, a.balance, a.lien, a.assignee, a.actionType, a.note, a.date_created, "
+                    + "b.name as financialInstitutionName "
+                    + "FROM transgateweb_db.tbl_wallets_operations a "
+                    + "LEFT JOIN transgateweb_db.tbl_financial_institutions b "
+                    + "ON a.financialInstitutionCode = b.code "
+                    + "WHERE a.id = ? AND a.actionType = 'credit' "
+                    + "ORDER BY a.id DESC";
+
+            List<WalletModel> pendings = jdbcTemplate.query(SQL, new Object[]{id}, new WalletMapper2());
+            if (pendings == null || pendings.isEmpty()) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Funding request not found");
+                return responseManager.ResponseNotFound(networkResponse);
+            }
+
+            WalletModel pending = pendings.get(0);
+            SQL = "DELETE FROM transgateweb_db.tbl_wallets_operations WHERE id = ? AND actionType = 'credit'";
+            int removed = jdbcTemplate.update(SQL, new Object[]{id});
+
+            SQL = "INSERT INTO transgateweb_db.tbl_wallet_funding_approvals(operation_id, walletnumber, approved_amount, initiated_by, approved_by, approved_at, action_type, approval_status, rejection_reason) "
+                    + "VALUES(?, ?, ?, ?, ?, now(), ?, 'rejected', ?)";
+            int logged = jdbcTemplate.update(SQL, new Object[]{id, pending.getWalletnumber(), pending.getBalance(), pending.getCreator(), approver, pending.getActionType(), reason.trim()});
+
+            if (removed > 0 && logged > 0) {
+                return responseManager.ResponseAccepted();
+            }
+            return responseManager.ResponseInternalServerError();
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
 
     class WalletMapper implements RowMapper<WalletModel> {
         @Override
@@ -666,34 +854,14 @@ public class WalletsService implements WalletsInterface {
             response.setCreator(rs.getString("creator"));
             response.setFinancialInstitutionCode(rs.getString("financialinstitutioncode") != null ? rs.getString("financialinstitutioncode") : "");
             response.setFinancialInstitutionName(rs.getString("financialInstitutionname") != null ? rs.getString("financialInstitutionname") : "");
-            response.setWallettype(rs.getInt("wallettype"));
-            BigDecimal _balance = new BigDecimal(rs.getString("balance"));
-            BigDecimal _lien = new BigDecimal(rs.getString("lien"));
+            applyWalletType(response, rs);
+            BigDecimal _balance = parseDecimal(rs, "balance");
+            BigDecimal _lien = parseDecimal(rs, "lien");
             BigDecimal balance = _balance.subtract(_lien);
             response.setBalance(balance);
             response.setLien(_lien);
             response.setDate_created(rs.getString("creationdate"));
             response.setDate_updated(null);
-            switch (rs.getInt("wallettype")) {
-                case 1:
-                    response.setWalletTypeName("Merchant");
-                    break;
-                case 2:
-                    response.setWalletTypeName("PSSP");
-                    break;
-                case 3:
-                    response.setWalletTypeName("PTSP");
-                    break;
-                case 4:
-                    response.setWalletTypeName("Super Agent");
-                    break;
-                case 5:
-                    response.setWalletTypeName("Switch");
-                    break;
-                default:
-                    response.setWalletTypeName("Others");
-                    break;
-            }
             switch (rs.getInt("is_active")) {
                 case 0:
                     response.setStatus("Inactive");
@@ -721,35 +889,16 @@ public class WalletsService implements WalletsInterface {
             response.setCreator(rs.getString("creator"));
             response.setFinancialInstitutionCode(rs.getString("financialinstitutioncode") != null ? rs.getString("financialinstitutioncode") : "");
             response.setFinancialInstitutionName(rs.getString("financialInstitutionname") != null ? rs.getString("financialInstitutionname") : "");
-            response.setWallettype(rs.getInt("wallettype"));
-            response.setBaseAmount(rs.getString("baseAmount"));
-            BigDecimal _balance = new BigDecimal(rs.getString("balance"));
-            BigDecimal _lien = new BigDecimal(rs.getString("lien"));
+            applyWalletType(response, rs);
+            // Belema tbl_wallets has no baseAmount
+            response.setBaseAmount(null);
+            BigDecimal _balance = parseDecimal(rs, "balance");
+            BigDecimal _lien = parseDecimal(rs, "lien");
             BigDecimal balance = _balance.subtract(_lien);
             response.setBalance(balance);
             response.setLien(_lien);
             response.setDate_created(rs.getString("creationdate"));
             response.setDate_updated(null);
-            switch (rs.getInt("wallettype")) {
-                case 1:
-                    response.setWalletTypeName("Merchant");
-                    break;
-                case 2:
-                    response.setWalletTypeName("PSSP");
-                    break;
-                case 3:
-                    response.setWalletTypeName("PTSP");
-                    break;
-                case 4:
-                    response.setWalletTypeName("Super Agent");
-                    break;
-                case 5:
-                    response.setWalletTypeName("Switch");
-                    break;
-                default:
-                    response.setWalletTypeName("Others");
-                    break;
-            }
             switch (rs.getInt("is_active")) {
                 case 0:
                     response.setStatus("Inactive");
@@ -796,9 +945,9 @@ public class WalletsService implements WalletsInterface {
             }
 //            response.setFinancialInstitutionCode(rs.getString("financialInstitutionCode") != null ? rs.getString("financialInstitutionCode") : "");
 //            response.setFinancialInstitutionName(rs.getString("financialInstitutionName") != null ? rs.getString("financialInstitutionName") : "");
-            response.setWallettype(rs.getInt("wallettype"));
-            BigDecimal _balance = new BigDecimal(rs.getString("balance"));
-            BigDecimal _lien = new BigDecimal(rs.getString("lien"));
+            applyWalletType(response, rs);
+            BigDecimal _balance = parseDecimal(rs, "balance");
+            BigDecimal _lien = parseDecimal(rs, "lien");
             BigDecimal balance = _balance.subtract(_lien);
             response.setBalance(balance);
             response.setLien(_lien);

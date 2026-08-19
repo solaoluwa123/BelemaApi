@@ -154,4 +154,24 @@ public class WalletsController {
 
         return walletInterface.WalletApprovals(sessiontoken, wallet.getId(), wallet.getActionType(), wallet.getCreator());
     }
+
+    @RequestMapping(value = "/wallets/approve-funding", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity ApproveFunding(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody WalletModel wallet) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+
+        return walletInterface.ApproveInstitutionFunding(sessiontoken, wallet.getId(), wallet.getCreator());
+    }
+
+    @RequestMapping(value = "/wallets/reject-funding", method = RequestMethod.PUT, headers = "Accept=application/json")
+    public ResponseEntity RejectFunding(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody WalletModel wallet) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+
+        return walletInterface.RejectInstitutionFunding(sessiontoken, wallet.getId(), wallet.getCreator(), wallet.getNote());
+    }
 }

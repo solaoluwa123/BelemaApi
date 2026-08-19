@@ -94,4 +94,16 @@ public class AppEnvironmentConfig {
         }
         return tippingPoint;
     }
+
+    /**
+     * Table holding archived transactions. Deployments without an archival feed
+     * keep every transaction in the live table, so this points there by default.
+     */
+    public String getTransactionsArchiveTable() {
+        String table = env.getProperty("app.transactions.archive-table");
+        if (table == null || table.trim().isEmpty()) {
+            return "ajiswitch_db.tbl_creditfundtransfers";
+        }
+        return table.trim();
+    }
 }

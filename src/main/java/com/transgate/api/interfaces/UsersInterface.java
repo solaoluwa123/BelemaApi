@@ -41,13 +41,13 @@ public interface UsersInterface {
 
     public ResponseEntity Delete(String sessiontoken, int userid, String username);
     
-    public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username);
+    public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username, String email_address);
     
     public ResponseEntity UpdateNames(String sessiontoken, String firstname, String surname, String phone_number, String username);
     
     public ResponseEntity UpdatePassword(String sessiontoken, String security, String session_token, String username);
     
-    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact);
+    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode);
     
     public ResponseEntity GetUsersForActions(boolean systemUsers);
     

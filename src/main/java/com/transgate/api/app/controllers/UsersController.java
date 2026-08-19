@@ -282,7 +282,7 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.Edit(sessiontoken, user.getId(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getRoleid(), user.getUsername());
+        return usersInterface.Edit(sessiontoken, user.getId(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getRoleid(), user.getUsername(), user.getEmail_address());
     }
 
     @RequestMapping(value = "/users/update-names", method = RequestMethod.POST, headers = "Accept=application/json")
@@ -309,7 +309,7 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername(), false);
+        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername(), false, user.getInstitution());
     }
 
     @RequestMapping(value = "/users/contact/approval", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -318,7 +318,7 @@ public class UsersController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername(), true);
+        return usersInterface.UserApprovals(sessiontoken, user.getId(), user.getActionType(), user.getUsername(), true, user.getInstitution());
     }
 
     @RequestMapping(value = "/users/reject/{id}", method = RequestMethod.PUT, headers = "Accept=application/json")

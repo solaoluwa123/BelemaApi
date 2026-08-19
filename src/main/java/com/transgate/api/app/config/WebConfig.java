@@ -10,14 +10,9 @@ package com.transgate.api.app.config;
  * @author Olawoyin Samson
  */
 import com.transgate.api.app.AuthTokenInterceptor;
-import javax.sql.DataSource;
+import com.transgate.api.audit.AuditInterceptor;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.jdbc.DataSourceBuilder;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Primary;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 
@@ -30,10 +25,15 @@ public class WebConfig implements WebMvcConfigurer {
     @Autowired
     private AuthTokenInterceptor authTokenInterceptor;
 
+    @Autowired
+    private AuditInterceptor auditInterceptor;
+
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // Add the interceptor to all endpoints or specific paths
+        // Auth first so actor attributes are available to audit afterCompletion
         registry.addInterceptor(authTokenInterceptor)
+                .addPathPatterns("/**");
+        registry.addInterceptor(auditInterceptor)
                 .addPathPatterns("/**");
     }
     

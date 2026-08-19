@@ -7,11 +7,14 @@ package com.transgate.api.app.services;
 
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.interfaces.UsersInterface;
+import com.transgate.api.audit.AuditConstants;
+import com.transgate.api.audit.AuditService;
 import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.MenuModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.RoleModel;
 import com.transgate.api.models.UserModel;
+import com.transgate.api.util.PlatformRole;
 import com.transgate.api.util.Randomizer;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import static java.lang.Integer.parseInt;
@@ -45,6 +48,9 @@ public class UsersService implements UsersInterface {
     @Qualifier("jdbcTemplate")
     JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private AuditService auditService;
+
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
     private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
@@ -60,12 +66,66 @@ public class UsersService implements UsersInterface {
         try {
             int role;
 
-            String SQL = "SELECT role FROM tbl_user_details WHERE email_address = ? OR username = ? AND deleted = 0 AND session_token = ?";
+            String SQL = "SELECT role FROM tbl_user_details WHERE (email_address = ? OR username = ?) AND deleted = 0 AND session_token = ?";
             role = jdbcTemplate.queryForObject(SQL, new Object[]{username, username, session_token}, int.class);
             return role;
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return -100;
+        }
+    }
+
+    /**
+     * Resolve the calling user's role from the session token alone.
+     * Prefer this for admin mutations where the request body/path carries the
+     * *target* user's username (e.g. /users/edit, DELETE /users/{id}/{username}),
+     * not the actor's identity.
+     */
+    private int GetActorRole(String session_token) {
+        if (session_token == null || session_token.isBlank()) {
+            return -100;
+        }
+        try {
+            Integer role = jdbcTemplate.queryForObject(
+                    "SELECT role FROM tbl_user_details WHERE session_token = ? AND deleted = 0 LIMIT 1",
+                    new Object[]{session_token},
+                    Integer.class);
+            return role != null ? role : -100;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return -100;
+        }
+    }
+
+    private void auditAuth(String email, String username, Integer role, String action, String outcome, int httpStatus, String details) {
+        try {
+            if (auditService != null) {
+                auditService.logAuthEvent(email, username, role, action, outcome, httpStatus, details);
+            }
+        } catch (Exception ex) {
+            logger.warn("Audit auth event failed: {}", ex.getMessage());
+        }
+    }
+
+    private Integer lookupRoleByEmail(String email) {
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT role FROM tbl_user_details WHERE (email_address = ? OR username = ?) AND deleted = 0 LIMIT 1",
+                    new Object[]{email, email},
+                    Integer.class);
+        } catch (DataAccessException ex) {
+            return null;
+        }
+    }
+
+    private String lookupUsernameByEmail(String email) {
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT username FROM tbl_user_details WHERE (email_address = ? OR username = ?) AND deleted = 0 LIMIT 1",
+                    new Object[]{email, email},
+                    String.class);
+        } catch (DataAccessException ex) {
+            return email;
         }
     }
 
@@ -102,6 +162,13 @@ public class UsersService implements UsersInterface {
         }
     }
 
+    private int insertPendingUserOperation(String username, String hashPassword, String firstname, String surname,
+            String phone_number, String email_address, int roleid, String createdBy, String actionType, String note) {
+        String SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+        logger.info("Executing SQL (tbl_user_details_operations): " + SQL);
+        return jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid, actionType, note});
+    }
+
     private boolean CheckUserPending(String username, String email_address, String actionType) {
         boolean found;
         try {
@@ -121,11 +188,14 @@ public class UsersService implements UsersInterface {
     private List<UserModel> GetUserFromPendings(int id, String actionType) {
         try {
             String SQL;
-            SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, b.role_name "
+            SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
+                    + "b.role_name, c.financial_institution_code "
                     + "from tbl_user_details_operations a "
                     + "LEFT JOIN tbl_role b "
                     + "ON a.role = b.id "
-                    + "WHERE a.id = ? AND a.actionType = ?"
+                    + "LEFT JOIN tbl_financial_institution_contacts_operations c "
+                    + "ON a.email_address = c.email_address AND c.actionType = a.actionType "
+                    + "WHERE a.id = ? AND a.actionType = ? "
                     + "ORDER BY a.id DESC";
             List<UserModel> users = jdbcTemplate.query(SQL, new Object[]{id, actionType}, new UserMapper2());
             return users;
@@ -136,14 +206,107 @@ public class UsersService implements UsersInterface {
         }
     }
 
+    /**
+     * On user create approval for role 4 (institution contact), promote pending contact
+     * into tbl_financial_institution_contacts (not the _operations table — that is staging only).
+     */
+    private void ApprovePendingFinancialInstitutionContact(UserModel user, String financialInstitutionCode) {
+        String email = user.getEmail_address();
+        try {
+            int existing = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM tbl_financial_institution_contacts WHERE email_address = ?",
+                    new Object[]{email},
+                    int.class);
+            if (existing > 0) {
+                jdbcTemplate.update(
+                        "DELETE FROM tbl_financial_institution_contacts_operations WHERE email_address = ? AND actionType = 'create'",
+                        email);
+                logger.info("Contact already exists for {}; cleared pending contact operations.", email);
+                return;
+            }
+
+            String institutionCode = null;
+            String firstname = user.getFirstname();
+            String surname = user.getSurname();
+            String phone = user.getPhone_number();
+
+            String SQL = "SELECT financial_institution_code, firstname, surname, phone_number "
+                    + "FROM tbl_financial_institution_contacts_operations "
+                    + "WHERE email_address = ? AND actionType = 'create' "
+                    + "ORDER BY id DESC LIMIT 1";
+            List<Map<String, Object>> pending = jdbcTemplate.queryForList(SQL, email);
+            if (!pending.isEmpty()) {
+                Map<String, Object> row = pending.get(0);
+                if (row.get("financial_institution_code") != null) {
+                    institutionCode = String.valueOf(row.get("financial_institution_code"));
+                }
+                if (row.get("firstname") != null) {
+                    firstname = String.valueOf(row.get("firstname"));
+                }
+                if (row.get("surname") != null) {
+                    surname = String.valueOf(row.get("surname"));
+                }
+                if (row.get("phone_number") != null) {
+                    phone = String.valueOf(row.get("phone_number"));
+                }
+            }
+
+            if (institutionCode == null || institutionCode.isEmpty()) {
+                if (financialInstitutionCode != null && !financialInstitutionCode.isEmpty()) {
+                    institutionCode = financialInstitutionCode;
+                } else if (user.getInstitution() != null && !user.getInstitution().isEmpty()) {
+                    institutionCode = user.getInstitution();
+                } else if (user.getNote() != null && !user.getNote().isEmpty()
+                        && !"Create user account".equals(user.getNote())
+                        && !"Create account".equals(user.getNote())
+                        && !"Create contact account".equals(user.getNote())
+                        && !"Create contact".equals(user.getNote())
+                        && !"Edit account".equals(user.getNote())
+                        && !"Edit contact account".equals(user.getNote())
+                        && !"Delete account".equals(user.getNote())
+                        && !"Delete contact account".equals(user.getNote())) {
+                    institutionCode = user.getNote();
+                }
+            }
+
+            if (institutionCode == null || institutionCode.isEmpty()) {
+                logger.error("Cannot approve role 4 contact {}: no financial_institution_code in pending operations, note, or approval request.", email);
+                throw new IllegalStateException("Missing financial institution code for contact " + email);
+            }
+
+            SQL = "INSERT INTO tbl_financial_institution_contacts("
+                    + "financial_institution_code, firstname, surname, phone_number, email_address, date_created) "
+                    + "VALUES(?, ?, ?, ?, ?, now())";
+            int inserted = jdbcTemplate.update(SQL,
+                    new Object[]{institutionCode, firstname, surname, phone, email});
+            if (inserted > 0) {
+                jdbcTemplate.update(
+                        "DELETE FROM tbl_financial_institution_contacts_operations WHERE email_address = ? AND actionType = 'create'",
+                        email);
+                logger.info("Approved contact saved to tbl_financial_institution_contacts for {} (institution={})", email, institutionCode);
+            } else {
+                throw new IllegalStateException("Insert into tbl_financial_institution_contacts failed for " + email);
+            }
+        } catch (DataAccessException ex) {
+            logger.error("Failed to promote pending contact for {}: {}", email, ex.getMessage());
+            throw ex;
+        }
+    }
+
     @Override
     public ResponseEntity ClearUserSession(String sessiontoken, String username) {
         try {
+            Integer role = lookupRoleByEmail(username);
+            String displayName = lookupUsernameByEmail(username);
             String SQL = "UPDATE tbl_user_details SET session_token = '' WHERE session_token = ? AND username = ?";
             jdbcTemplate.update(SQL, new Object[]{sessiontoken, username});
+            auditAuth(username, displayName, role, AuditConstants.ACTION_LOGOUT,
+                    AuditConstants.OUTCOME_SUCCESS, 202, "Logout successful");
             return responseManager.ResponseAccepted();
         } catch (DataAccessException ex) {
             System.out.println(ex);
+            auditAuth(username, username, null, AuditConstants.ACTION_LOGOUT,
+                    AuditConstants.OUTCOME_FAILURE, 401, "Logout failed");
             return responseManager.ResponseUnathorized();
         }
     }
@@ -254,7 +417,7 @@ public class UsersService implements UsersInterface {
                 }
 
                 List<MenuModel> menu;
-                if (userRoleid < 5) {
+                if (PlatformRole.hasTransgateMenu(userRoleid)) {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
@@ -287,7 +450,7 @@ public class UsersService implements UsersInterface {
                 } else {
                     response.setTransgateMenu(new ArrayList<>());
                 }
-                if (userRoleid < 4) {
+                if (PlatformRole.hasSparkpayMenu(userRoleid)) {
                     SQL = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM `tbl_menus` a "
                             + "LEFT JOIN `tbl_menus` b "
@@ -310,6 +473,8 @@ public class UsersService implements UsersInterface {
                     List<MenuModel> eM = new ArrayList<>();
                     response.setSparkpayMenu(eM);
                 }
+                auditAuth(username, response.getUsername(), userRoleid,
+                        AuditConstants.ACTION_LOGIN_2FA, AuditConstants.OUTCOME_SUCCESS, 200, "2FA login successful");
                 return responseManager.ResponseOk(response);
             } else {
                 SQL = "UPDATE tbl_user_details SET attempts_left = attempts_left - 1 WHERE email_address = ?";
@@ -317,6 +482,8 @@ public class UsersService implements UsersInterface {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Invalid 2FA");
+                auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
+                        AuditConstants.ACTION_LOGIN_2FA_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "Invalid 2FA code");
                 return responseManager.ResponseOk(response);
             }
         } catch (DataAccessException ex) {
@@ -325,9 +492,18 @@ public class UsersService implements UsersInterface {
                 response.setCode(400);
                 response.setStatus("failed");
                 response.setMessage("Invalid username or password");
+                auditAuth(username, username, null,
+                        AuditConstants.ACTION_LOGIN_2FA_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "User not found");
                 return responseManager.ResponseOk(response);
             }
             System.out.println("error>>>>" + ex.getMessage());
+            auditAuth(username, username, null,
+                    AuditConstants.ACTION_LOGIN_2FA_FAILED, AuditConstants.OUTCOME_FAILURE, 401, "2FA login error");
+            return responseManager.ResponseUnathorized();
+        } catch (Exception ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            auditAuth(username, username, null,
+                    AuditConstants.ACTION_LOGIN_2FA_FAILED, AuditConstants.OUTCOME_FAILURE, 401, "Unexpected 2FA error");
             return responseManager.ResponseUnathorized();
         }
     }
@@ -425,6 +601,8 @@ public class UsersService implements UsersInterface {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
+                auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
+                        AuditConstants.ACTION_LOGIN_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "Account locked");
                 return responseManager.ResponseOk(response);
             }
 
@@ -475,6 +653,8 @@ public class UsersService implements UsersInterface {
                     response.setCode(200);
                     response.setStatus("success");
                     response.setMessage("Login successful");
+                    auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
+                            AuditConstants.ACTION_LOGIN, AuditConstants.OUTCOME_SUCCESS, 200, "Password ok; 2FA required");
                     return responseManager.ResponseOk(response);
                 }
 
@@ -541,7 +721,7 @@ public class UsersService implements UsersInterface {
 
                 // Handling menu based on user role
                 List<MenuModel> menu;
-                if (userRoleid < 5) {
+                if (PlatformRole.hasTransgateMenu(userRoleid)) {
                     sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
                             + "b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
@@ -564,7 +744,7 @@ public class UsersService implements UsersInterface {
                 }
 
                 // Retrieve secondary menu information based on role
-                if (userRoleid < 4) {
+                if (PlatformRole.hasSparkpayMenu(userRoleid)) {
                     sql = "SELECT a.id, a.role_id, a.label, a.icon, a.path, b.id as child_id, "
                             + "b.label as child_label, b.path as child_path, b.parent_id "
                             + "FROM tbl_menus a LEFT JOIN tbl_menus b ON a.id = b.parent_id "
@@ -583,6 +763,8 @@ public class UsersService implements UsersInterface {
                 menu = jdbcTemplate.query(sql, new Object[]{userRoleid}, new MenuMapper());
                 response.setSparkpayMenu(!menu.isEmpty() ? menu : new ArrayList<>());
                 logger.info("Login process completed successfully for user: {}", username);
+                auditAuth(username, response.getUsername(), userRoleid,
+                        AuditConstants.ACTION_LOGIN, AuditConstants.OUTCOME_SUCCESS, 200, "Login successful");
                 return responseManager.ResponseOk(response);
             } else {
                 logger.info("Invalid password provided for user: {}", username);
@@ -592,6 +774,8 @@ public class UsersService implements UsersInterface {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Invalid username or password");
+                auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
+                        AuditConstants.ACTION_LOGIN_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "Invalid password");
                 return responseManager.ResponseOk(response);
             }
         } catch (DataAccessException ex) {
@@ -600,11 +784,17 @@ public class UsersService implements UsersInterface {
                 response.setCode(400);
                 response.setStatus("failed");
                 response.setMessage("Invalid username or password");
+                auditAuth(username, username, null,
+                        AuditConstants.ACTION_LOGIN_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "User not found");
                 return responseManager.ResponseOk(response);
             }
+            auditAuth(username, username, null,
+                    AuditConstants.ACTION_LOGIN_FAILED, AuditConstants.OUTCOME_FAILURE, 401, "Login error");
             return responseManager.ResponseUnathorized();
         } catch (Exception ex) {
             logger.info("Unexpected error while processing login for user {}: {}", username, ex.getMessage(), ex);
+            auditAuth(username, username, null,
+                    AuditConstants.ACTION_LOGIN_FAILED, AuditConstants.OUTCOME_FAILURE, 401, "Unexpected login error");
             return responseManager.ResponseUnathorized();
         }
     }
@@ -828,7 +1018,7 @@ public class UsersService implements UsersInterface {
                         + "ON a.email_address = c.email_address "
                         + "LEFT JOIN tbl_financial_institutions d "
                         + "ON c.financial_institution_code = d.code "
-                        + "WHERE a.deleted = 0 AND role < 4 "
+                        + "WHERE a.deleted = 0 AND a.role BETWEEN " + PlatformRole.ADMIN + " AND " + PlatformRole.APPROVER + " "
                         + "ORDER BY a.id DESC";
             } else {
                 SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, "
@@ -839,13 +1029,13 @@ public class UsersService implements UsersInterface {
                         + "ON a.role = b.id "
                         + "LEFT JOIN tbl_map_card_users_institution c "
                         + "ON a.email_address = c.user_email "
-                        + "WHERE a.deleted = 0 AND role > 4 "
+                        + "WHERE a.deleted = 0 AND a.role BETWEEN " + PlatformRole.OTHER_MIN + " AND " + PlatformRole.OTHER_MAX + " "
                         + "ORDER BY a.id DESC";
             }
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage(systemUsers ? "System USers" : "Other Users");
+            networkResponse.setMessage(systemUsers ? "System Users" : "Other Users");
             networkResponse.setData((ArrayList) users);
 
             return responseManager.ResponseOk(networkResponse);
@@ -898,6 +1088,11 @@ public class UsersService implements UsersInterface {
                 networkResponse.setStatus("success");
                 networkResponse.setMessage("Email address already exists");
                 return responseManager.ResponseOk(networkResponse);
+            }
+
+            if (!PlatformRole.isSystemUserRole(roleid)) {
+                logger.info("Create rejected: roleid {} is not a system user role (1-3)", roleid);
+                return responseManager.ResponseBadRequest("System users must have role 1-3");
             }
 
             // Generate a reference and retrieve the user role.
@@ -960,11 +1155,25 @@ public class UsersService implements UsersInterface {
                         return responseManager.ResponseOk(networkResponse);
                     }
                     // Insert a record into tbl_user_details_operations for pending creation.
-                    SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
-                    logger.info("Executing SQL (tbl_user_details_operations): " + SQL);
-                    retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
-                    logger.info("tbl_user_details_operations insert returned: " + retval);
-
+                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
+                    if (retval > 0) {
+                        logger.info("Pending account creation recorded for username: " + username);
+                        return responseManager.ResponseAccepted();
+                    } else {
+                        logger.info("Insert into tbl_user_details_operations failed for username: " + username);
+                        return responseManager.ResponseInternalServerError();
+                    }
+                case 3:
+                    userPending = CheckUserPending(username, email_address, "create");
+                    if (userPending) {
+                        logger.info("User pending creation already exists for username: " + username + " or email: " + email_address);
+                        NetworkResponse networkResponse = new NetworkResponse();
+                        networkResponse.setCode(200);
+                        networkResponse.setStatus("failed");
+                        networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
+                        return responseManager.ResponseOk(networkResponse);
+                    }
+                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     if (retval > 0) {
                         logger.info("Pending account creation recorded for username: " + username);
                         return responseManager.ResponseAccepted();
@@ -1016,6 +1225,11 @@ public class UsersService implements UsersInterface {
                 networkResponse.setStatus("success");
                 networkResponse.setMessage("Email address already exists");
                 return responseManager.ResponseOk(networkResponse);
+            }
+
+            if (!PlatformRole.isOtherUserRole(roleid)) {
+                logger.info("CreateOther rejected: roleid {} is not an other-user role (4-8)", roleid);
+                return responseManager.ResponseBadRequest("Other users must have role 4-8");
             }
 
             // Generate a reference (if needed) and retrieve the user role.
@@ -1087,9 +1301,7 @@ public class UsersService implements UsersInterface {
                         networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'create', 'Create user account', now())";
-                    logger.info("Executing SQL (tbl_user_details_operations): " + SQL);
-                    retval = jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid});
+                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     logger.info("tbl_user_details_operations insert result: " + retval);
 
                     if (retval > 0) {
@@ -1136,10 +1348,12 @@ public class UsersService implements UsersInterface {
                 response.setMessage("Can not delete an administrator account");
                 return responseManager.ResponseOk(response);
             }
-            int userrole = GetUserRole(username, sessiontoken);
+            // Authorize the caller from session — path {username} is the target being deleted.
+            int userrole = GetActorRole(sessiontoken);
+            logger.info("Delete user id={} target={} actorRole={}", userid, username, userrole);
             int retVal;
             switch (userrole) {
-                case 1:
+                case PlatformRole.ADMIN:
                     SQL = "UPDATE tbl_user_details SET deleted = 1 WHERE id = ?";
                     retVal = jdbcTemplate.update(SQL, new Object[]{userid});
                     if (retVal > 0) {
@@ -1147,7 +1361,7 @@ public class UsersService implements UsersInterface {
                     } else {
                         return responseManager.ResponseInternalServerError();
                     }
-                case 2:
+                case PlatformRole.OPERATOR:
                     boolean userPending = CheckUserPending(loginResponse.getUsername(), loginResponse.getEmail_address(), "delete");
                     if (userPending) {
                         NetworkResponse networkResponse = new NetworkResponse();
@@ -1233,31 +1447,62 @@ public class UsersService implements UsersInterface {
     }
 
     @Override
-    public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username) {
+    public ResponseEntity Edit(String sessiontoken, int userid, String firstname, String surname, String phone_number, int roleid, String username, String email_address) {
         try {
             String SQL;
-            int userrole = GetUserRole(username, sessiontoken);
+            // Authorize the caller from session — body.username is the target being edited.
+            int userrole = GetActorRole(sessiontoken);
+            logger.info("Edit user id={} targetUsername={} email={} actorRole={}", userid, username, email_address, userrole);
+
+            ResponseEntity existingEntity = GetUserById(sessiontoken, userid);
+            LoginResponse existing = existingEntity != null && existingEntity.getBody() instanceof LoginResponse
+                    ? (LoginResponse) existingEntity.getBody()
+                    : new LoginResponse();
+            if (existing.getId() == 0) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("User not found");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            String newUsername = (username != null && !username.isBlank()) ? username.trim() : existing.getUsername();
+            String newFirstname = (firstname != null && !firstname.isBlank()) ? firstname.trim() : existing.getFirstname();
+            String newSurname = (surname != null && !surname.isBlank()) ? surname.trim() : existing.getSurname();
+            String newPhone = phone_number != null ? phone_number.trim() : existing.getPhone_number();
+            String newEmail = (email_address != null && !email_address.isBlank())
+                    ? email_address.trim().toLowerCase()
+                    : existing.getEmail_address();
+            String oldEmail = existing.getEmail_address() != null ? existing.getEmail_address().trim().toLowerCase() : "";
+
+            if (!newEmail.equalsIgnoreCase(oldEmail) && CheckExistingUser(newEmail)) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Email already in use");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
             int retVal;
             switch (userrole) {
-                case 1:
-                    SQL = "UPDATE tbl_user_details SET firstname = ?, surname = ?, phone_number = ?, role = ? WHERE id = ?";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{firstname, surname, phone_number, roleid, userid});
+                case PlatformRole.ADMIN:
+                    // Administrator: apply changes immediately (including email used for login).
+                    SQL = "UPDATE tbl_user_details SET username = ?, firstname = ?, surname = ?, phone_number = ?, email_address = ?, role = ?, date_updated = now() WHERE id = ?";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{newUsername, newFirstname, newSurname, newPhone, newEmail, roleid, userid});
                     if (retVal > 0) {
+                        if (!newEmail.equalsIgnoreCase(oldEmail) && !oldEmail.isEmpty()) {
+                            // Login joins sparkpayweb_db.tbl_users.username to tbl_user_details.email_address.
+                            jdbcTemplate.update(
+                                    "UPDATE sparkpayweb_db.tbl_users SET username = ? WHERE username = ?",
+                                    new Object[]{newEmail, oldEmail});
+                        }
                         return responseManager.ResponseAccepted();
                     } else {
                         return responseManager.ResponseInternalServerError();
                     }
-                case 2:
-                    ResponseEntity responseEntity = GetUserById(sessiontoken, userid);
-                    LoginResponse loginResponse = responseEntity != null ? (LoginResponse) responseEntity.getBody() : new LoginResponse();
-                    if (loginResponse.getId() == 0) {
-                        NetworkResponse networkResponse = new NetworkResponse();
-                        networkResponse.setCode(200);
-                        networkResponse.setStatus("failed");
-                        networkResponse.setMessage("User not found");
-                        return responseManager.ResponseOk(networkResponse);
-                    }
-                    boolean userPending = CheckUserPending(loginResponse.getUsername(), loginResponse.getEmail_address(), "edit");
+                case PlatformRole.OPERATOR:
+                    // Operator: queue edit for Approver/Admin approval.
+                    boolean userPending = CheckUserPending(existing.getUsername(), existing.getEmail_address(), "edit");
                     if (userPending) {
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
@@ -1265,11 +1510,28 @@ public class UsersService implements UsersInterface {
                         networkResponse.setMessage("Account already pending for edit");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    String note = loginResponse.getFirstname().equals(firstname) || firstname == null ? "" : "Change firstname from " + loginResponse.getFirstname() + " to " + firstname;
-                    note = loginResponse.getSurname().equals(surname) || surname == null ? note : !note.equals("") ? note + ", change surname from " + loginResponse.getSurname() + " to " + surname : "Change surname from " + loginResponse.getSurname() + " to " + surname;
-                    note = loginResponse.getPhone_number().equals(phone_number) || phone_number == null ? note : !note.equals("") ? note + ", change phone number from " + loginResponse.getPhone_number() + " to " + phone_number : "Change phone number from " + loginResponse.getPhone_number() + " to " + phone_number;
-                    SQL = "INSERT INTO tbl_user_details_operations(username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', ?, now())";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{loginResponse.getUsername(), loginResponse.getFirstname().equals(firstname) || firstname == null ? loginResponse.getFirstname() : firstname, loginResponse.getSurname().equals(surname) || surname == null ? loginResponse.getSurname() : surname, loginResponse.getPhone_number().equals(phone_number) || phone_number == null ? loginResponse.getPhone_number() : phone_number, loginResponse.getEmail_address(), roleid, note});
+                    String note = "";
+                    if (!safeEq(existing.getUsername(), newUsername)) {
+                        note = appendNote(note, "Change username from " + existing.getUsername() + " to " + newUsername);
+                    }
+                    if (!safeEq(existing.getFirstname(), newFirstname)) {
+                        note = appendNote(note, "Change firstname from " + existing.getFirstname() + " to " + newFirstname);
+                    }
+                    if (!safeEq(existing.getSurname(), newSurname)) {
+                        note = appendNote(note, "Change surname from " + existing.getSurname() + " to " + newSurname);
+                    }
+                    if (!safeEq(existing.getPhone_number(), newPhone)) {
+                        note = appendNote(note, "Change phone number from " + existing.getPhone_number() + " to " + newPhone);
+                    }
+                    if (!newEmail.equalsIgnoreCase(oldEmail)) {
+                        note = appendNote(note, "Change email from " + oldEmail + " to " + newEmail);
+                    }
+                    if (existing.getRoleid() != roleid) {
+                        note = appendNote(note, "Change role from " + existing.getRoleid() + " to " + roleid);
+                    }
+                    // Store target user id so approval can update by id even when email changes.
+                    SQL = "INSERT INTO tbl_user_details_operations(id, username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, 'edit', ?, now())";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{userid, newUsername, newFirstname, newSurname, newPhone, newEmail, roleid, note});
                     if (retVal > 0) {
                         return responseManager.ResponseAccepted();
                     } else {
@@ -1284,8 +1546,20 @@ public class UsersService implements UsersInterface {
         }
     }
 
+    private static boolean safeEq(String a, String b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.equals(b);
+    }
+
+    private static String appendNote(String note, String part) {
+        if (part == null || part.isBlank()) return note == null ? "" : note;
+        if (note == null || note.isBlank()) return part;
+        return note + ", " + part;
+    }
+
     @Override
-    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact) {
+    public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode) {
         try {
             String SQL;
             int userrole = GetUserRole(username, sessiontoken);
@@ -1312,28 +1586,78 @@ public class UsersService implements UsersInterface {
                         case "edit":
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            SQL = "UPDATE tbl_user_details SET firstname = ?, surname = ?, phone_number = ?, role = ? WHERE username = ? AND email_address = ?";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getRoleid(), users.get(0).getUsername(), users.get(0).getEmail_address()});
+                            UserModel pendingEdit = users.get(0);
+                            String previousEmail = null;
+                            try {
+                                previousEmail = jdbcTemplate.queryForObject(
+                                        "SELECT email_address FROM tbl_user_details WHERE id = ? AND deleted = 0",
+                                        new Object[]{pendingEdit.getId()},
+                                        String.class);
+                            } catch (DataAccessException ignore) {
+                                previousEmail = null;
+                            }
+                            SQL = "UPDATE tbl_user_details SET username = ?, firstname = ?, surname = ?, phone_number = ?, email_address = ?, role = ?, date_updated = now() WHERE id = ?";
+                            retVal2 = jdbcTemplate.update(SQL, new Object[]{
+                                pendingEdit.getUsername(),
+                                pendingEdit.getFirstname(),
+                                pendingEdit.getSurname(),
+                                pendingEdit.getPhone_number(),
+                                pendingEdit.getEmail_address(),
+                                pendingEdit.getRoleid(),
+                                pendingEdit.getId()
+                            });
+                            if (retVal2 > 0
+                                    && previousEmail != null
+                                    && pendingEdit.getEmail_address() != null
+                                    && !previousEmail.equalsIgnoreCase(pendingEdit.getEmail_address())) {
+                                jdbcTemplate.update(
+                                        "UPDATE sparkpayweb_db.tbl_users SET username = ? WHERE username = ?",
+                                        new Object[]{pendingEdit.getEmail_address().trim().toLowerCase(), previousEmail.trim().toLowerCase()});
+                            }
                             if (isContact) {
                                 SQL = "DELETE FROM tbl_financial_institution_contacts_operations WHERE email_address = ? AND actionType = 'edit'";
-                                jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address()});
-                                SQL = "UPDATE tbl_financial_institution_contacts SET firstname = ?, surname = ?, phone_number = ? WHERE email_address = ?";
-                                jdbcTemplate.update(SQL, new Object[]{users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getEmail_address()});
+                                jdbcTemplate.update(SQL, new Object[]{pendingEdit.getEmail_address()});
+                                SQL = "UPDATE tbl_financial_institution_contacts SET firstname = ?, surname = ?, phone_number = ?"
+                                        + (previousEmail != null ? ", email_address = ?" : "")
+                                        + " WHERE email_address = ?";
+                                if (previousEmail != null) {
+                                    jdbcTemplate.update(SQL, new Object[]{
+                                        pendingEdit.getFirstname(),
+                                        pendingEdit.getSurname(),
+                                        pendingEdit.getPhone_number(),
+                                        pendingEdit.getEmail_address(),
+                                        previousEmail
+                                    });
+                                } else {
+                                    jdbcTemplate.update(
+                                            "UPDATE tbl_financial_institution_contacts SET firstname = ?, surname = ?, phone_number = ? WHERE email_address = ?",
+                                            new Object[]{
+                                                pendingEdit.getFirstname(),
+                                                pendingEdit.getSurname(),
+                                                pendingEdit.getPhone_number(),
+                                                pendingEdit.getEmail_address()
+                                            });
+                                }
                             }
-//                            if (retVal > 0 && retVal2 > 0)
                             return responseManager.ResponseAccepted();
-//                            else
-//                                return responseManager.ResponseInternalServerError();
                         case "create":
+                            UserModel pendingUser = users.get(0);
+                            if (isContact || pendingUser.getRoleid() == 4) {
+                                String institutionForContact = financialInstitutionCode;
+                                if (institutionForContact == null || institutionForContact.isEmpty()) {
+                                    institutionForContact = pendingUser.getInstitution();
+                                }
+                                ApprovePendingFinancialInstitutionContact(pendingUser, institutionForContact);
+                            }
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             String reference = randomizer.GenerateReference();
                             String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
                             SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                            jdbcTemplate.update(SQL, new Object[]{users.get(0).getEmail_address(), users.get(0).getSecurity(), ref});
+                            jdbcTemplate.update(SQL, new Object[]{pendingUser.getEmail_address(), pendingUser.getSecurity(), ref});
                             SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{users.get(0).getUsername(), users.get(0).getFirstname(), users.get(0).getSurname(), users.get(0).getPhone_number(), users.get(0).getEmail_address(), users.get(0).getRoleid()});
+                            retVal2 = jdbcTemplate.update(SQL, new Object[]{pendingUser.getUsername(), pendingUser.getFirstname(), pendingUser.getSurname(), pendingUser.getPhone_number(), pendingUser.getEmail_address(), pendingUser.getRoleid()});
                             if (retVal > 0 && retVal2 > 0) {
                                 LoginResponse response = new LoginResponse();
                                 response.setCode(201);
@@ -1341,7 +1665,7 @@ public class UsersService implements UsersInterface {
                                 response.setMessage("Account approved");
                                 response.setFirstname(ref);
                                 response.setSurname(code);
-                                response.setUsername(users.get(0).getEmail_address());
+                                response.setUsername(pendingUser.getEmail_address());
                                 return responseManager.ResponseOk(response);
                             } //                                return responseManager.ResponseAccepted();
                             else {
@@ -1360,6 +1684,13 @@ public class UsersService implements UsersInterface {
             } else {
                 return responseManager.ResponseUnathorized();
             }
+        } catch (IllegalStateException ex) {
+            logger.error("User approval failed: {}", ex.getMessage());
+            NetworkResponse networkResponse = new NetworkResponse();
+            networkResponse.setCode(500);
+            networkResponse.setStatus("failed");
+            networkResponse.setMessage(ex.getMessage());
+            return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
@@ -1372,11 +1703,22 @@ public class UsersService implements UsersInterface {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             if (systemUsers) {
-                SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, b.role_name "
+                SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
+                        + "b.role_name, "
+                        + "COALESCE(c.financial_institution_code, cop.financial_institution_code, d.institution_id) as financial_institution_code, "
+                        + "COALESCE(fi.name, d.institution_name) as institution_name "
                         + "from tbl_user_details_operations a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
-                        + "WHERE a.role < 4 "
+                        + "LEFT JOIN tbl_financial_institution_contacts c "
+                        + "ON a.email_address = c.email_address "
+                        + "LEFT JOIN tbl_financial_institution_contacts_operations cop "
+                        + "ON cop.email_address = a.email_address AND cop.actionType = a.actionType "
+                        + "LEFT JOIN tbl_map_card_users_institution d "
+                        + "ON a.email_address = d.user_email "
+                        + "LEFT JOIN tbl_financial_institutions fi "
+                        + "ON fi.code = COALESCE(c.financial_institution_code, cop.financial_institution_code, d.institution_id) "
+                        + "WHERE a.role BETWEEN " + PlatformRole.ADMIN + " AND " + PlatformRole.APPROVER + " "
                         + "ORDER BY a.id DESC";
             } else {
                 SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
@@ -1387,13 +1729,13 @@ public class UsersService implements UsersInterface {
                         + "ON a.role = b.id "
                         + "LEFT JOIN tbl_map_card_users_institution c "
                         + "ON a.email_address = c.user_email "
-                        + "WHERE a.role > 4 "
+                        + "WHERE a.role BETWEEN " + PlatformRole.OTHER_MIN + " AND " + PlatformRole.OTHER_MAX + " "
                         + "ORDER BY a.id DESC";
             }
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper2());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
-            networkResponse.setMessage(systemUsers ? "Pending System Users" : "Pending Other Users");
+            networkResponse.setMessage(systemUsers ? "Pending Users" : "Pending Other Users");
             networkResponse.setData((ArrayList) users);
             return responseManager.ResponseOk(networkResponse);
 
@@ -1410,14 +1752,17 @@ public class UsersService implements UsersInterface {
             String SQL;
             SQL = "SELECT a.id, a.username, a.password, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.actionType, a.note, a.date_created, "
                     + "b.role_name, "
-                    + "c.financial_institution_code, d.name as institution_name  "
+                    + "COALESCE(c.financial_institution_code, cop.financial_institution_code) as financial_institution_code, "
+                    + "d.name as institution_name  "
                     + "from tbl_user_details_operations a "
                     + "LEFT JOIN tbl_role b "
                     + "ON a.role = b.id "
                     + "LEFT JOIN tbl_financial_institution_contacts c "
                     + "ON a.email_address = c.email_address "
+                    + "LEFT JOIN tbl_financial_institution_contacts_operations cop "
+                    + "ON cop.email_address = a.email_address AND cop.actionType = a.actionType "
                     + "LEFT JOIN tbl_financial_institutions d "
-                    + "ON c.financial_institution_code = d.code "
+                    + "ON d.code = COALESCE(c.financial_institution_code, cop.financial_institution_code) "
                     + "WHERE a.role = 4 "
                     + "ORDER BY a.id DESC";
             List<UserModel> users = jdbcTemplate.query(SQL, new UserMapper2());
@@ -1476,9 +1821,31 @@ public class UsersService implements UsersInterface {
             response.setNote(rs.getString("note"));
             response.setActionType(rs.getString("actionType"));
             response.setSecurity(rs.getString("password"));
-            response.setInstitution(hasColumn(rs, "financial_institution_code") ? rs.getString("financial_institution_code") : "");
-            response.setInstitutionName(hasColumn(rs, "institution_name") ? rs.getString("institution_name") : "");
+            String institutionCode = hasColumn(rs, "financial_institution_code") ? rs.getString("financial_institution_code") : "";
+            String institutionName = hasColumn(rs, "institution_name") ? rs.getString("institution_name") : "";
+            if (institutionCode == null) {
+                institutionCode = "";
+            }
+            if (institutionName == null) {
+                institutionName = "";
+            }
+            response.setInstitution(institutionCode);
+            response.setInstitutionName(institutionName);
+            response.setFinancial_institution_code(institutionCode);
+            response.setFinancial_institution_name(institutionName);
+            mapOperationSubmitter(response, rs);
             return response;
+        }
+    }
+
+    private static void mapOperationSubmitter(UserModel response, ResultSet rs) throws SQLException {
+        if (!hasColumn(rs, "created_by")) {
+            return;
+        }
+        String submitter = rs.getString("created_by");
+        if (submitter != null && !submitter.isEmpty()) {
+            response.setCreator(submitter);
+            response.setCreated_by(submitter);
         }
     }
 

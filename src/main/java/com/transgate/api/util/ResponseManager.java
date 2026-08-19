@@ -25,6 +25,14 @@ public class ResponseManager {
         networkResponse.setMessage("Invalid value in header");
         return new ResponseEntity(networkResponse, HttpStatus.FORBIDDEN);
     }
+
+    public ResponseEntity ResponseForbidden(String message) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        networkResponse.setCode(403);
+        networkResponse.setStatus("forbidden");
+        networkResponse.setMessage(message);
+        return new ResponseEntity(networkResponse, HttpStatus.FORBIDDEN);
+    }
     
     public ResponseEntity InvalidSession() {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -71,10 +79,14 @@ public class ResponseManager {
     }
     
     public ResponseEntity ResponseBadRequest() {
+        return ResponseBadRequest("Bad request");
+    }
+
+    public ResponseEntity ResponseBadRequest(String message) {
         NetworkResponse networkResponse = new NetworkResponse();
         networkResponse.setCode(400);
         networkResponse.setStatus("error");
-        networkResponse.setMessage("Bad request");
+        networkResponse.setMessage(message);
         return new ResponseEntity(networkResponse, HttpStatus.BAD_REQUEST);
     }
     

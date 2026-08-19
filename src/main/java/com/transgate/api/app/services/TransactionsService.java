@@ -84,11 +84,40 @@ public class TransactionsService implements TransactionsInterface {
         this.appConfig = appConfig;
     }
 
+    private static final String TNX_LIVE_TABLE = "ajiswitch_db.tbl_creditfundtransfers";
+
+    private String archiveTable() {
+        return appConfig.getTransactionsArchiveTable();
+    }
+
+    /**
+     * False when archived transactions are read from the live table, in which
+     * case a range spanning today must not be queried twice and merged.
+     */
+    private boolean hasSeparateArchive() {
+        return !TNX_LIVE_TABLE.equalsIgnoreCase(archiveTable());
+    }
+
+    /**
+     * Accepts both {@code yyyy-MM-dd HH:mm:ss} and {@code yyyy-MM-dd'T'HH:mm:ss},
+     * since callers mix JDBC and ISO date formats.
+     */
+    private static String toIsoDateTime(String value) {
+        if (value == null) {
+            return null;
+        }
+        String trimmed = value.trim();
+        if (trimmed.length() == 19 && trimmed.charAt(10) == ' ') {
+            return trimmed.replace(' ', 'T');
+        }
+        return trimmed;
+    }
+
     private int GetUserRole(String username, String session_token) {
         try {
             int role;
 
-            String SQL = "SELECT role FROM tbl_user_details WHERE email_address = ? OR username = ? AND deleted = 0 AND session_token = ?";
+            String SQL = "SELECT role FROM tbl_user_details WHERE (email_address = ? OR username = ?) AND deleted = 0 AND session_token = ?";
             role = jdbcTemplate.queryForObject(SQL, new Object[]{username, username, session_token}, int.class);
             return role;
         } catch (DataAccessException ex) {
@@ -133,9 +162,9 @@ public class TransactionsService implements TransactionsInterface {
         String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                 + "ON a.source_institution_code = b.institution_code "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                 + "ON a.destination_institution_code = c.institution_code "
                 + "WHERE a.session_id = ? AND a.source_institution_code = ?";
 
@@ -149,10 +178,10 @@ public class TransactionsService implements TransactionsInterface {
         if (!source.equals("-1")) {
             String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id = ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)";
 
@@ -164,10 +193,10 @@ public class TransactionsService implements TransactionsInterface {
         } else {
             String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id = ?";
 
@@ -186,9 +215,9 @@ public class TransactionsService implements TransactionsInterface {
             String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id = ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)";
 
@@ -197,9 +226,9 @@ public class TransactionsService implements TransactionsInterface {
             String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id = ?";
 
@@ -212,9 +241,9 @@ public class TransactionsService implements TransactionsInterface {
         String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                 + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                 + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                 + "ON a.source_institution_code = b.institution_code "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                 + "ON a.destination_institution_code = c.institution_code "
                 + "WHERE a.session_id = ? AND a.source_institution_code = ? AND a.response_code = ?";
 
@@ -240,9 +269,9 @@ public class TransactionsService implements TransactionsInterface {
 //                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
 //                        + "a.destination_node "
 //                        + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-//                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+//                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
 //                        + "ON a.source_institution_code = b.institution_code "
-//                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+//                        + "LEFT JOIN ajiswitch_db.tbl_nodes c "
 //                        + "ON a.destination_institution_code = c.institution_code "
 //                        //                    + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
 //                        //                    + "ON a.destination_node = n.port_number "
@@ -261,10 +290,10 @@ public class TransactionsService implements TransactionsInterface {
 //                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
 //                        + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
 //                        + "a.destination_node "
-//                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-//                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+//                        + "FROM " + archiveTable() + " a "
+//                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
 //                        + "ON a.source_institution_code = b.institution_code "
-//                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+//                        + "LEFT JOIN ajiswitch_db.tbl_nodes c "
 //                        + "ON a.destination_institution_code = c.institution_code "
 //                        //                + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
 //                        //                + "ON a.destination_node = n.port_number "
@@ -274,7 +303,7 @@ public class TransactionsService implements TransactionsInterface {
 //                transactions = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
 //
 //                SQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords "
-//                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+//                        + "FROM " + archiveTable() + " a "
 //                        + "WHERE (a.transaction_date_time >= ? AND a.transaction_date_time <= ?) AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
 //                        + "ORDER BY a.id DESC";
 //                logger.info("sql query: " + SQL);
@@ -330,9 +359,9 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" //+ destinationNodeCondition
                     + " ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
@@ -351,10 +380,10 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" //+ destinationNodeCondition
                     + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
@@ -364,7 +393,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             transactions = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode, limit, offset}, new FullTransactionMapper());
             logger.info("Historical transactions query returned for institution " + transactions.size() + " rows.");
 
-            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" ;//+ destinationNodeCondition + ";";
+            SQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM " + archiveTable() + " a WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?)" ;//+ destinationNodeCondition + ";";
             logger.info("sql query to fetch historical days summary for institution: " + SQL);
             logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
             agg = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
@@ -428,9 +457,9 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
                     + " ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?";
@@ -438,10 +467,10 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             String olderDaysQuery = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?) "
                     + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
@@ -449,11 +478,11 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
             LocalDateTime start = Optional.ofNullable(startDate)
                     .filter(s -> !s.isBlank())
-                    .map(s -> LocalDateTime.parse(s, formatter))
+                    .map(s -> LocalDateTime.parse(toIsoDateTime(s), formatter))
                     .orElse(LocalDateTime.now());
             LocalDateTime end = Optional.ofNullable(endDate)
                     .filter(s -> !s.isBlank())
-                    .map(s -> LocalDateTime.parse(s, formatter))
+                    .map(s -> LocalDateTime.parse(toIsoDateTime(s), formatter))
                     .orElse(LocalDateTime.now());
             LocalDate today = LocalDate.now();
 
@@ -478,6 +507,11 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             } else {
                 // Fallback: use isCurrent parameter if dates are not provided
                 includeCurrent = isCurrent;
+            }
+            if (includeHistory && !hasSeparateArchive()) {
+                // Archive reads resolve to the live table, so query it once.
+                includeCurrent = true;
+                includeHistory = false;
             }
             logger.info("getInstitutionTransactionsByDateOnly() :: Date range determination: includeCurrent = " + includeCurrent + ", includeHistory = " + includeHistory);
 
@@ -673,7 +707,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             List<Map<String, Object>> aggHistory = new ArrayList<>();
             if (includeCurrent && includeHistory) {
                 String aggCurrentSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
-                String aggHistorySQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
+                String aggHistorySQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM " + archiveTable() + " a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
                 logger.info("Executing aggregation on current transactions: " + aggCurrentSQL);
                 ZonedDateTime startTimeAgg = ZonedDateTime.now();
                 List<Map<String, Object>> aggCurrent = jdbcTemplate.queryForList(aggCurrentSQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
@@ -781,7 +815,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     aggSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
                     agg = jdbcTemplate.queryForList(aggSQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
                 } else { // includeHistory must be true
-                    aggSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
+                    aggSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM " + archiveTable() + " a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND (a.source_institution_code = ? OR a.destination_institution_code = ?);";
 //                    agg = secondJdbcTemplate.queryForList(aggSQL, new Object[]{startDate, endDate, institutioncode, institutioncode});
                     if (end.isBefore(threshold)) {
                         // CASE 1: end < threshold  → all secondary
@@ -919,7 +953,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
 
             if (isCurrent) {
                 logger.info("Executing query for current transactions from 'tbl_creditfundtransfers'.");
-                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.response_code, a.beneficiary_account_number, a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.destination_institution_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName, a.destination_node FROM (SELECT id FROM ajiswitch_db.tbl_creditfundtransfers ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?) AS sq JOIN ajiswitch_db.tbl_creditfundtransfers a ON a.id = sq.id LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code ORDER BY a.transaction_date_time DESC;";
+                SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.response_code, a.beneficiary_account_number, a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.destination_institution_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName, a.destination_node FROM (SELECT id FROM ajiswitch_db.tbl_creditfundtransfers ORDER BY transaction_date_time DESC LIMIT ? OFFSET ?) AS sq JOIN ajiswitch_db.tbl_creditfundtransfers a ON a.id = sq.id LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code ORDER BY a.transaction_date_time DESC;";
                 logger.info("sql query to fetch current day transactions: " + SQL);
                 logger.info("Executing current transactions query with parameters: [startDate, endDate, limit, offset].");
                 ZonedDateTime startTime = ZonedDateTime.now();
@@ -947,9 +981,9 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                         + "a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, "
                         + "b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                         + "a.destination_node "
-                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                        + "FROM " + archiveTable() + " a "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                         + " "
                         + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
                 logger.info("sql query  to fetch older days transactions: " + SQL);
@@ -962,7 +996,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
 
                 logger.info("Historical transactions query returned " + transactions.size() + " rows.");
 
-                SQL = "SELECT SUM(amount) AS totalValue, COUNT(*) AS totalRecords, AVG(response_code = '00') * 100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s WHERE transaction_date_time BETWEEN ? AND ?;";
+                SQL = "SELECT SUM(amount) AS totalValue, COUNT(*) AS totalRecords, AVG(response_code = '00') * 100 AS successRate FROM " + archiveTable() + " WHERE transaction_date_time BETWEEN ? AND ?;";
                 logger.info("sql query  to fetch hitorical days summary: " + SQL);
                 logger.info("Executing historical transactions aggregation query with parameters: [startDate, endDate].");
                 ZonedDateTime startTimeAgg = ZonedDateTime.now();
@@ -1038,8 +1072,8 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     + "b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? "
                     + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
             String olderDaysQuery = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, "
@@ -1049,19 +1083,19 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     + "a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, "
                     + "b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? "
                     + "ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
             LocalDateTime start = Optional.ofNullable(startDate)
                     .filter(s -> !s.isBlank())
-                    .map(s -> LocalDateTime.parse(s, formatter))
+                    .map(s -> LocalDateTime.parse(toIsoDateTime(s), formatter))
                     .orElse(LocalDateTime.now());
             LocalDateTime end = Optional.ofNullable(endDate)
                     .filter(s -> !s.isBlank())
-                    .map(s -> LocalDateTime.parse(s, formatter))
+                    .map(s -> LocalDateTime.parse(toIsoDateTime(s), formatter))
                     .orElse(LocalDateTime.now());
             LocalDate today = LocalDate.now();
 
@@ -1086,6 +1120,11 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
             } else {
                 // Fallback: use isCurrent parameter if dates are not provided
                 includeCurrent = isCurrent;
+            }
+            if (includeHistory && !hasSeparateArchive()) {
+                // Archive reads resolve to the live table, so query it once.
+                includeCurrent = true;
+                includeHistory = false;
             }
             logger.info("getTransactionsByDateOnly() :: Date range determination: includeCurrent = " + includeCurrent + ", includeHistory = " + includeHistory);
 
@@ -1294,7 +1333,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? ";
 
                 String aggHistorySQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
-                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? ";
+                        + "FROM " + archiveTable() + " a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? ";
 
                 logger.info("Executing aggregation on current transactions: " + aggCurrentSQL);
                 ZonedDateTime startTimeAgg = ZonedDateTime.now();
@@ -1427,7 +1466,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                     aggSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfers a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ?;";
                     agg = jdbcTemplate.queryForList(aggSQL, new Object[]{startDate, endDate});
                 } else { // includeHistory must be true
-                    aggSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ?;";
+                    aggSQL = "SELECT SUM(a.amount) AS totalValue, COUNT(a.id) AS totalRecords, (CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate FROM " + archiveTable() + " a WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ?;";
 //                    agg = secondJdbcTemplate.queryForList(aggSQL, new Object[]{startDate, endDate});
                     if (end.isBefore(threshold)) {
                         // CASE 1: end < threshold  → all secondary
@@ -1742,14 +1781,14 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
 //                    + "c.institution_name as destInstitutionName, a.destination_node ";
 //            String currentDayQuery = commonSelect
 //                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
 //                    + whereQuery
 //                    + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
 //            String olderDaysQuery = commonSelect
-//                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+//                    + "FROM " + archiveTable() + " a "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
 //                    + whereQuery
 //                    + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
 //
@@ -1970,7 +2009,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
 //                        + "FROM ajiswitch_db.tbl_creditfundtransfers a " + whereQuery;
 //
 //                String aggHistorySQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, AVG(response_code = '00') * 100 AS successRate "
-//                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a " + whereQuery;
+//                        + "FROM " + archiveTable() + " a " + whereQuery;
 //
 //                List<Map<String, Object>> aggHistory = null;
 //
@@ -2111,7 +2150,7 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
 //                } else { // includeHistory must be true
 //                    aggSQL = "SELECT SUM(a.amount) as totalValue, COUNT(a.id) as totalRecords, "
 //                            + "(CAST(SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS DECIMAL(10,2))/COUNT(a.id))*100 AS successRate "
-//                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a " + whereQuery;
+//                            + "FROM " + archiveTable() + " a " + whereQuery;
 //
 //                    if (start != null && end != null) {
 //                        if (end.isBefore(threshold)) {
@@ -2364,6 +2403,13 @@ public ResponseEntity Get(String institutioncode, String startDate, String endDa
                 logger.info(String.format("[%s] No/invalid date input, using default: start=%s, end=%s, includeCurrent=true, includeHistory=true", marker, start, end));
             }
 
+            if (includeHistory && !hasSeparateArchive()) {
+                // Archive reads resolve to the live table, so query it once.
+                includeCurrent = true;
+                includeHistory = false;
+                logger.info(String.format("[%s] Single transactions table: querying live only", marker));
+            }
+
             LocalDateTime threshold = LocalDateTime.parse(appConfig.getTippingPoint(), DTF);
             logger.info(String.format("[%s] Threshold (tipping point): %s", marker, threshold));
 
@@ -2604,7 +2650,12 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //        wb.add("a.destination_node != ?", "9082");
 //    }
 
-    if (!"-1".equals(userInstitutionCode)
+    // A blank code means "all institutions" (global operator), same as -1.
+    boolean scopedToInstitution = userInstitutionCode != null
+            && !userInstitutionCode.isBlank()
+            && !"-1".equals(userInstitutionCode);
+
+    if (scopedToInstitution
             && (source_institution_code == null || source_institution_code.isEmpty())
             && (destination_institution_code == null || destination_institution_code.isEmpty())) {
         wb.addRaw("(a.source_institution_code = ? OR a.destination_institution_code = ?)");
@@ -2641,16 +2692,16 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         // current table: ajiswitch_db.tbl_creditfundtransfers
         wb.addDateRange(startDate, endDate);
         return "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                 + wb.build() + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
     }
 
     private String buildFullFromHist(WhereBuilder wb, String startDate, String endDate) {
         wb.addDateRange(startDate, endDate);
-        return "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+        return "FROM " + archiveTable() + " a "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                 + wb.build() + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
     }
 
@@ -2677,13 +2728,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 // Secondary: [start, threshold)
                 WhereBuilder wbSec = wbBase.cloneWithDateRange(startDate, threshold.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 Map<String, Object> aggSec = runAggregate(
-                        buildAggSQL("ajiswitch_db.tbl_creditfundtransfer_hist_s", wbSec, wbSec.getStartDate(), wbSec.getEndDate()),
+                        buildAggSQL(archiveTable(), wbSec, wbSec.getStartDate(), wbSec.getEndDate()),
                         wbSec.params(), secondJdbcTemplate
                 );
                 // Primary: [threshold, end)
                 WhereBuilder wbPri = wbBase.cloneWithDateRange(threshold.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")), endDate);
                 Map<String, Object> aggPri = runAggregate(
-                        buildAggSQL("ajiswitch_db.tbl_creditfundtransfer_hist_s", wbPri, wbPri.getStartDate(), wbPri.getEndDate()),
+                        buildAggSQL(archiveTable(), wbPri, wbPri.getStartDate(), wbPri.getEndDate()),
                         wbPri.params(), jdbcTemplate
                 );
                 // Combine
@@ -2691,7 +2742,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             } else {
                 // Only one DB
                 aggHist = runAggregate(
-                        buildAggSQL("ajiswitch_db.tbl_creditfundtransfer_hist_s", wbBase, startDate, endDate),
+                        buildAggSQL(archiveTable(), wbBase, startDate, endDate),
                         wbBase.params(),
                         getHistTemplate(start, end, threshold)
                 );
@@ -2707,19 +2758,19 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 // Archive split
                 WhereBuilder wbSec = wbBase.cloneWithDateRange(startDate, threshold.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")));
                 Map<String, Object> aggSec = runAggregate(
-                        buildAggSQL("ajiswitch_db.tbl_creditfundtransfer_hist_s", wbSec, wbSec.getStartDate(), wbSec.getEndDate()),
+                        buildAggSQL(archiveTable(), wbSec, wbSec.getStartDate(), wbSec.getEndDate()),
                         wbSec.params(), secondJdbcTemplate
                 );
                 WhereBuilder wbPri = wbBase.cloneWithDateRange(threshold.format(DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss")), endDate);
                 Map<String, Object> aggPri = runAggregate(
-                        buildAggSQL("ajiswitch_db.tbl_creditfundtransfer_hist_s", wbPri, wbPri.getStartDate(), wbPri.getEndDate()),
+                        buildAggSQL(archiveTable(), wbPri, wbPri.getStartDate(), wbPri.getEndDate()),
                         wbPri.params(), jdbcTemplate
                 );
                 return combineAggs(aggSec, aggPri);
             } else {
                 // Only one DB
                 return runAggregate(
-                        buildAggSQL("ajiswitch_db.tbl_creditfundtransfer_hist_s", wbBase, startDate, endDate),
+                        buildAggSQL(archiveTable(), wbBase, startDate, endDate),
                         wbBase.params(),
                         getHistTemplate(start, end, threshold)
                 );
@@ -2773,7 +2824,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             SQL = "SELECT a.*, "
                     + "b.institution_name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_timeout_retry a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code "
                     + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time <= ? "
                     + "ORDER BY a.id DESC LIMIT ? OFFSET ?";
@@ -2853,7 +2904,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             SQL = "SELECT a.*, "
                     + "b.institution_name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_timeout_retry a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code " + whereQuery
                     + " ORDER BY a.id DESC LIMIT ? OFFSET ?";
             transactions = jdbcTemplate.queryForList(SQL, new Object[]{limit, offset});
@@ -2886,7 +2937,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             String SQL;
             List<Map<String, Object>> summary;
             List<Map<String, Object>> summary_;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
                     + "FROM " + table + " a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00'";
@@ -2894,7 +2945,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -2911,7 +2962,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
 //                summary_ = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 //
-//            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+//            } else if (table.equalsIgnoreCase(archiveTable())) {
 //                summary_ = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 //            } else {
 //                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -2938,14 +2989,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
                     + "FROM " + table + " a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00' AND a.source_institution_code = ? ";
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -2987,7 +3038,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 //            
             SQL = "SELECT COUNT(a.id) as volume, a.transaction_date_time as label "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM " + archiveTable() + " a "
                     + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND a.response_code = '00'"
                     + "GROUP BY CAST(a.transaction_date_time as DATE) "
                     + "ORDER BY a.transaction_date_time DESC";
@@ -3021,7 +3072,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
 
             SQL = "SELECT COUNT(a.id) as volume, a.transaction_date_time as label "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM " + archiveTable() + " a "
                     + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND a.response_code = '00' AND a.source_institution_code = ? "
                     + "GROUP BY CAST(a.transaction_date_time as DATE) "
                     + "ORDER BY a.transaction_date_time DESC";
@@ -3047,7 +3098,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM " + table + " a "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
@@ -3058,7 +3109,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3085,7 +3136,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM " + table + " a "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
@@ -3095,7 +3146,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3122,10 +3173,10 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
                     + "FROM " + table + " a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.source_institution_code "
@@ -3133,7 +3184,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3161,10 +3212,10 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
                     + "FROM " + table + " a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ?"
                     + "GROUP BY a.source_institution_code "
@@ -3172,7 +3223,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3199,7 +3250,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM " + table + " a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
@@ -3208,7 +3259,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3235,7 +3286,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM " + table + " a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? "
@@ -3243,7 +3294,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3270,7 +3321,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<ChannelsTnxValueModel> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
                     + "FROM " + table + " a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ?"
@@ -3279,7 +3330,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionChannelsSummaryMapper());
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionChannelsSummaryMapper());
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3306,7 +3357,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<ChannelsTnxValueModel> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
             SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
                     + "FROM " + table + " a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
@@ -3316,7 +3367,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
                 summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode}, new TransactionChannelsSummaryMapper());
 
-            } else if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+            } else if (table.equalsIgnoreCase(archiveTable())) {
                 summary = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode}, new TransactionChannelsSummaryMapper());
             } else {
                 String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
@@ -3343,8 +3394,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.amount) as value, b.institution_name, b.shortName, b.color, b.institution_code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
                     + "WHERE a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.source_institution_code";
@@ -3352,8 +3403,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             List<TransactionSummaryModel> summary = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionSummaryMapper());
 
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.amount) as value, b.institution_name, b.shortName, b.color, b.institution_code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code "
                     + "WHERE a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.destination_institution_code";
@@ -3378,30 +3429,30 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.amount) as value, b.institution_name, b.shortName, b.color, b.institution_code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
                     + "WHERE a.source_institution_code = ? AND a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ?";
 
             List<TransactionSummaryModel> summary = secondJdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
 
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.amount) as value "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM " + archiveTable() + " a "
                     + "WHERE a.source_institution_code != ? AND a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ?";
 
             List<TransactionSummaryModel> summaryOthers = secondJdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
             summary.add(summaryOthers.get(0));
 
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.amount) as value, b.institution_name, b.shortName, b.color, b.institution_code "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN tbl_financial_institutions b "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code "
                     + "WHERE a.destination_institution_code = ? AND a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ?";
 
             List<TransactionSummaryModel> summary_ = secondJdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
 
             SQL = "SELECT COUNT(a.id) as volume, SUM(a.amount) as value "
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
+                    + "FROM " + archiveTable() + " a "
                     + "WHERE a.destination_institution_code != ? AND a.response_code = '00' AND a.transaction_date_time BETWEEN ? AND ?";
             List<TransactionSummaryModel> summary_Others = secondJdbcTemplate.query(SQL, new Object[]{institutioncode, startDate, endDate}, new TransactionSummaryMapper());
             summary_.add(summary_Others.get(0));
@@ -3448,14 +3499,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     whereTwo += " AND destination_institution_code = ? ";
                 }
                 SQL = "SELECT b.institution_name, b.shortName, b.color, b.institution_code, COALESCE(a.volume, 0) AS volume "
-                        + "FROM ajiswitch_db.tbl_nodes_temp b "
+                        + "FROM ajiswitch_db.tbl_nodes b "
                         + "LEFT JOIN ( "
                         + "  SELECT destination_institution_code, COUNT(id) AS volume "
                         + "  FROM ajiswitch_db.tbl_creditfundtransfers "
                         + where
                         + "  GROUP BY destination_institution_code"
                         + ") a ON b.institution_code = a.destination_institution_code "
-                        + "ORDER BY b.institution_name ASC";//SELECT b.institution_name, b.shortName, b.color, b.institution_code, COALESCE(a.volume, 0) AS volume FROM ajiswitch_db.tbl_nodes_temp b LEFT JOIN (   SELECT destination_institution_code, COUNT(id) AS volume   FROM ajiswitch_db.tbl_creditfundtransfers WHERE response_code = '00' AND transaction_date_time BETWEEN '2025-06-01 00:00' AND '2025-06-01 23:00'   GROUP BY destination_institution_code) a ON b.institution_code = a.destination_institution_code ORDER BY b.institution_name ASC
+                        + "ORDER BY b.institution_name ASC";//SELECT b.institution_name, b.shortName, b.color, b.institution_code, COALESCE(a.volume, 0) AS volume FROM ajiswitch_db.tbl_nodes b LEFT JOIN (   SELECT destination_institution_code, COUNT(id) AS volume   FROM ajiswitch_db.tbl_creditfundtransfers WHERE response_code = '00' AND transaction_date_time BETWEEN '2025-06-01 00:00' AND '2025-06-01 23:00'   GROUP BY destination_institution_code) a ON b.institution_code = a.destination_institution_code ORDER BY b.institution_name ASC
                 SQL_ = SQL.replace("destination_institution_code", "destination_institution_code") // same subquery but without response_code filter
                         .replace("response_code = '00' AND ", "");
             } else {
@@ -3465,7 +3516,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     whereTwo += " AND source_institution_code = ? ";
                 }
                 SQL = "SELECT b.institution_name, b.shortName, b.color, b.institution_code, COALESCE(a.volume, 0) AS volume "
-                        + "FROM ajiswitch_db.tbl_nodes_temp b "
+                        + "FROM ajiswitch_db.tbl_nodes b "
                         + "LEFT JOIN ( "
                         + "  SELECT source_institution_code, COUNT(id) AS volume "
                         + "  FROM ajiswitch_db.tbl_creditfundtransfers "
@@ -3524,14 +3575,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 logger.info("Building INWARD queries");
                 SQL = "SELECT COUNT(a.id) as volume, b.institution_name, b.shortName, b.color, b.institution_code "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "  ON a.destination_institution_code = b.institution_code "
                         + "WHERE a.response_code = '00' "
                         + "  AND a.destination_institution_code = ? "
                         + "  AND a.transaction_date_time BETWEEN ? AND ?";
                 SQL_ = "SELECT COUNT(a.id) as volume, b.institution_name, b.shortName, b.color, b.institution_code "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "  ON a.destination_institution_code = b.institution_code "
                         + "WHERE a.destination_institution_code = ? "
                         + "  AND a.transaction_date_time BETWEEN ? AND ?";
@@ -3539,14 +3590,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 logger.info("Building OUTWARD queries");
                 SQL = "SELECT COUNT(a.id) as volume, b.institution_name, b.shortName, b.color, b.institution_code "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "  ON a.source_institution_code = b.institution_code "
                         + "WHERE a.response_code = '00' "
                         + "  AND a.source_institution_code = ? "
                         + "  AND a.transaction_date_time BETWEEN ? AND ?";
                 SQL_ = "SELECT COUNT(a.id) as volume, b.institution_name, b.shortName, b.color, b.institution_code "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "  ON a.source_institution_code = b.institution_code "
                         + "WHERE a.source_institution_code = ? "
                         + "  AND a.transaction_date_time BETWEEN ? AND ?";
@@ -3588,18 +3639,18 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //            String SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, a.destination_node, "
 //                    + "b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
 //                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
 //                    + "ON a.source_institution_code = b.institution_code "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
 //                    + "ON a.destination_institution_code = c.institution_code "
 //                    + "WHERE a.session_id IN (" + sessionids + ")";
 //            List<TransactionHalfModel> transactions = jdbcTemplate.query(SQL, new TransactionHalfMapper());
 //            SQL = "SELECT a.session_id, a.originator_account_name, a.originator_account_number, a.originator_kyc, a.beneficiary_account_name, a.beneficiary_account_number, a.beneficiary_kyc, a.name_enquiry_ref, a.txn_duration, a.response_date_time, a.response_code, a.transaction_date_time, a.amount, a.destination_node, "
 //                    + "b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
-//                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+//                    + "FROM " + archiveTable() + " a "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
 //                    + "ON a.source_institution_code = b.institution_code "
-//                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+//                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
 //                    + "ON a.destination_institution_code = c.institution_code "
 //                    + "WHERE a.session_id IN (" + sessionids + ")";
 //            logger.info("SearchTransactionsForSessionIds() :: SQL query " + SQL);
@@ -3641,14 +3692,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 
             String currentSQL = "SELECT " + selectFields
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id IN (" + inClause + ")";
 
             String historyPrimarySQL = "SELECT " + selectFields
-                    + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                    + "FROM " + archiveTable() + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id IN (" + inClause + ")";
 
             Object[] params = sessionIdList.toArray();
@@ -3709,8 +3760,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     + "beneficiary_account_name, beneficiary_account_number, beneficiary_kyc, name_enquiry_ref, txn_duration, "
                     + "response_date_time, response_code, transaction_date_time, amount, destination_node, source_institution_code, "
                     + "destination_institution_code FROM %s WHERE session_id IN (" + inClause + ")) AS t "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON t.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON t.destination_institution_code = c.institution_code";
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON t.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON t.destination_institution_code = c.institution_code";
 
             // 2. Query all sources
             List<TransactionHalfModel> allResults = new ArrayList<>();
@@ -3723,7 +3774,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             allResults.addAll(liveResults);
 
             // b) Archive table (primary DB)
-            String sqlHistPrimary = commonSelect + String.format(fromTpl, "ajiswitch_db.tbl_creditfundtransfer_hist_s");
+            String sqlHistPrimary = commonSelect + String.format(fromTpl, archiveTable());
             logger.info("Executing history (primary) transactions query: " + sqlHistPrimary);
             List<TransactionHalfModel> histPrimary = jdbcTemplate.query(sqlHistPrimary, sessionIdList.toArray(), new TransactionHalfMapper());
             logger.info("History (primary) query returned " + histPrimary.size() + " rows");
@@ -3764,12 +3815,12 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //        logger.info("Entering SearchTransactionsForSessionIds(sessionids=" + sessionids
 //                + ", startDate=" + startDate + ", endDate=" + endDate + ")");
 //        try {
-//            String SQL = "SELECT t.session_id, t.originator_account_name, t.originator_account_number, t.originator_kyc, t.beneficiary_account_name, t.beneficiary_account_number, t.beneficiary_kyc, t.name_enquiry_ref, t.txn_duration, t.response_date_time, t.response_code, t.transaction_date_time, t.amount, t.destination_node, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName FROM (SELECT session_id, originator_account_name, originator_account_number, originator_kyc, beneficiary_account_name, beneficiary_account_number, beneficiary_kyc, name_enquiry_ref, txn_duration, response_date_time, response_code, transaction_date_time, amount, destination_node, source_institution_code, destination_institution_code FROM ajiswitch_db.tbl_creditfundtransfers WHERE session_id IN (" + sessionids.trim().replaceAll("\\s+", "") + ") ) AS t LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON t.source_institution_code=b.institution_code LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON t.destination_institution_code=c.institution_code;";
+//            String SQL = "SELECT t.session_id, t.originator_account_name, t.originator_account_number, t.originator_kyc, t.beneficiary_account_name, t.beneficiary_account_number, t.beneficiary_kyc, t.name_enquiry_ref, t.txn_duration, t.response_date_time, t.response_code, t.transaction_date_time, t.amount, t.destination_node, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName FROM (SELECT session_id, originator_account_name, originator_account_number, originator_kyc, beneficiary_account_name, beneficiary_account_number, beneficiary_kyc, name_enquiry_ref, txn_duration, response_date_time, response_code, transaction_date_time, amount, destination_node, source_institution_code, destination_institution_code FROM ajiswitch_db.tbl_creditfundtransfers WHERE session_id IN (" + sessionids.trim().replaceAll("\\s+", "") + ") ) AS t LEFT JOIN ajiswitch_db.tbl_nodes b ON t.source_institution_code=b.institution_code LEFT JOIN ajiswitch_db.tbl_nodes c ON t.destination_institution_code=c.institution_code;";
 //            logger.info("Executing live transactions query: " + SQL);
 //            List<TransactionHalfModel> transactions = jdbcTemplate.query(SQL, new TransactionHalfMapper());
 //            logger.info("Live query returned " + transactions.size() + " rows");
 //
-//            SQL = "SELECT t.session_id, t.originator_account_name, t.originator_account_number, t.originator_kyc, t.beneficiary_account_name, t.beneficiary_account_number, t.beneficiary_kyc, t.name_enquiry_ref, t.txn_duration, t.response_date_time, t.response_code, t.transaction_date_time, t.amount, t.destination_node, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName FROM (SELECT session_id, originator_account_name, originator_account_number, originator_kyc, beneficiary_account_name, beneficiary_account_number, beneficiary_kyc, name_enquiry_ref, txn_duration, response_date_time, response_code, transaction_date_time, amount, destination_node, source_institution_code, destination_institution_code FROM ajiswitch_db.tbl_creditfundtransfer_hist_s WHERE session_id  IN (" + sessionids.trim().replaceAll("\\s+", "") + ")) AS t LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON t.source_institution_code=b.institution_code LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON t.destination_institution_code=c.institution_code;";
+//            SQL = "SELECT t.session_id, t.originator_account_name, t.originator_account_number, t.originator_kyc, t.beneficiary_account_name, t.beneficiary_account_number, t.beneficiary_kyc, t.name_enquiry_ref, t.txn_duration, t.response_date_time, t.response_code, t.transaction_date_time, t.amount, t.destination_node, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName FROM (SELECT session_id, originator_account_name, originator_account_number, originator_kyc, beneficiary_account_name, beneficiary_account_number, beneficiary_kyc, name_enquiry_ref, txn_duration, response_date_time, response_code, transaction_date_time, amount, destination_node, source_institution_code, destination_institution_code FROM " + archiveTable() + " WHERE session_id  IN (" + sessionids.trim().replaceAll("\\s+", "") + ")) AS t LEFT JOIN ajiswitch_db.tbl_nodes b ON t.source_institution_code=b.institution_code LEFT JOIN ajiswitch_db.tbl_nodes c ON t.destination_institution_code=c.institution_code;";
 //            logger.info("Executing history transactions query: " + SQL);
 //            List<TransactionHalfModel> history = jdbcTemplate.query(SQL, new TransactionHalfMapper());
 //            logger.info("History query returned " + history.size() + " rows");
@@ -3800,8 +3851,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             switch (type) {
                 case "month":
                     SQL = "SELECT a.transaction_date_time as label, COUNT(a.id) as volume, SUM(a.amount) as value, b.institution_name, b.shortName, b.color, b.institution_code "
-                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                            + "FROM " + archiveTable() + " a "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                             + "ON a.source_institution_code = b.institution_code "
                             + "WHERE a.response_code = '00' AND a.source_institution_code = ? "
                             + "AND a.transaction_date_time BETWEEN ? AND ?"
@@ -3810,8 +3861,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 case "day":
                 default:
                     SQL = "SELECT a.transaction_date_time as label, COUNT(a.id) as volume, SUM(a.amount) as value, b.institution_name, b.shortName, b.color, b.institution_code "
-                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                            + "FROM " + archiveTable() + " a "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                             + "ON a.source_institution_code = b.institution_code "
                             + "WHERE a.response_code = '00' AND a.source_institution_code = ? "
                             + "AND a.transaction_date_time BETWEEN ? AND ? "
@@ -3841,9 +3892,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName, "
                     + "a.destination_node "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     //                + "LEFT JOIN ajiswitch_db.tbl_transactions_routes n "
                     //                + "ON a.destination_node = n.port_number "
@@ -3852,9 +3903,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 
             SQL = "SELECT SUM(a.amount) as totalValue "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.source_institution_code = ? OR a.destination_institution_code = ? ORDER BY a.id DESC";
             Double totalValue = jdbcTemplate.queryForObject(SQL, new Object[]{institutioncode, institutioncode}, Double.class);
@@ -3884,9 +3935,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                         + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                         + "ON a.destination_institution_code = c.institution_code "
                         + "WHERE a.id = ? ";
                 transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
@@ -3894,18 +3945,18 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                         + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                         + "ON a.destination_institution_code = c.institution_code "
                         + "ORDER BY a.id DESC";
                 transactions = jdbcTemplate.query(SQL, new FullTransactionMapper());
 
                 SQL = "SELECT SUM(a.amount) as totalValue "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                         + "ON a.destination_institution_code = c.institution_code ";
                 Double totalValue = jdbcTemplate.queryForObject(SQL, Double.class);
                 totalValue = totalValue != null ? totalValue : 0;
@@ -3938,9 +3989,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                     + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id = ? ";
             transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
@@ -3962,13 +4013,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<FullTransactionModel> transactions;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers a " : "ajiswitch_db.tbl_creditfundtransfer_hist_s a ";
+            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers a " : archiveTable() + " a ";
             SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.session_id, a.response_code, a.beneficiary_account_number, "
                     + "a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.amount, a.destination_institution_code, a.response_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name as srcInstitutionName, c.institution_name as destInstitutionName "
                     + "FROM " + table
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c "
                     + "ON a.destination_institution_code = c.institution_code "
                     + "WHERE a.session_id = ? ";
             transactions = jdbcTemplate.query(SQL, new Object[]{id}, new FullTransactionMapper());
@@ -4841,7 +4892,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
                 SQL = "SELECT a.*, b.institution_name "
                         + "FROM ajiswitch_db.tbl_commission_paid a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.institution_code = b.institution_code "
                         + "WHERE a.generation_date >= ? AND a.generation_date < ? "
                         + "ORDER BY a.generation_date DESC";
@@ -4861,7 +4912,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             } else {
                 SQL = "SELECT a.*, b.institution_name "
                         + "FROM ajiswitch_db.tbl_commission_paid a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.institution_code = b.institution_code "
                         + "WHERE a.institution_code = ?"
                         + "AND a.generation_date >= ? AND a.generation_date < ? "
@@ -4922,9 +4973,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //                logger.info(String.format("%s :: Initial isCurrent = %s", sid, isCurrent));
 //
 //                String SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
-//                        + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-//                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-//                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+//                        + "FROM " + archiveTable() + " a "
+//                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+//                        + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
 //                        + "WHERE a.session_id = ? AND a.response_code = '09'";
 //                logger.info(String.format("%s :: SQL Query: %s", sid, SQL));
 //                List<Map<String, Object>> rows = secondJdbcTemplate.queryForList(SQL, new Object[]{sid});
@@ -4934,8 +4985,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //                    logger.info(String.format("%s :: No history rows, querying live table instead.", sid));
 //                    SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
 //                            + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-//                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-//                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+//                            + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+//                            + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
 //                            + "WHERE a.session_id = ? AND a.response_code = '09'";
 //                    logger.info(String.format("%s :: Finding transaction SQL Query: %s", sid, SQL));
 //                    rows = jdbcTemplate.queryForList(SQL, new Object[]{sid});
@@ -4960,7 +5011,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //                                    logger.info(String.format("%s :: Status is not success, so proceeding to reverse transaction amount into wallet", sid));
 //                                    // --- NEW: 1) lookup walletnumber for this institution ---
 //                                    String nodeSql = "SELECT walletnumber, institution_name "
-//                                            + "FROM ajiswitch_db.tbl_nodes_temp "
+//                                            + "FROM ajiswitch_db.tbl_nodes "
 //                                            + "WHERE institution_code = ? AND is_active = 1";
 //                                    String sourceInst = txn.get("source_institution_code").toString();
 //                                    List<Map<String, Object>> nodeRows = jdbcTemplate.queryForList(nodeSql, sourceInst);
@@ -5020,7 +5071,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //                                    logger.info(String.format("%s :: retVal set back to 0: %s", sid, retVal));
 //                                    String tnxTable = isCurrent
 //                                            ? "ajiswitch_db.tbl_creditfundtransfers"
-//                                            : "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+//                                            : archiveTable();
 //                                    logger.info(String.format("%s :: Updating response_code in table: %s. Status transaction is to be updated to --> %s", sid, tnxTable, status));
 //                                    SQL = "UPDATE " + tnxTable + " SET response_code = ? WHERE session_id = ?";
 //                                    logger.info(String.format("%s :: SQL Query to update response code: %s", sid, SQL));
@@ -5028,7 +5079,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 //                                    if (tnxTable.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
 //                                        upd = jdbcTemplate.update(SQL, new Object[]{status, sid});
 //
-//                                    } else if (tnxTable.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+//                                    } else if (tnxTable.equalsIgnoreCase(archiveTable())) {
 //                                        upd = secondJdbcTemplate.update(SQL, new Object[]{status, sid});
 //                                    } else {
 //                                        String msg = String.format("Unknown transaction table '%s'—cannot update response_code", tnxTable);
@@ -5097,7 +5148,20 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         logger.info("Entering RequestTransactionStatusChange(sessionid=" + sessionid
                 + ", username=" + username + ", status=" + status + ")");
+        networkResponse.setCode(200);
+        networkResponse.setStatus("failed");
+        networkResponse.setMessage("Transaction status change is not available on this Belema schema (tbl_transactions_status is missing)");
+        return responseManager.ResponseOk(networkResponse);
+    }
 
+    @SuppressWarnings("unused")
+    private ResponseEntity RequestTransactionStatusChangeLegacy(
+            String sessionid,
+            String sessiontoken,
+            String username,
+            String status) {
+
+        NetworkResponse networkResponse = new NetworkResponse();
         try {
             int userrole = GetUserRole(username, sessiontoken);
             logger.info("Retrieved user role: " + userrole);
@@ -5119,8 +5183,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 // 1. Try live table (primary DB)
                 String SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
                         + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                         + "WHERE a.session_id = ? AND a.response_code = '09'";
                 List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, sid);
                 if (!rows.isEmpty()) {
@@ -5133,14 +5197,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 // 2. Try archive (primary DB) if not found
                 if (txn == null) {
                     SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
-                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                            + "FROM " + archiveTable() + " a "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                             + "WHERE a.session_id = ? AND a.response_code = '09'";
                     rows = jdbcTemplate.queryForList(SQL, sid);
                     if (!rows.isEmpty()) {
                         txn = rows.get(0);
-                        foundTable = "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+                        foundTable = archiveTable();
                         sourceJdbc = jdbcTemplate;
                         logger.info(String.format("%s :: Found in archive (primary DB).", sid));
                     }
@@ -5149,14 +5213,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 // 3. Try archive (secondary DB) if still not found
                 if (txn == null) {
                     SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
-                            + "FROM ajiswitch_db.tbl_creditfundtransfer_hist_s a "
-                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp b ON a.source_institution_code = b.institution_code "
-                            + "LEFT JOIN ajiswitch_db.tbl_nodes_temp c ON a.destination_institution_code = c.institution_code "
+                            + "FROM " + archiveTable() + " a "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
                             + "WHERE a.session_id = ? AND a.response_code = '09'";
                     rows = secondJdbcTemplate.queryForList(SQL, sid);
                     if (!rows.isEmpty()) {
                         txn = rows.get(0);
-                        foundTable = "ajiswitch_db.tbl_creditfundtransfer_hist_s";
+                        foundTable = archiveTable();
                         sourceJdbc = secondJdbcTemplate;
                         logger.info(String.format("%s :: Found in archive (secondary DB).", sid));
                     }
@@ -5197,7 +5261,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     // Lookup wallet for source institution
                     String sourceInst = txn.get("source_institution_code").toString();
                     String nodeSql = "SELECT walletnumber, institution_name "
-                            + "FROM ajiswitch_db.tbl_nodes_temp "
+                            + "FROM ajiswitch_db.tbl_nodes "
                             + "WHERE institution_code = ? AND is_active = 1";
                     List<Map<String, Object>> nodeRows = jdbcTemplate.queryForList(nodeSql, sourceInst);
 
@@ -5265,7 +5329,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     logger.info(String.format("%s :: Updating response_code in table: %s --> %s", sid, foundTable, status));
                     String updateSql = "UPDATE " + foundTable + " SET response_code = ? WHERE session_id = ?";
                     int upd;
-                    if (foundTable.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers") || foundTable.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfer_hist_s")) {
+                    if (foundTable.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers") || foundTable.equalsIgnoreCase(archiveTable())) {
                         // Use correct JdbcTemplate based on foundTable
                         upd = (sourceJdbc != null ? sourceJdbc : jdbcTemplate).update(updateSql, status, sid);
                     } else {
@@ -5306,57 +5370,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         logger.info("Entering UpdateTransactionStatusChange(sessionid=" + sessionid
                 + ", username=" + username + ", status=" + status + ")");
-        try {
-            List<String> sessionIds = new ArrayList<>(Arrays.asList(sessionid.split(",")));
-            logger.info("Session IDs to update: " + sessionIds);
-
-            for (String sid : sessionIds) {
-                logger.info("Processing sessionId: " + sid);
-                int retVal = 0;
-
-                if ("approve".equals(status)) {
-                    logger.info("Status = approve; checking existing status record.");
-                    String SQL = "SELECT * FROM ajiswitch_db.tbl_transactions_status WHERE session_id = ?";
-                    List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, new Object[]{sid});
-                    logger.info("Status records found: " + rows.size());
-
-                    if (!rows.isEmpty()) {
-                        logger.info("Updating response_code in history table.");
-                        SQL = "UPDATE ajiswitch_db.tbl_creditfundtransfer_hist_s SET response_code = ? WHERE session_id = ?";
-                        retVal = secondJdbcTemplate.update(SQL, new Object[]{rows.get(0).get("new_status"), sid});
-                        logger.info("History table update returned: " + retVal);
-
-                        if (retVal < 1) {
-                            logger.info("No rows updated in history; updating live table.");
-                            SQL = "UPDATE ajiswitch_db.tbl_creditfundtransfers SET response_code = ? WHERE session_id = ?";
-                            retVal = jdbcTemplate.update(SQL, new Object[]{rows.get(0).get("new_status"), sid});
-                            logger.info("Live table update returned: " + retVal);
-                        }
-                    } else {
-                        logger.info("No status record found for sessionId " + sid);
-                    }
-                }
-
-                if (retVal > 0 || "reject".equals(status)) {
-                    int _status = "approve".equals(status) ? 1 : 0;
-                    logger.info("Recording final approval/rejection in tbl_transactions_status (status=" + _status + ").");
-                    String SQL = "UPDATE ajiswitch_db.tbl_transactions_status SET approved_by = ?, approved_at = now(), status = ? WHERE session_id = ?";
-                    int upd = jdbcTemplate.update(SQL, new Object[]{username, _status, sid});
-                    logger.info("Final status update returned: " + upd);
-                } else {
-                    logger.info("No update performed for sessionId " + sid + " (retVal=" + retVal + ").");
-                }
-            }
-
-            networkResponse.setCode(200);
-            networkResponse.setStatus("success");
-            networkResponse.setMessage("Transaction(s) status updated");
-            logger.info("UpdateTransactionStatusChange completed: code=200, message=" + networkResponse.getMessage());
-            return responseManager.ResponseOk(networkResponse);
-
-        } catch (DataAccessException ex) {
-            logger.info("DataAccessException in UpdateTransactionStatusChange: " + ex.getMessage());
-            return responseManager.ResponseInternalServerError();
-        }
+        networkResponse.setCode(200);
+        networkResponse.setStatus("failed");
+        networkResponse.setMessage("Transaction status change is not available on this Belema schema (tbl_transactions_status is missing)");
+        return responseManager.ResponseOk(networkResponse);
     }
 }

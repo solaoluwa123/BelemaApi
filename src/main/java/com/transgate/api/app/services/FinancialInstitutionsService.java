@@ -12,6 +12,7 @@ import com.transgate.api.models.InstitutionTypesModel;
 import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
+import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -78,20 +79,125 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             return false;
         }
     }
+
+    private String nz(String value) {
+        return value == null ? "" : value;
+    }
+
+    private int settlementFlag(FinancialInstitutionModel institution) {
+        return institution != null && institution.getIssettlementbank() == 1 ? 1 : 0;
+    }
+
+    private int instWithWalletFlag(FinancialInstitutionModel institution) {
+        return settlementFlag(institution) == 1 ? 0 : 1;
+    }
+
+    private String defaultServerIp(String value) {
+        String ip = nz(value).trim();
+        return ip.isEmpty() ? "localhost" : ip;
+    }
+
+    private int defaultTimeout(int value, int fallback) {
+        return value > 0 ? value : fallback;
+    }
+
+    private String generateWalletNumber() {
+        int totalRows = 1;
+        String walletnumber = "";
+        try {
+            while (totalRows > 0) {
+                walletnumber = Randomizer.GenerateWalletNumber();
+                Integer count = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ajiswitch_db.tbl_wallets WHERE walletnumber = ?",
+                        new Object[]{walletnumber},
+                        Integer.class);
+                totalRows = count == null ? 0 : count;
+            }
+            return walletnumber;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return "";
+        }
+    }
+
+    private void insertInstitutionExt(FinancialInstitutionModel institution) {
+        int withWallet = instWithWalletFlag(institution);
+        int extActive = institutionExtActive(institution);
+        String SQL = "INSERT into ajiswitch_db.tbl_institution_ext("
+                + "is_active, institution_code, neEnvelope, url, neResponseStartTag, neResponseEndTag, "
+                + "ftEnvelope, ftResponseStartTag, ftResponseEndTag, tsqEnvelope, urlTSQ, "
+                + "tsqResponseStartTag, tsqResponseEndTag, instWithWallet) "
+                + "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+        jdbcTemplate.update(SQL, new Object[]{
+            extActive,
+            institution.getCode(),
+            nz(institution.getNeEnvelope()),
+            nz(institution.getUrl()),
+            nz(institution.getNeResponseStartTag()),
+            nz(institution.getNeResponseEndTag()),
+            nz(institution.getFtEnvelope()),
+            nz(institution.getFtResponseStartTag()),
+            nz(institution.getFtResponseEndTag()),
+            nz(institution.getTsqEnvelope()),
+            nz(institution.getUrlTSQ()),
+            nz(institution.getTsqResponseStartTag()),
+            nz(institution.getTsqResponseEndTag()),
+            withWallet
+        });
+    }
+
+    private int institutionExtActive(FinancialInstitutionModel institution) {
+        if (institution.getEnableInward() == 1) {
+            return 1;
+        }
+        if (!nz(institution.getUrl()).isEmpty() || !nz(institution.getNeEnvelope()).isEmpty()) {
+            return 1;
+        }
+        return 0;
+    }
+
+    private String insertLiveWallet(String creator, String code, String walletname, int wallettype) {
+        if (walletname == null || walletname.trim().isEmpty()) {
+            return "";
+        }
+        String walletnumber = generateWalletNumber();
+        if (walletnumber == null || walletnumber.isEmpty()) {
+            return "";
+        }
+        jdbcTemplate.update(
+                "INSERT INTO ajiswitch_db.tbl_wallets(walletnumber, walletname, creator, financialinstitutioncode, creationdate, balance, lien, wallettype, is_active) VALUES(?, ?, ?, ?, now(), 0.00, 0.00, ?, 1)",
+                new Object[]{walletnumber, walletname.trim(), creator, code, wallettype});
+        return walletnumber;
+    }
     
     private List<FinancialInstitutionModel> GetInstitutionsFromPendings(int id, String actionType) {
         try {
             String SQL;
             SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
-                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, b.name as businessTypeName "
+                    + "n.cbn_bank_account, n.hashkey, n.isProcessTSQ, n.issettlementbank, n.serverIP, n.neTimeout, n.ftTimeout, n.canFundWallet, "
+                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, "
+                    + "a.charge_amount, a.vat, a.password, a.url, a.urlTSQ, a.neEnvelope, a.neResponseStartTag, a.neResponseEndTag, "
+                    + "a.ftEnvelope, a.ftResponseStartTag, a.ftResponseEndTag, a.tsqEnvelope, a.tsqResponseStartTag, a.tsqResponseEndTag, "
+                    + "a.instWithWallet, a.walletname, a.wallettype, b.name as businessTypeName "
                     + "FROM tbl_nodes_pendings n "
                     + "LEFT JOIN tbl_financial_institutions_pendings a "
                     + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
                     + "ON a.businessType = b.id "
                     + "WHERE n.id = ? AND a.actionType = ?";
-            List<FinancialInstitutionModel> institution = jdbcTemplate.query(SQL, new Object[]{id, actionType}, new FinancialInstitutionMapper2());
-            return institution;
+            try {
+                return jdbcTemplate.query(SQL, new Object[]{id, actionType}, new FinancialInstitutionMapper2());
+            } catch (DataAccessException missingColumns) {
+                SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
+                        + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, b.name as businessTypeName "
+                        + "FROM tbl_nodes_pendings n "
+                        + "LEFT JOIN tbl_financial_institutions_pendings a "
+                        + "ON n.institution_code = a.code "
+                        + "LEFT JOIN tbl_institution_types b "
+                        + "ON a.businessType = b.id "
+                        + "WHERE n.id = ? AND a.actionType = ?";
+                return jdbcTemplate.query(SQL, new Object[]{id, actionType}, new FinancialInstitutionMapper2());
+            }
             
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
@@ -110,12 +216,53 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             return -1;
         }
     }
+
+    /** True if another live institution already uses this code (trimmed, case-insensitive). */
+    private boolean institutionCodeExists(String code) {
+        if (code == null || code.trim().isEmpty()) {
+            return false;
+        }
+        String normalized = code.trim();
+        try {
+            Integer fiCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM tbl_financial_institutions WHERE LOWER(TRIM(code)) = LOWER(?)",
+                    new Object[]{normalized},
+                    Integer.class);
+            if (fiCount != null && fiCount > 0) {
+                return true;
+            }
+            Integer nodeCount = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM ajiswitch_db.tbl_nodes WHERE LOWER(TRIM(institution_code)) = LOWER(?)",
+                    new Object[]{normalized},
+                    Integer.class);
+            return nodeCount != null && nodeCount > 0;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return true;
+        }
+    }
+
+    private boolean institutionNameExists(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return false;
+        }
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM tbl_financial_institutions WHERE LOWER(TRIM(name)) = LOWER(?)",
+                    new Object[]{name.trim()},
+                    Integer.class);
+            return count != null && count > 0;
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return true;
+        }
+    }
     
     private int GetUserRole(String username, String session_token) {
         try {
             int role;
 
-            String SQL = "SELECT role FROM tbl_user_details WHERE email_address = ? OR username = ? AND deleted = 0 AND session_token = ?";
+            String SQL = "SELECT role FROM tbl_user_details WHERE (email_address = ? OR username = ?) AND deleted = 0 AND session_token = ?";
             role = jdbcTemplate.queryForObject(SQL, new Object[]{username, username, session_token}, int.class);
             return role;
         } catch (DataAccessException ex) {
@@ -146,14 +293,29 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
             SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
-                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, b.name as businessTypeName "
+                    + "n.cbn_bank_account, n.isProcessTSQ, n.issettlementbank, n.serverIP, n.neTimeout, n.ftTimeout, "
+                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, "
+                    + "a.charge_amount, a.vat, a.instWithWallet, b.name as businessTypeName "
                     + "FROM tbl_nodes_pendings n "
                     + "LEFT JOIN tbl_financial_institutions_pendings a "
                     + "ON n.institution_code = a.code "
                     + "LEFT JOIN tbl_institution_types b "
                     + "ON a.businessType = b.id "
                     + "ORDER BY n.id DESC";
-            List<FinancialInstitutionModel> financialInstitutionModel = jdbcTemplate.query(SQL, new FinancialInstitutionMapper2());
+            List<FinancialInstitutionModel> financialInstitutionModel;
+            try {
+                financialInstitutionModel = jdbcTemplate.query(SQL, new FinancialInstitutionMapper2());
+            } catch (DataAccessException missingColumns) {
+                SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
+                        + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, b.name as businessTypeName "
+                        + "FROM tbl_nodes_pendings n "
+                        + "LEFT JOIN tbl_financial_institutions_pendings a "
+                        + "ON n.institution_code = a.code "
+                        + "LEFT JOIN tbl_institution_types b "
+                        + "ON a.businessType = b.id "
+                        + "ORDER BY n.id DESC";
+                financialInstitutionModel = jdbcTemplate.query(SQL, new FinancialInstitutionMapper2());
+            }
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All Financial Institutions");
@@ -226,29 +388,65 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String publickeylocationLinux, String cbn_bank_account, String color, String code, String business_address, int businessType, String creator, String password, float charge_amount, float vat, String hashKey, int is_tsq_processed) {
+    public ResponseEntity Create(String sessiontoken, FinancialInstitutionModel institution) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            int retval, retvalLinux;
-            int checkCodeAndName = CheckCodeAndName(name, code);
-            if (checkCodeAndName == 0) {
-                int userrole = GetUserRole(creator, sessiontoken);
-                switch (userrole) {
+            int retval;
+            String code = institution.getCode();
+            String name = institution.getName();
+            String creator = institution.getCreated_by();
+            if (code == null || code.trim().isEmpty()) {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Institution code is required");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            code = code.trim();
+            institution.setCode(code);
+            if (!code.matches("\\d{1,6}")) {
+                return responseManager.ResponseBadRequest("Institution code must be 1 to 6 digits");
+            }
+            if (institutionCodeExists(code)) {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Institution code already exists");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            if (institutionNameExists(name)) {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Financial Institution with name already exist");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            int isSettlement = settlementFlag(institution);
+            int withWallet = instWithWalletFlag(institution);
+            int canFund = withWallet;
+            String cbnAccount = isSettlement == 1 ? nz(institution.getCbn_bank_account()) : "";
+            String serverIp = defaultServerIp(institution.getServerIP());
+            int neTimeout = defaultTimeout(institution.getNeTimeout(), 5);
+            int ftTimeout = defaultTimeout(institution.getFtTimeout(), 10);
+            int userrole = GetUserRole(creator, sessiontoken);
+            switch (userrole) {
                     case 1:
                         SQL = "INSERT into ajiswitch_db.tbl_charges(institution_code, charge_amount, vat, date_created, is_active) VALUES(?, ?, ?, now(), '1')";
-                        jdbcTemplate.update(SQL, new Object[]{code, charge_amount, vat});
-                        SQL = "INSERT into ajiswitch_db.tbl_token_users(institution_name, password) VALUES(?, ENCODE(?, ?))";
-                        jdbcTemplate.update(SQL, new Object[]{code, password, appConfig.getSqlEncodeString()});
+                        jdbcTemplate.update(SQL, new Object[]{code, institution.getCharge_amount(), institution.getVat()});
+                        SQL = "INSERT into ajiswitch_db.tbl_token_users(institution_name, password) VALUES(?, TO_BASE64(AES_ENCRYPT(?, ?)))";
+                        jdbcTemplate.update(SQL, new Object[]{code, institution.getPassword(), appConfig.getSqlEncodeString()});
                         SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
-                        jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?)";
-                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name, cbn_bank_account, hashKey, is_tsq_processed});
-                        SQL = "INSERT into ajiswitch_db.tbl_nodes_temp(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?)";
-                        retvalLinux = jdbcTemplate.update(SQL, new Object[]{port, publickeylocationLinux, code, name, cbn_bank_account, hashKey, is_tsq_processed});
-                        if (retval > 0 && retvalLinux > 0) 
+                        jdbcTemplate.update(SQL, new Object[]{code, name, institution.getShortName(), institution.getColor(), institution.getBusinessType(), institution.getBusiness_address()});
+                        SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ, issettlementbank, serverIP, neTimeout, ftTimeout, canFundWallet, walletnumber) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        retval = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getPublickeylocation(), code, name, cbnAccount, institution.getHashKey(), institution.getIsProcessTSQ(), isSettlement, serverIp, neTimeout, ftTimeout, canFund, ""});
+                        insertInstitutionExt(institution);
+                        if (isSettlement == 0) {
+                            String walletnumber = insertLiveWallet(creator, code, institution.getWalletname(), institution.getWallettype());
+                            if (walletnumber != null && !walletnumber.isEmpty()) {
+                                jdbcTemplate.update("UPDATE ajiswitch_db.tbl_nodes SET walletnumber = ? WHERE institution_code = ?", new Object[]{walletnumber, code});
+                            }
+                        }
+                        if (retval > 0)
                             return responseManager.ResponseAccepted();
-                        else 
+                        else
                             return responseManager.ResponseInternalServerError();
                     case 2:
                         boolean checkPendingAction = CheckInstitutionActionPending(code, "create");
@@ -259,10 +457,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             networkResponse.setMessage("Institution already pending create");
                             return responseManager.ResponseOk(networkResponse);
                         }
-                        SQL = "INSERT INTO tbl_financial_institutions_pendings(code, name, shortName, color, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', ?)";
-                        jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                        SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, 1, ?, ?, ?, now())";
-                        retval = jdbcTemplate.update(SQL, new Object[]{port, publickeylocation, code, name});
+                        SQL = "INSERT INTO tbl_financial_institutions_pendings(code, name, shortName, color, businessType, actionType, note, business_address, charge_amount, vat, password, url, urlTSQ, neEnvelope, neResponseStartTag, neResponseEndTag, ftEnvelope, ftResponseStartTag, ftResponseEndTag, tsqEnvelope, tsqResponseStartTag, tsqResponseEndTag, instWithWallet, walletname, wallettype) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', ?, ?, ?, TO_BASE64(AES_ENCRYPT(?, ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        jdbcTemplate.update(SQL, new Object[]{code, name, institution.getShortName(), institution.getColor(), institution.getBusinessType(), institution.getBusiness_address(), institution.getCharge_amount(), institution.getVat(), institution.getPassword(), appConfig.getSqlEncodeString(), nz(institution.getUrl()), nz(institution.getUrlTSQ()), nz(institution.getNeEnvelope()), nz(institution.getNeResponseStartTag()), nz(institution.getNeResponseEndTag()), nz(institution.getFtEnvelope()), nz(institution.getFtResponseStartTag()), nz(institution.getFtResponseEndTag()), nz(institution.getTsqEnvelope()), nz(institution.getTsqResponseStartTag()), nz(institution.getTsqResponseEndTag()), withWallet, nz(institution.getWalletname()), institution.getWallettype()});
+                        SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ, issettlementbank, serverIP, neTimeout, ftTimeout, canFundWallet) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?)";
+                        retval = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getPublickeylocation(), code, name, cbnAccount, institution.getHashKey(), institution.getIsProcessTSQ(), isSettlement, serverIp, neTimeout, ftTimeout, canFund});
                         if (retval > 0) 
                             return responseManager.ResponseAccepted();
                         else 
@@ -270,13 +468,12 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     default:
                         return responseManager.ResponseUnathorized();
                 }
-            }
-            else {
-                networkResponse.setCode(200);
-                networkResponse.setStatus("failed");
-                networkResponse.setMessage("Financial Institution with name or code already exist");
-                return responseManager.ResponseOk(networkResponse);
-            }
+        } catch (org.springframework.dao.DuplicateKeyException ex) {
+            NetworkResponse networkResponse = new NetworkResponse();
+            networkResponse.setCode(200);
+            networkResponse.setStatus("failed");
+            networkResponse.setMessage("Institution code already exists");
+            return responseManager.ResponseOk(networkResponse);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
@@ -433,8 +630,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     jdbcTemplate.update(SQL, new Object[]{charge_amount, vat, code});
                     SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ?, cbn_bank_account = ?, isProcessTSQ = ? WHERE institution_code = ?";
                     jdbcTemplate.update(SQL, new Object[]{name, cbn_bank_account, is_tsq_processed, code});
-                    SQL = "UPDATE ajiswitch_db.tbl_nodes_temp SET institution_name = ?, cbn_bank_account = ?, isProcessTSQ = ? WHERE institution_code = ?";
-                    jdbcTemplate.update(SQL, new Object[]{name, cbn_bank_account, is_tsq_processed, code});
+                    // Belema has no tbl_nodes_temp — only tbl_nodes
 //                    if (retVal > 0)
                     return responseManager.ResponseAccepted();
 //                    else
@@ -522,12 +718,35 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             else
                                 return responseManager.ResponseInternalServerError();
                         case "create":
+                            FinancialInstitutionModel pendingCreate = institutions.get(0);
+                            int isSettlement = settlementFlag(pendingCreate);
+                            int canFund = instWithWalletFlag(pendingCreate);
+                            String cbnAccount = isSettlement == 1 ? nz(pendingCreate.getCbn_bank_account()) : "";
+                            String serverIp = defaultServerIp(pendingCreate.getServerIP());
+                            int neTimeout = defaultTimeout(pendingCreate.getNeTimeout(), 5);
+                            int ftTimeout = defaultTimeout(pendingCreate.getFtTimeout(), 10);
+                            String walletnumber = "";
+                            SQL = "INSERT into ajiswitch_db.tbl_charges(institution_code, charge_amount, vat, date_created, is_active) VALUES(?, ?, ?, now(), '1')";
+                            jdbcTemplate.update(SQL, new Object[]{pendingCreate.getCode(), pendingCreate.getCharge_amount(), pendingCreate.getVat()});
+                            try {
+                                SQL = "INSERT into ajiswitch_db.tbl_token_users(institution_name, password) "
+                                        + "SELECT b.code, b.password FROM tbl_nodes_pendings a "
+                                        + "INNER JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code "
+                                        + "WHERE a.id = ? AND b.actionType = 'create' AND b.password IS NOT NULL";
+                                jdbcTemplate.update(SQL, new Object[]{id});
+                            } catch (DataAccessException tokenUsersEx) {
+                                System.out.println("error>>>>" + tokenUsersEx.getMessage());
+                            }
+                            SQL = "INSERT into tbl_financial_institutions(name, shortName, color, code, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
+                            jdbcTemplate.update(SQL, new Object[]{pendingCreate.getName(), pendingCreate.getShortName(), pendingCreate.getColor(), pendingCreate.getCode(), pendingCreate.getBusinessType(), pendingCreate.getBusiness_address()});
+                            if (isSettlement == 0) {
+                                walletnumber = insertLiveWallet(username, pendingCreate.getCode(), pendingCreate.getWalletname(), pendingCreate.getWallettype());
+                            }
+                            SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ, issettlementbank, serverIP, neTimeout, ftTimeout, canFundWallet, walletnumber) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                            retVal2 = jdbcTemplate.update(SQL, new Object[]{pendingCreate.getPort_number(), pendingCreate.getPublickeylocation(), pendingCreate.getCode(), pendingCreate.getName(), cbnAccount, pendingCreate.getHashKey(), pendingCreate.getIsProcessTSQ(), isSettlement, serverIp, neTimeout, ftTimeout, canFund, walletnumber});
+                            insertInstitutionExt(pendingCreate);
                             SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            SQL = "INSERT into tbl_financial_institutions(name, shortName, color, code, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
-                            jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getShortName(), institutions.get(0).getColor(), institutions.get(0).getCode(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address()});
-                            SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, 1, ?, ?, ?, now())";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getPort_number(), institutions.get(0).getPublickeylocation(), institutions.get(0).getCode(), institutions.get(0).getName()});
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseAccepted();
                             else
@@ -814,18 +1033,34 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
         ResponseEntity createLoginResponse = usersInterface.Create(
                 sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security);
         logger.info("Received response from usersInterface.Create");
-        LoginResponse response = (LoginResponse) createLoginResponse.getBody();
-        if (response.getStatus().equals("success")) {
-            logger.info("Login response success. Processing contact creation for userrole: " + userrole);
+        Object createBody = createLoginResponse.getBody();
+        boolean userCreateOk = false;
+        if (createBody instanceof LoginResponse) {
+            userCreateOk = "success".equals(((LoginResponse) createBody).getStatus());
+        } else if (createBody instanceof NetworkResponse) {
+            userCreateOk = "success".equals(((NetworkResponse) createBody).getStatus());
+        }
+        if (userCreateOk) {
+            if (institution == null || institution.isEmpty()) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Financial institution code is required");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            jdbcTemplate.update(
+                    "UPDATE tbl_user_details_operations SET note = 'Create contact account' WHERE email_address = ? AND actionType = 'create'",
+                    email_address);
+            logger.info("Stored create-account note on pending contact for " + email_address);
+            logger.info("User create accepted. Processing contact creation for userrole: " + userrole);
             String SQL;
             int retval;
             switch (userrole) {
                 case 1:
-                case 2:
                     SQL = "INSERT into tbl_financial_institution_contacts(" +
                           "financial_institution_code, firstname, surname, phone_number, email_address, date_created) " +
                           "VALUES(?, ?, ?, ?, ?, now())";
-                    logger.info("Executing SQL for userrole 1/2: " + SQL);
+                    logger.info("Executing SQL for userrole 1: " + SQL);
                     retval = jdbcTemplate.update(SQL, new Object[]{institution, firstname, surname, phone_number, email_address});
                     logger.info("Insert into tbl_financial_institution_contacts returned: " + retval);
                     if (retval > 0) {
@@ -835,10 +1070,9 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
                         logger.info("Insert into tbl_financial_institution_contacts failed for email: " + email_address);
                         return responseManager.ResponseBadRequest();
                     }
+                case 2:
                 case 3:
-                    // Check if creation is already pending.
-                    boolean contactPending = CheckContactPending(email_address, "create");
-                    if (contactPending) {
+                    if (CheckContactPending(email_address, "create")) {
                         logger.info("Contact pending creation already exists for email: " + email_address);
                         NetworkResponse networkResponse = new NetworkResponse();
                         networkResponse.setCode(200);
@@ -849,11 +1083,11 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
                     SQL = "INSERT INTO tbl_financial_institution_contacts_operations(" +
                           "financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) " +
                           "VALUES(?, ?, ?, ?, ?, 'create', 'Create contact', now())";
-                    logger.info("Executing SQL for userrole 3: " + SQL);
+                    logger.info("Executing SQL for pending contact (userrole " + userrole + "): " + SQL);
                     retval = jdbcTemplate.update(SQL, new Object[]{institution, firstname, surname, phone_number, email_address});
                     logger.info("Insert into tbl_financial_institution_contacts_operations returned: " + retval);
                     if (retval > 0) {
-                        logger.info("Successfully recorded pending contact creation for email: " + email_address);
+                        logger.info("Pending contact recorded for email: " + email_address);
                         return responseManager.ResponseAccepted();
                     } else {
                         logger.info("Insert into tbl_financial_institution_contacts_operations failed for email: " + email_address);
@@ -864,7 +1098,12 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
                     return responseManager.ResponseUnathorized();
             }
         } else {
-            logger.info("Login response failed. Status: " + response.getStatus());
+            String status = createBody instanceof LoginResponse
+                    ? ((LoginResponse) createBody).getStatus()
+                    : createBody instanceof NetworkResponse
+                            ? ((NetworkResponse) createBody).getStatus()
+                            : "unknown";
+            logger.info("User create failed. Status: " + status);
             return responseManager.ResponseInternalServerError();
         }
     } catch (DataAccessException ex) {
@@ -963,8 +1202,8 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
                     note = contact.getPhone_number().equals(phone_number) || phone_number == null ? note : !note.equals("") ? note + ", change phone number from " + contact.getPhone_number() + " to " + phone_number : "Change phone number from " + contact.getPhone_number() + " to " + phone_number;
                     SQL = "INSERT INTO tbl_financial_institution_contacts_operations(financial_institution_code, firstname, surname, phone_number, email_address, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, 'edit', ?, now())";
                     jdbcTemplate.update(SQL, new Object[]{contact.getInstitution(), contact.getFirstname(), contact.getSurname(), contact.getPhone_number(), contact.getEmail_address(), note});
-                    SQL = "INSERT INTO tbl_user_details_operations(username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', ?, now())";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{contact.getEmail_address(), firstname, surname, phone_number, contact.getEmail_address(), 4, note});
+                    SQL = "INSERT INTO tbl_user_details_operations(username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, 'edit', 'Edit contact account', now())";
+                    retVal = jdbcTemplate.update(SQL, new Object[]{contact.getEmail_address(), firstname, surname, phone_number, contact.getEmail_address(), 4});
                     if (retVal > 0) 
                         return responseManager.ResponseAccepted();
                     else
@@ -1008,7 +1247,19 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             response.setInstitutionName(rs.getString("institutionname"));
             response.setActionType(rs.getString("actionType"));
             response.setNote(rs.getString("note"));
+            mapContactOperationSubmitter(response, rs);
             return response;
+        }
+    }
+
+    private void mapContactOperationSubmitter(UserModel response, ResultSet rs) throws SQLException {
+        if (!UsersService.hasColumn(rs, "created_by")) {
+            return;
+        }
+        String submitter = rs.getString("created_by");
+        if (submitter != null && !submitter.isEmpty()) {
+            response.setCreator(submitter);
+            response.setCreated_by(submitter);
         }
     }
     
@@ -1056,6 +1307,87 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             response.setBusinessTypeName(rs.getString("businessTypeName"));
             response.setActionType(rs.getString("actionType"));
             response.setNote(rs.getString("note"));
+            if (UsersService.hasColumn(rs, "created_by")) {
+                String submitter = rs.getString("created_by");
+                if (submitter != null && !submitter.isEmpty()) {
+                    response.setCreated_by(submitter);
+                }
+            }
+            if (UsersService.hasColumn(rs, "charge_amount")) {
+                response.setCharge_amount(rs.getFloat("charge_amount"));
+            }
+            if (UsersService.hasColumn(rs, "vat")) {
+                response.setVat(rs.getFloat("vat"));
+            }
+            if (UsersService.hasColumn(rs, "cbn_bank_account")) {
+                response.setCbn_bank_account(rs.getString("cbn_bank_account"));
+            }
+            if (UsersService.hasColumn(rs, "isProcessTSQ")) {
+                response.setIsProcessTSQ(rs.getInt("isProcessTSQ"));
+            }
+            if (UsersService.hasColumn(rs, "password")) {
+                byte[] encodedPassword = rs.getBytes("password");
+                if (encodedPassword != null && encodedPassword.length > 0) {
+                    response.setPassword(java.util.HexFormat.of().formatHex(encodedPassword));
+                }
+            }
+            if (UsersService.hasColumn(rs, "hashkey")) {
+                response.setHashKey(rs.getString("hashkey"));
+            }
+            if (UsersService.hasColumn(rs, "issettlementbank")) {
+                response.setIssettlementbank(rs.getInt("issettlementbank"));
+            }
+            if (UsersService.hasColumn(rs, "serverIP")) {
+                response.setServerIP(rs.getString("serverIP"));
+            }
+            if (UsersService.hasColumn(rs, "neTimeout")) {
+                response.setNeTimeout(rs.getInt("neTimeout"));
+            }
+            if (UsersService.hasColumn(rs, "ftTimeout")) {
+                response.setFtTimeout(rs.getInt("ftTimeout"));
+            }
+            if (UsersService.hasColumn(rs, "url")) {
+                response.setUrl(rs.getString("url"));
+            }
+            if (UsersService.hasColumn(rs, "urlTSQ")) {
+                response.setUrlTSQ(rs.getString("urlTSQ"));
+            }
+            if (UsersService.hasColumn(rs, "neEnvelope")) {
+                response.setNeEnvelope(rs.getString("neEnvelope"));
+            }
+            if (UsersService.hasColumn(rs, "neResponseStartTag")) {
+                response.setNeResponseStartTag(rs.getString("neResponseStartTag"));
+            }
+            if (UsersService.hasColumn(rs, "neResponseEndTag")) {
+                response.setNeResponseEndTag(rs.getString("neResponseEndTag"));
+            }
+            if (UsersService.hasColumn(rs, "ftEnvelope")) {
+                response.setFtEnvelope(rs.getString("ftEnvelope"));
+            }
+            if (UsersService.hasColumn(rs, "ftResponseStartTag")) {
+                response.setFtResponseStartTag(rs.getString("ftResponseStartTag"));
+            }
+            if (UsersService.hasColumn(rs, "ftResponseEndTag")) {
+                response.setFtResponseEndTag(rs.getString("ftResponseEndTag"));
+            }
+            if (UsersService.hasColumn(rs, "tsqEnvelope")) {
+                response.setTsqEnvelope(rs.getString("tsqEnvelope"));
+            }
+            if (UsersService.hasColumn(rs, "tsqResponseStartTag")) {
+                response.setTsqResponseStartTag(rs.getString("tsqResponseStartTag"));
+            }
+            if (UsersService.hasColumn(rs, "tsqResponseEndTag")) {
+                response.setTsqResponseEndTag(rs.getString("tsqResponseEndTag"));
+            }
+            if (UsersService.hasColumn(rs, "instWithWallet")) {
+                response.setInstWithWallet(rs.getInt("instWithWallet"));
+            }
+            if (UsersService.hasColumn(rs, "walletname")) {
+                response.setWalletname(rs.getString("walletname"));
+            }
+            if (UsersService.hasColumn(rs, "wallettype")) {
+                response.setWallettype(rs.getInt("wallettype"));
+            }
             return response;
         }
     }

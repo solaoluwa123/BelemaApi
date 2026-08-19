@@ -5,6 +5,7 @@
  */
 package com.transgate.api.interfaces;
 
+import com.transgate.api.models.FinancialInstitutionModel;
 import org.springframework.http.ResponseEntity;
 
 /**
@@ -15,7 +16,7 @@ public interface FinancialInstitutionsInterface {
     
     public ResponseEntity GetFinancialInstitutions();
 
-    public ResponseEntity Create(String sessiontoken, String name, String shortName, int port, String publickeylocation, String publickeylocationLinux, String cbn_bank_account, String color, String code, String business_address, int businessType, String creator, String password, float charge_amount, float vat, String hashKey, int is_tsq_processed);
+    public ResponseEntity Create(String sessiontoken, FinancialInstitutionModel institution);
     
     public ResponseEntity GetFinancialInstitutionsTypes();
     
