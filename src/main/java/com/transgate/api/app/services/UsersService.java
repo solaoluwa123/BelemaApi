@@ -321,8 +321,9 @@ public class UsersService implements UsersInterface {
 
             if (randomizer.AuthorizeGoogleAuthenticatorCode(secret, Integer.parseInt(password))) {
                 response.setTwofaenabled(1);
-                response.setTwofasecretkey(secret);
-                String sessiontoken = randomizer.GenerateToken(100);
+                Date now = new Date();
+                Date expirationDate = new Date(now.getTime() + (1000 * 60 * 120));
+                String sessiontoken = validators.GenerateJSONWebToken(username, expirationDate);
                 SQL = "UPDATE tbl_user_details SET attempts_left = 3, last_login = now(), session_token = ? WHERE email_address = ?";
                 jdbcTemplate.update(SQL, new Object[]{sessiontoken, username});
                 SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.session_token, a.last_login, b.role_name, c.financial_institution_code, d.name as institution_name "
@@ -368,6 +369,7 @@ public class UsersService implements UsersInterface {
                     response.setRole("Third Party Vendor");
                     response.setDate_created((new Date()).toString());
                     response.setDate_updated(null);
+                    response.setSession_token(sessiontoken);
                 }
 
                 if (userRoleid == 5) {
@@ -648,11 +650,14 @@ public class UsersService implements UsersInterface {
                 jdbcTemplate.update(sql, new Object[]{sessionToken, username});
                 logger.info("User {} authenticated successfully.", username);
 
-                // If two-factor authentication is enabled, return response early
+                // If two-factor authentication is enabled, return challenge response (JWT pending OTP).
                 if (twoFaEnabled == 1) {
                     response.setCode(200);
                     response.setStatus("success");
-                    response.setMessage("Login successful");
+                    response.setMessage("2FA required");
+                    response.setEmail_address(username);
+                    response.setUsername(username);
+                    response.setTwofaenabled(1);
                     auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
                             AuditConstants.ACTION_LOGIN, AuditConstants.OUTCOME_SUCCESS, 200, "Password ok; 2FA required");
                     return responseManager.ResponseOk(response);
