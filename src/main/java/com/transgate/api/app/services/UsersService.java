@@ -827,7 +827,11 @@ public class UsersService implements UsersInterface {
                 int ret = jdbcTemplate.update(SQL, new Object[]{enable, secret, username});
                 if (ret > 0) {
                     response.setStatus("success");
-                    String meta = "{\"qrCodeUri\": " + "\"" + qrCodeUri + "\"" + "}";
+                    // Escape for JSON string value — otpauth URIs can contain quotes/backslashes after encoding edge cases.
+                    String escapedUri = qrCodeUri
+                            .replace("\\", "\\\\")
+                            .replace("\"", "\\\"");
+                    String meta = "{\"qrCodeUri\":\"" + escapedUri + "\"}";
                     response.setMeta(meta);
                 } else {
                     response.setStatus("failed");
