@@ -9,10 +9,16 @@ public final class PlatformRole {
     public static final int OPERATOR = 2;
     public static final int APPROVER = 3;
     public static final int OTHER_MIN = 4;
+    /** Institution contact / Third Party Vendor (same as OTHER_MIN). */
+    public static final int THIRD_PARTY_VENDOR = 4;
     public static final int OTHER_MAX = 8;
     public static final int READ_ONLY = 9;
 
     private PlatformRole() {
+    }
+
+    public static boolean isThirdPartyVendor(int role) {
+        return role == THIRD_PARTY_VENDOR;
     }
 
     public static boolean isReadOnly(int role) {

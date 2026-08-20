@@ -9,6 +9,7 @@ import com.transgate.api.interfaces.TransactionsInterface;
 import com.transgate.api.models.DisputeModel;
 import com.transgate.api.models.TransactionModel;
 import com.transgate.api.util.ResponseManager;
+import com.transgate.api.util.SessionActorResolver;
 import com.transgate.api.app.services.Validators;
 import java.util.Optional;
 import java.util.logging.Logger;
@@ -32,6 +33,9 @@ public class TransactionsController {
     @Autowired
     private TransactionsInterface transactionsInterface;
 
+    @Autowired
+    private SessionActorResolver sessionActorResolver;
+
     ResponseManager responseManager = new ResponseManager();
 
     private final Validators validators;
@@ -42,10 +46,53 @@ public class TransactionsController {
         this.validators = validators;
     }
 
+    /**
+     * For Third Party Vendor (role 4), force the caller's own FI code.
+     * Returns empty Optional when the caller is not a vendor.
+     * Returns a ResponseEntity error when the vendor has no FI linked.
+     */
+    private Optional<ResponseEntity> vendorInstitutionGate(String sessiontoken, String requestedCode) {
+        Optional<SessionActorResolver.Actor> actorOpt = sessionActorResolver.resolve(sessiontoken);
+        if (actorOpt.isEmpty() || !actorOpt.get().isThirdPartyVendor()) {
+            return Optional.empty();
+        }
+        SessionActorResolver.Actor actor = actorOpt.get();
+        if (!actor.hasInstitutionCode()) {
+            return Optional.of(responseManager.ResponseBadRequest(
+                    "Your account is not linked to an institution."));
+        }
+        String mine = actor.institutionCode().trim();
+        if (requestedCode != null && !requestedCode.isBlank() && !mine.equals(requestedCode.trim())) {
+            return Optional.of(responseManager.ResponseForbidden(
+                    "Third Party Vendors may only access transactions for their own institution."));
+        }
+        return Optional.empty();
+    }
+
+    private String vendorInstitutionOrNull(String sessiontoken) {
+        return sessionActorResolver.resolve(sessiontoken)
+                .filter(SessionActorResolver.Actor::isThirdPartyVendor)
+                .filter(SessionActorResolver.Actor::hasInstitutionCode)
+                .map(a -> a.institutionCode().trim())
+                .orElse(null);
+    }
+
     @RequestMapping(value = "/transactions", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity Get(@RequestHeader(value = "Authorization") String header) {
+    public ResponseEntity Get(
+            @RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
+        }
+        // Role 4 → GET /transactions/institution/{theirCode}
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            logger.info("Routing Third Party Vendor to institution transactions: " + vendorCode);
+            return transactionsInterface.Get(vendorCode);
+        }
+        Optional<SessionActorResolver.Actor> actorOpt = sessionActorResolver.resolve(sessiontoken);
+        if (actorOpt.isPresent() && actorOpt.get().isThirdPartyVendor()) {
+            return responseManager.ResponseBadRequest("Your account is not linked to an institution.");
         }
         return transactionsInterface.Get();
     }
@@ -53,39 +100,34 @@ public class TransactionsController {
     @RequestMapping(value = "/transactions-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity Get(
             @RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
             @RequestParam("page") int page,
             @RequestParam("limit") int limit,
             @RequestParam("isCurrent") boolean isCurrent) {
 
-        // Log incoming request details.
         logger.info("Received GET /transactions-by-date request with parameters: "
                 + "startDate=" + startDate + ", endDate=" + endDate
-                + ", page=" + page + ", limit=" + limit + ", isCurrent=" + isCurrent
-                + ", Authorization header=" + header);
+                + ", page=" + page + ", limit=" + limit + ", isCurrent=" + isCurrent);
 
         try {
-            // Validate the Authorization header.
             if (!validators.validHeader().equals(header)) {
-                logger.info("Invalid Authorization header provided. Expected header: "
-                        + validators.validHeader() + " but received: " + header);
-
-                ResponseEntity invalidResponse = responseManager.InvalidAuthorizationHeader();
-                logger.info("Returning response with status: " + invalidResponse.getStatusCode());
-                return invalidResponse;
+                return responseManager.InvalidAuthorizationHeader();
             }
 
-            // Call the underlying transactions service.
-            ResponseEntity responseEntity = transactionsInterface.Get(startDate, endDate, page, limit, isCurrent);
+            String vendorCode = vendorInstitutionOrNull(sessiontoken);
+            if (vendorCode != null) {
+                logger.info("Routing Third Party Vendor /transactions-by-date to institution " + vendorCode);
+                return transactionsInterface.Get(vendorCode, startDate, endDate, page, limit, isCurrent);
+            }
+            Optional<SessionActorResolver.Actor> actorOpt = sessionActorResolver.resolve(sessiontoken);
+            if (actorOpt.isPresent() && actorOpt.get().isThirdPartyVendor()) {
+                return responseManager.ResponseBadRequest("Your account is not linked to an institution.");
+            }
 
-            // Log basic response details.
-            logger.info("Returning response with status: " + responseEntity.getStatusCode());
-            logger.info("Response body: " + responseEntity.getBody());
-
-            return responseEntity;
+            return transactionsInterface.Get(startDate, endDate, page, limit, isCurrent);
         } catch (Exception ex) {
-            // Log the exception details and rethrow the exception.
             logger.info("Exception occurred while processing /transactions-by-date: " + ex.getMessage());
             throw ex;
         }
@@ -360,11 +402,20 @@ public class TransactionsController {
     }
 
     @RequestMapping(value = "/transactions/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GetInstitutionTransactions(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable("institutioncode") String institutioncode) {
+    public ResponseEntity GetInstitutionTransactions(
+            @RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("institutioncode") String institutioncode) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(institutioncode);
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institutioncode);
+        if (denied.isPresent()) {
+            return denied.get();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        String code = vendorCode != null ? vendorCode : institutioncode;
+        return transactionsInterface.Get(code);
     }
 
     @RequestMapping(value = "/transactions-by-session-ids", method = RequestMethod.POST, headers = "Accept=application/json")
@@ -402,10 +453,16 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.Get(institutioncode, startDate, endDate, page, limit, isCurrent);
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institutioncode);
+        if (denied.isPresent()) {
+            return denied.get();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        String code = vendorCode != null ? vendorCode : institutioncode;
+        return transactionsInterface.Get(code, startDate, endDate, page, limit, isCurrent);
     }
     
-        @RequestMapping(value = "/transactions-by-date-only/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    @RequestMapping(value = "/transactions-by-date-only/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity getInstitutionTransactionsByDateOnly(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,
             @PathVariable("institutioncode") String institutioncode,
@@ -417,7 +474,13 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.getInstitutionTransactionsByDateOnly(institutioncode, startDate, endDate, page, limit, isCurrent);
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institutioncode);
+        if (denied.isPresent()) {
+            return denied.get();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        String code = vendorCode != null ? vendorCode : institutioncode;
+        return transactionsInterface.getInstitutionTransactionsByDateOnly(code, startDate, endDate, page, limit, isCurrent);
     }
 
     @RequestMapping(value = "/transactions/disputes/create", method = RequestMethod.PUT, headers = "Accept=application/json")
@@ -533,10 +596,24 @@ public class TransactionsController {
             return responseManager.InvalidAuthorizationHeader();
         }
 
-        // Log after header validation and before invoking the transactions service
+        String scopedInstitution = userInstitutionCode;
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, userInstitutionCode);
+            if (denied.isPresent()) {
+                return denied.get();
+            }
+            scopedInstitution = vendorCode;
+            logger.info("Forcing Third Party Vendor search scope to institution " + vendorCode);
+        } else {
+            Optional<SessionActorResolver.Actor> actorOpt = sessionActorResolver.resolve(sessiontoken);
+            if (actorOpt.isPresent() && actorOpt.get().isThirdPartyVendor()) {
+                return responseManager.ResponseBadRequest("Your account is not linked to an institution.");
+            }
+        }
+
         logger.info("Header validated. Proceeding to search transactions.");
 
-        // Call the interface method and log that the service call is being made.
         ResponseEntity response = transactionsInterface.SearchTransactions(
                 srcSessionid,
                 channelCode,
@@ -552,9 +629,8 @@ public class TransactionsController {
                 page,
                 limit,
                 isCurrent,
-                userInstitutionCode);
+                scopedInstitution);
 
-        // Log before returning the response
         logger.info("SearchTransactions completed. Returning response.");
         return response;
     }
