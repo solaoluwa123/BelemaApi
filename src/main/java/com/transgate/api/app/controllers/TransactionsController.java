@@ -851,7 +851,19 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.RequestTransactionStatusChange(model.getSrcSessionid(), sessiontoken, model.getUsername(), model.getNarration());
+        // New response code lives on srcResponsecode (not narration — narration is the admin reason).
+        String newStatusCode = model.getSrcResponsecode();
+        if (newStatusCode == null || newStatusCode.trim().isEmpty()) {
+            newStatusCode = model.getDestResponseCode();
+        }
+        if (newStatusCode == null || newStatusCode.trim().isEmpty()) {
+            newStatusCode = model.getType();
+        }
+        return transactionsInterface.RequestTransactionStatusChange(
+                model.getSrcSessionid(),
+                sessiontoken,
+                model.getUsername(),
+                newStatusCode == null ? "" : newStatusCode.trim());
     }
 
 //    @RequestMapping(value = "/transaction/status/change/update", method = RequestMethod.POST, headers = "Accept=application/json")

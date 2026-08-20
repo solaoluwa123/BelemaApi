@@ -5148,10 +5148,163 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         logger.info("Entering RequestTransactionStatusChange(sessionid=" + sessionid
                 + ", username=" + username + ", status=" + status + ")");
-        networkResponse.setCode(200);
-        networkResponse.setStatus("failed");
-        networkResponse.setMessage("Transaction status change is not available on this Belema schema (tbl_transactions_status is missing)");
-        return responseManager.ResponseOk(networkResponse);
+        try {
+            int userrole = GetUserRole(username, sessiontoken);
+            logger.info("Retrieved user role: " + userrole);
+
+            // Admin-only, immediate apply — no approval queue on Belema.
+            if (userrole != 1) {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Only an administrator can change transaction status");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            String newCode = status == null ? "" : status.trim();
+            // Accept UI labels as well as ISO response codes.
+            if ("Successful".equalsIgnoreCase(newCode) || "Success".equalsIgnoreCase(newCode)) {
+                newCode = "00";
+            } else if ("Failed".equalsIgnoreCase(newCode) || "Failure".equalsIgnoreCase(newCode)) {
+                newCode = "91";
+            } else if ("Pending".equalsIgnoreCase(newCode)) {
+                newCode = "09";
+            }
+            if (newCode.isEmpty() || !newCode.matches("\\d{2}")) {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Invalid target status. Use Successful/Failed or a 2-digit response code.");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            if (sessionid == null || sessionid.trim().isEmpty()) {
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Session id is required");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            Set<String> sessionIds = Arrays.stream(sessionid.split(","))
+                    .map(s -> s.replaceAll("['\"]", "").trim())
+                    .filter(s -> !s.isEmpty())
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+
+            int updatedCount = 0;
+            for (String sid : sessionIds) {
+                Map<String, Object> txn = null;
+                String foundTable = null;
+                JdbcTemplate sourceJdbc = null;
+
+                String SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
+                        + "FROM ajiswitch_db.tbl_creditfundtransfers a "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
+                        + "WHERE a.session_id = ? AND a.response_code = '09'";
+                List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, sid);
+                if (!rows.isEmpty()) {
+                    txn = rows.get(0);
+                    foundTable = "ajiswitch_db.tbl_creditfundtransfers";
+                    sourceJdbc = jdbcTemplate;
+                }
+
+                if (txn == null) {
+                    SQL = "SELECT a.*, b.institution_name as source_institution_name, c.institution_name as destination_institution_name "
+                            + "FROM " + archiveTable() + " a "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                            + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
+                            + "WHERE a.session_id = ? AND a.response_code = '09'";
+                    rows = jdbcTemplate.queryForList(SQL, sid);
+                    if (!rows.isEmpty()) {
+                        txn = rows.get(0);
+                        foundTable = archiveTable();
+                        sourceJdbc = jdbcTemplate;
+                    }
+                }
+
+                if (txn == null && hasSeparateArchive()) {
+                    rows = secondJdbcTemplate.queryForList(SQL, sid);
+                    if (!rows.isEmpty()) {
+                        txn = rows.get(0);
+                        foundTable = archiveTable();
+                        sourceJdbc = secondJdbcTemplate;
+                    }
+                }
+
+                if (txn == null) {
+                    logger.info(String.format("%s :: No pending (09) transaction found; skipping.", sid));
+                    continue;
+                }
+
+                BigDecimal amount;
+                try {
+                    amount = new BigDecimal(txn.get("amount").toString());
+                    if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                        logger.info(String.format("%s :: Invalid amount %s; skipping.", sid, amount));
+                        continue;
+                    }
+                } catch (Exception e) {
+                    logger.info(String.format("%s :: Could not parse amount; skipping.", sid));
+                    continue;
+                }
+
+                // When marking failed (not success), credit source institution wallet (legacy admin behaviour).
+                if (!"00".equals(newCode)) {
+                    Object sourceInstObj = txn.get("source_institution_code");
+                    if (sourceInstObj != null) {
+                        String sourceInst = sourceInstObj.toString();
+                        String nodeSql = "SELECT walletnumber, institution_name "
+                                + "FROM ajiswitch_db.tbl_nodes "
+                                + "WHERE institution_code = ? AND is_active = 1";
+                        List<Map<String, Object>> nodeRows = jdbcTemplate.queryForList(nodeSql, sourceInst);
+                        if (!nodeRows.isEmpty() && nodeRows.get(0).get("walletnumber") != null) {
+                            String walletNumber = nodeRows.get(0).get("walletnumber").toString();
+                            if (walletNumber.matches("\\d{10}")) {
+                                int walletUpd = jdbcTemplate.update(
+                                        "UPDATE ajiswitch_db.tbl_wallets SET balance = balance + ? WHERE walletnumber = ?",
+                                        amount, walletNumber);
+                                if (walletUpd > 0) {
+                                    try {
+                                        jdbcTemplate.update(
+                                                "INSERT INTO ajiswitch_db.tbl_wallet_activities "
+                                                        + "(walletnumber, amount, credit_or_debit, actor, activity_date_time, session_id) "
+                                                        + "VALUES (?, ?, 'CR', ?, now(), ?)",
+                                                walletNumber, amount, username, sid);
+                                    } catch (DataAccessException actEx) {
+                                        logger.info(String.format("%s :: Wallet activity insert skipped: %s", sid, actEx.getMessage()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                String updateSql = "UPDATE " + foundTable + " SET response_code = ? WHERE session_id = ? AND response_code = '09'";
+                int upd = (sourceJdbc != null ? sourceJdbc : jdbcTemplate).update(updateSql, newCode, sid);
+                logger.info(String.format("%s :: response_code update rowsAffected=%d -> %s", sid, upd, newCode));
+                if (upd > 0) {
+                    updatedCount++;
+                    try {
+                        jdbcTemplate.update("DELETE FROM ajiswitch_db.tbl_tsq_retry WHERE session_id = ?", sid);
+                    } catch (DataAccessException delEx) {
+                        logger.info(String.format("%s :: tsq_retry delete skipped: %s", sid, delEx.getMessage()));
+                    }
+                }
+            }
+
+            networkResponse.setCode(200);
+            if (updatedCount > 0) {
+                networkResponse.setStatus("success");
+                networkResponse.setMessage("Transaction status updated (" + updatedCount + ")");
+            } else {
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("No pending transaction was updated. Confirm the session id has response code 09.");
+            }
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("DataAccessException in RequestTransactionStatusChange: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        } catch (Exception ex) {
+            logger.info("Exception in RequestTransactionStatusChange: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
     }
 
     @SuppressWarnings("unused")
