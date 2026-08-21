@@ -135,4 +135,24 @@ public class AppEnvironmentConfig {
     public boolean isRequire2fa() {
         return env.getProperty("app.require-2fa", Boolean.class, Boolean.TRUE);
     }
+
+    public String getSupersoftMailHost() {
+        return env.getProperty("app.mail.supersoft.host");
+    }
+
+    public String getSupersoftMailPort() {
+        return env.getProperty("app.mail.supersoft.port");
+    }
+
+    public String getSupersoftMailUsername() {
+        return env.getProperty("app.mail.supersoft.username");
+    }
+
+    public String getSupersoftMailPassword() {
+        return env.getProperty("app.mail.supersoft.password");
+    }
+
+    public String getSupersoftMailFrom() {
+        return env.getProperty("app.mail.supersoft.from");
+    }
 }

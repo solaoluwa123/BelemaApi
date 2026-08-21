@@ -9,6 +9,7 @@ import com.transgate.api.util.ResponseManager;
 import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.audit.AuditConstants;
 import com.transgate.api.audit.AuditService;
+import com.transgate.api.events.UserCreatedEvent;
 import com.transgate.api.models.LoginResponse;
 import com.transgate.api.models.MenuModel;
 import com.transgate.api.models.NetworkResponse;
@@ -32,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
@@ -52,6 +54,9 @@ public class UsersService implements UsersInterface {
 
     @Autowired
     private AuditService auditService;
+
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
@@ -1384,7 +1389,8 @@ public class UsersService implements UsersInterface {
                         logger.info("tbl_user_details insert returned: " + retval);
 
                         if (retval > 0) {
-                            sendCredentialsEmail(email_address, plainPassword);
+                            eventPublisher.publishEvent(new UserCreatedEvent(
+                                    email_address, username, plainPassword, firstname, surname));
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
                             response.setStatus("success");
@@ -1415,7 +1421,7 @@ public class UsersService implements UsersInterface {
                         networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    // Insert a record into tbl_user_details_operations for pending creation.
+                    // Store password for pending create; AES encode happens in insertPendingUserOperation.
                     retval = insertPendingUserOperation(username, plainPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     if (retval > 0) {
                         logger.info("Pending account creation recorded for username: " + username);
@@ -1544,7 +1550,8 @@ public class UsersService implements UsersInterface {
 
                         if (retval > 0) {
                             mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
-                            sendCredentialsEmail(email_address, plainPassword);
+                            eventPublisher.publishEvent(new UserCreatedEvent(
+                                    email_address, username, plainPassword, firstname, surname));
 
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
@@ -1988,7 +1995,12 @@ public class UsersService implements UsersInterface {
                             if (retVal > 0 && retVal2 > 0) {
                                 String plainForMail = decryptPasswordCipher(pendingCipher);
                                 if (plainForMail != null && !plainForMail.isEmpty()) {
-                                    sendCredentialsEmail(pendingUser.getEmail_address(), plainForMail);
+                                    eventPublisher.publishEvent(new UserCreatedEvent(
+                                            pendingUser.getEmail_address(),
+                                            pendingUser.getUsername(),
+                                            plainForMail,
+                                            pendingUser.getFirstname(),
+                                            pendingUser.getSurname()));
                                 }
                                 LoginResponse response = new LoginResponse();
                                 response.setCode(201);
