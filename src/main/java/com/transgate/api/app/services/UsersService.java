@@ -1030,14 +1030,22 @@ public class UsersService implements UsersInterface {
                         + "WHERE a.deleted = 0 AND a.role BETWEEN " + PlatformRole.ADMIN + " AND " + PlatformRole.APPROVER + " "
                         + "ORDER BY a.id DESC";
             } else {
+                // Role 4 (vendor) stores FI on contacts; roles 5–8 use the card-user map.
                 SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, "
                         + "b.role_name, "
-                        + "c.institution_id as financial_institution_code, c.institution_name as institution_name  "
+                        + "COALESCE(ct.financial_institution_code, map.institution_id) as financial_institution_code, "
+                        + "COALESCE(fi.name, map.institution_name, n.institution_name) as institution_name "
                         + "from tbl_user_details a "
                         + "LEFT JOIN tbl_role b "
                         + "ON a.role = b.id "
-                        + "LEFT JOIN tbl_map_card_users_institution c "
-                        + "ON a.email_address = c.user_email "
+                        + "LEFT JOIN tbl_financial_institution_contacts ct "
+                        + "ON a.email_address = ct.email_address "
+                        + "LEFT JOIN tbl_financial_institutions fi "
+                        + "ON ct.financial_institution_code = fi.code "
+                        + "LEFT JOIN tbl_map_card_users_institution map "
+                        + "ON a.email_address = map.user_email "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes n "
+                        + "ON n.institution_code = COALESCE(ct.financial_institution_code, map.institution_id) "
                         + "WHERE a.deleted = 0 AND a.role BETWEEN " + PlatformRole.OTHER_MIN + " AND " + PlatformRole.OTHER_MAX + " "
                         + "ORDER BY a.id DESC";
             }
