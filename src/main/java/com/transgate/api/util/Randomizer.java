@@ -14,6 +14,7 @@ import org.apache.commons.codec.binary.Base32;
 import org.apache.commons.codec.binary.Hex;
 
 import com.warrenstrange.googleauth.GoogleAuthenticator;
+import com.warrenstrange.googleauth.GoogleAuthenticatorConfig;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import com.warrenstrange.googleauth.GoogleAuthenticatorQRGenerator;
 
@@ -22,7 +23,10 @@ import com.warrenstrange.googleauth.GoogleAuthenticatorQRGenerator;
  * @author Makintola
  */
 public class Randomizer {
-    static GoogleAuthenticator googleAuthenticator = new GoogleAuthenticator();
+    static GoogleAuthenticator googleAuthenticator = new GoogleAuthenticator(
+            new GoogleAuthenticatorConfig.GoogleAuthenticatorConfigBuilder()
+                    .setWindowSize(5)
+                    .build());
     public static String GenerateWalletNumber() {
         Random rng = new Random();
         String characters = "0123456789";

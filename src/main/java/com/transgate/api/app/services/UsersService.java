@@ -14,6 +14,8 @@ import com.transgate.api.models.MenuModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.RoleModel;
 import com.transgate.api.models.UserModel;
+import com.transgate.api.util.Mailers;
+import com.transgate.api.util.PasswordUtil;
 import com.transgate.api.util.PlatformRole;
 import com.transgate.api.util.Randomizer;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
@@ -56,10 +58,158 @@ public class UsersService implements UsersInterface {
     private static final Logger logger = LoggerFactory.getLogger(UsersService.class);
 
     private final Validators validators;
+    private final AppEnvironmentConfig appConfig;
 
     // Constructor injection for RestCall
-    public UsersService(Validators validators) {
+    public UsersService(Validators validators, AppEnvironmentConfig appConfig) {
         this.validators = validators;
+        this.appConfig = appConfig;
+    }
+
+    /** Blank → generate; otherwise require PasswordUtil policy. */
+    private String resolveAssignedPassword(String password) {
+        if (password == null || password.trim().isEmpty()) {
+            return PasswordUtil.generate();
+        }
+        String trimmed = password.trim();
+        if (!PasswordUtil.meetsPolicy(trimmed)) {
+            throw new IllegalArgumentException(
+                    "Password must be at least " + PasswordUtil.DEFAULT_LENGTH
+                    + " characters and include upper, lower, digit, and symbol.");
+        }
+        return trimmed;
+    }
+
+    private boolean verifyStoredPassword(String plain, String stored) {
+        if (plain == null || plain.isEmpty() || stored == null || stored.isEmpty()) {
+            return false;
+        }
+        if (PasswordUtil.isBcryptHash(stored)) {
+            return BCrypt.checkpw(plain, stored);
+        }
+        String decrypted = decryptPasswordCipher(stored);
+        return plain.equals(decrypted);
+    }
+
+    private String decryptPasswordCipher(String stored) {
+        if (stored == null || stored.isEmpty() || PasswordUtil.isBcryptHash(stored)) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT CAST(AES_DECRYPT(FROM_BASE64(?), ?) AS CHAR)",
+                    new Object[]{stored, appConfig.getSqlEncodeString()},
+                    String.class);
+        } catch (DataAccessException ex) {
+            logger.warn("AES decrypt failed: {}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private int insertAesUserRow(String email, String plainPassword, String ref, int enabled, int mustChange) {
+        String SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference, must_change_password) "
+                + "VALUES(?, TO_BASE64(AES_ENCRYPT(?, ?)), now(), ?, ?, ?)";
+        return jdbcTemplate.update(SQL, new Object[]{
+            email, plainPassword, appConfig.getSqlEncodeString(), enabled, ref, mustChange
+        });
+    }
+
+    /** User-chosen passwords (must-change / update / reset) are BCrypt-hashed, not AES. */
+    private void updateHashedPassword(String username, String plainPassword) {
+        String hashPassword = BCrypt.hashpw(plainPassword, BCrypt.gensalt());
+        String SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, must_change_password = 0 WHERE username = ?";
+        jdbcTemplate.update(SQL, new Object[]{hashPassword, username});
+    }
+
+    private void sendCredentialsEmail(String toEmail, String plainPassword) {
+        try {
+            String body = "<p>Your account has been created.</p>"
+                    + "<p><b>Username:</b> " + toEmail + "</p>"
+                    + "<p><b>Temporary password:</b> " + plainPassword + "</p>"
+                    + "<p>You must change this password on first login.</p>";
+            Mailers.sendMail(toEmail, "Your account credentials", body, "supersofttechltd2023@gmail.com", "");
+        } catch (Exception ex) {
+            logger.warn("Failed to send credentials email to {}: {}", toEmail, ex.getMessage());
+        }
+    }
+
+    private static int asIntFlag(Object value) {
+        if (value == null) {
+            return 0;
+        }
+        if (value instanceof Number) {
+            return ((Number) value).intValue();
+        }
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (NumberFormatException ex) {
+            return 0;
+        }
+    }
+
+    /** 1 when feature is on and create should force password change. */
+    private int mustChangeOnCreateFlag() {
+        return appConfig.isRequirePasswordChange() ? 1 : 0;
+    }
+
+    /** Gate DB must_change_password by the feature flag for API responses. */
+    private int effectiveMustChangePassword(int dbFlag) {
+        return appConfig.isRequirePasswordChange() && dbFlag == 1 ? 1 : 0;
+    }
+
+    private int require2faSetupFlag(int twoFaEnabled) {
+        return appConfig.isRequire2fa() && twoFaEnabled == 0 ? 1 : 0;
+    }
+
+    private void applyLoginSecurityFlags(LoginResponse response, int dbMustChange, int twoFaEnabled) {
+        response.setMustChangePassword(effectiveMustChangePassword(dbMustChange));
+        response.setRequire2faSetup(require2faSetupFlag(twoFaEnabled));
+    }
+
+    private int countLiveAdmins() {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM tbl_user_details WHERE role = ? AND deleted = 0",
+                    new Object[]{PlatformRole.ADMIN},
+                    Integer.class);
+            return count != null ? count : 0;
+        } catch (DataAccessException ex) {
+            logger.warn("countLiveAdmins failed: {}", ex.getMessage());
+            return Integer.MAX_VALUE / 4;
+        }
+    }
+
+    private int countPendingAdminCreates() {
+        try {
+            Integer count = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM tbl_user_details_operations WHERE role = ? AND actionType = 'create'",
+                    new Object[]{PlatformRole.ADMIN},
+                    Integer.class);
+            return count != null ? count : 0;
+        } catch (DataAccessException ex) {
+            logger.warn("countPendingAdminCreates failed: {}", ex.getMessage());
+            return Integer.MAX_VALUE / 4;
+        }
+    }
+
+    private int occupiedAdminSeats() {
+        return countLiveAdmins() + countPendingAdminCreates();
+    }
+
+    /** True when adding another Administrator seat would exceed {@code app.max-admins}. */
+    private boolean wouldExceedAdminCap(boolean addingAdminSeat) {
+        if (!addingAdminSeat) {
+            return false;
+        }
+        return occupiedAdminSeats() >= appConfig.getMaxAdmins();
+    }
+
+    private ResponseEntity adminCapExceededResponse() {
+        NetworkResponse networkResponse = new NetworkResponse();
+        networkResponse.setCode(200);
+        networkResponse.setStatus("failed");
+        networkResponse.setMessage("Maximum of " + appConfig.getMaxAdmins() + " Administrator accounts allowed.");
+        return responseManager.ResponseOk(networkResponse);
     }
 
     private int GetUserRole(String username, String session_token) {
@@ -131,18 +281,24 @@ public class UsersService implements UsersInterface {
 
     private String GetUserSecret(String username, String session_token) {
         try {
-            String secret;
-
             String SQL = "SELECT a.two_fa_secret "
                     + "FROM sparkpayweb_db.tbl_users a "
                     + "LEFT JOIN tbl_user_details b "
                     + "ON b.email_address = a.username "
                     + "WHERE a.username = ? AND b.deleted = 0 AND b.session_token = ?";
-            secret = jdbcTemplate.queryForObject(SQL, new Object[]{username, session_token}, String.class);
-            return secret;
+            return jdbcTemplate.queryForObject(SQL, new Object[]{username, session_token}, String.class);
         } catch (DataAccessException ex) {
-            System.out.println("error>>>>" + ex.getMessage());
-            return "";
+            // Pending 2FA token can be overwritten by a second password login; still resolve secret by username.
+            logger.info("GetUserSecret session-bound lookup failed for {}: {}; falling back to username", username, ex.getMessage());
+            try {
+                return jdbcTemplate.queryForObject(
+                        "SELECT two_fa_secret FROM sparkpayweb_db.tbl_users WHERE username = ? AND two_fa_enabled = 1",
+                        new Object[]{username},
+                        String.class);
+            } catch (DataAccessException ex2) {
+                System.out.println("error>>>>" + ex2.getMessage());
+                return "";
+            }
         }
     }
 
@@ -162,11 +318,14 @@ public class UsersService implements UsersInterface {
         }
     }
 
-    private int insertPendingUserOperation(String username, String hashPassword, String firstname, String surname,
+    private int insertPendingUserOperation(String username, String plainPassword, String firstname, String surname,
             String phone_number, String email_address, int roleid, String createdBy, String actionType, String note) {
-        String SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, now())";
+        String SQL = "INSERT INTO tbl_user_details_operations(username, password, firstname, surname, phone_number, email_address, role, actionType, note, date_created) "
+                + "VALUES(?, TO_BASE64(AES_ENCRYPT(?, ?)), ?, ?, ?, ?, ?, ?, ?, now())";
         logger.info("Executing SQL (tbl_user_details_operations): " + SQL);
-        return jdbcTemplate.update(SQL, new Object[]{username, hashPassword, firstname, surname, phone_number, email_address, roleid, actionType, note});
+        return jdbcTemplate.update(SQL, new Object[]{
+            username, plainPassword, appConfig.getSqlEncodeString(), firstname, surname, phone_number, email_address, roleid, actionType, note
+        });
     }
 
     private boolean CheckUserPending(String username, String email_address, String actionType) {
@@ -317,10 +476,38 @@ public class UsersService implements UsersInterface {
         try {
             String SQL;
             String secret = GetUserSecret(username, _sessiontoken);
-//            String code = randomizer.GetTOTPCode(secret);
+            if (secret == null || secret.isBlank()) {
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Invalid 2FA");
+                auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
+                        AuditConstants.ACTION_LOGIN_2FA_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "Missing 2FA secret");
+                return responseManager.ResponseOk(response);
+            }
 
-            if (randomizer.AuthorizeGoogleAuthenticatorCode(secret, Integer.parseInt(password))) {
+            String otp = password == null ? "" : password.trim();
+            if (!otp.matches("\\d{6}")) {
+                response.setCode(404);
+                response.setStatus("failed");
+                response.setMessage("Invalid 2FA");
+                auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
+                        AuditConstants.ACTION_LOGIN_2FA_FAILED, AuditConstants.OUTCOME_FAILURE, 200, "Malformed 2FA code");
+                return responseManager.ResponseOk(response);
+            }
+
+            if (randomizer.AuthorizeGoogleAuthenticatorCode(secret.trim(), Integer.parseInt(otp))) {
                 response.setTwofaenabled(1);
+                int dbMustChange = 0;
+                try {
+                    Integer mustChange = jdbcTemplate.queryForObject(
+                            "SELECT must_change_password FROM sparkpayweb_db.tbl_users WHERE username = ?",
+                            new Object[]{username},
+                            Integer.class);
+                    dbMustChange = mustChange != null ? mustChange : 0;
+                } catch (DataAccessException ex) {
+                    logger.warn("Could not load must_change_password for {}: {}", username, ex.getMessage());
+                }
+                applyLoginSecurityFlags(response, dbMustChange, 1);
                 Date now = new Date();
                 Date expirationDate = new Date(now.getTime() + (1000 * 60 * 120));
                 String sessiontoken = validators.GenerateJSONWebToken(username, expirationDate);
@@ -339,7 +526,11 @@ public class UsersService implements UsersInterface {
                 List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{username, username}, new UserMapper());
                 response.setCode(200);
                 response.setStatus("success");
-                response.setMessage("Login successful");
+                if (response.getMustChangePassword() == 1) {
+                    response.setMessage("Password change required");
+                } else {
+                    response.setMessage("Login successful");
+                }
                 int userRoleid;
                 if (details.size() > 0) {
                     userRoleid = details.get(0).getRoleid();
@@ -540,8 +731,8 @@ public class UsersService implements UsersInterface {
             }
 
             String security = (String) users.get(0).get("password");
-            logger.info("Password hash retrieved, verifying password");
-            boolean comparePassword = BCrypt.checkpw(password, security);
+            logger.info("Password retrieved, verifying password");
+            boolean comparePassword = verifyStoredPassword(password, security);
             logger.info(String.format("Password match for user '%s': %b", username, comparePassword));
             return comparePassword;
 
@@ -609,7 +800,7 @@ public class UsersService implements UsersInterface {
             }
 
             // Query to obtain user security details including password and two-factor configuration
-            sql = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret from sparkpayweb_db.tbl_users a "
+            sql = "SELECT a.password, a.two_fa_enabled, a.two_fa_secret, a.must_change_password from sparkpayweb_db.tbl_users a "
                     + "LEFT JOIN tbl_user_details b ON a.username = b.email_address "
                     + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
             logger.info("Fetching security details for user --> {}", username);
@@ -619,20 +810,22 @@ public class UsersService implements UsersInterface {
             String twoFaSecret = "";
             boolean comparePassword = false;
             int twoFaEnabled = 0;
+            int mustChangePassword = 0;
 
             if (!users.isEmpty()) {
                 security = (String) users.get(0).get("password");
                 twoFaSecret = (String) users.get(0).get("two_fa_secret");
-                twoFaEnabled = (int) users.get(0).get("two_fa_enabled");
+                twoFaEnabled = asIntFlag(users.get(0).get("two_fa_enabled"));
+                mustChangePassword = asIntFlag(users.get(0).get("must_change_password"));
                 response.setTwofaenabled(twoFaEnabled);
-                logger.info("User {} found. two_fa_enabled: {}.", username, twoFaEnabled);
+                applyLoginSecurityFlags(response, mustChangePassword, twoFaEnabled);
+                logger.info("User {} found. two_fa_enabled: {} must_change_password: {} require2faSetup: {}.",
+                        username, twoFaEnabled, response.getMustChangePassword(), response.getRequire2faSetup());
             } else {
                 logger.info("No matching user record found for username: {}", username);
             }
-            logger.info("Password before check for user {}: {}", username, password);
             if (password != null && password.length() > 0) {
-                logger.info("Password after check for user {}: {}", username, password);
-                comparePassword = BCrypt.checkpw(password, security);
+                comparePassword = verifyStoredPassword(password, security);
                 logger.info("Password comparison result for user {}: {}", username, comparePassword);
             }
 
@@ -658,6 +851,7 @@ public class UsersService implements UsersInterface {
                     response.setEmail_address(username);
                     response.setUsername(username);
                     response.setTwofaenabled(1);
+                    applyLoginSecurityFlags(response, mustChangePassword, twoFaEnabled);
                     auditAuth(username, lookupUsernameByEmail(username), lookupRoleByEmail(username),
                             AuditConstants.ACTION_LOGIN, AuditConstants.OUTCOME_SUCCESS, 200, "Password ok; 2FA required");
                     return responseManager.ResponseOk(response);
@@ -677,7 +871,14 @@ public class UsersService implements UsersInterface {
                 List<UserModel> details = jdbcTemplate.query(sql, new Object[]{username, username}, new UserMapper());
                 response.setCode(200);
                 response.setStatus("success");
-                response.setMessage("Login successful");
+                applyLoginSecurityFlags(response, mustChangePassword, twoFaEnabled);
+                if (response.getMustChangePassword() == 1) {
+                    response.setMessage("Password change required");
+                } else if (response.getRequire2faSetup() == 1) {
+                    response.setMessage("2FA setup required");
+                } else {
+                    response.setMessage("Login successful");
+                }
                 int userRoleid;
 
                 if (!details.isEmpty()) {
@@ -811,6 +1012,12 @@ public class UsersService implements UsersInterface {
             String SQL;
             int userrole = GetUserRole(username, sessiontoken);
             if (userrole > 0) {
+                if (enable == 0 && appConfig.isRequire2fa()) {
+                    response.setCode(200);
+                    response.setStatus("failed");
+                    response.setMessage("2FA is required and cannot be disabled");
+                    return responseManager.ResponseOk(response);
+                }
                 String secret = "";
                 GoogleAuthenticatorKey key = randomizer.GenerateGoogleAuthenticatorSecretKey();
                 String qrCodeUri = "";
@@ -858,10 +1065,11 @@ public class UsersService implements UsersInterface {
             if (security.equals(token)) {
                 String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
                 String reference = randomizer.GenerateReference();
-                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, reference = ? WHERE reference = ?";
+                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, reference = ?, must_change_password = 0 WHERE reference = ?";
                 jdbcTemplate.update(SQL, new Object[]{hashPassword, reference, code});
                 response.setCode(200);
                 response.setMessage("Password reset complete");
+                response.setMustChangePassword(0);
                 return responseManager.ResponseOk(response);
             } else {
                 response.setCode(404);
@@ -894,10 +1102,11 @@ public class UsersService implements UsersInterface {
             if (security.equals(token)) {
                 String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
                 String reference = randomizer.GenerateReference();
-                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, reference = ?, enabled = 1 WHERE reference = ?";
+                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, reference = ?, enabled = 1, must_change_password = 0 WHERE reference = ?";
                 jdbcTemplate.update(SQL, new Object[]{hashPassword, reference, code});
                 response.setCode(200);
                 response.setMessage("Account activated");
+                response.setMustChangePassword(0);
                 return responseManager.ResponseOk(response);
             } else {
                 response.setCode(404);
@@ -1117,11 +1326,34 @@ public class UsersService implements UsersInterface {
             int userrole = GetUserRole(creator, sessiontoken);
             logger.info("User role for creator " + creator + ": " + userrole);
 
-            // Create the hash password.
-            String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
-            // Use the hashed password as the code for now.
-            String code = hashPassword;
-            // Generate a random reference for the new user.
+            // Admin and Operator (and Approver queue) must not create Administrator accounts.
+            if (roleid == PlatformRole.ADMIN
+                    && (userrole == PlatformRole.ADMIN
+                    || userrole == PlatformRole.OPERATOR
+                    || userrole == PlatformRole.APPROVER)) {
+                logger.info("Create rejected: actor role {} cannot create Administrator accounts", userrole);
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Creating Administrator accounts is not allowed.");
+                return responseManager.ResponseOk(networkResponse);
+            }
+
+            if (roleid == PlatformRole.ADMIN && wouldExceedAdminCap(true)) {
+                logger.info("Create rejected: admin cap reached ({})", appConfig.getMaxAdmins());
+                return adminCapExceededResponse();
+            }
+
+            final String plainPassword;
+            try {
+                plainPassword = resolveAssignedPassword(password);
+            } catch (IllegalArgumentException ex) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage(ex.getMessage());
+                return responseManager.ResponseOk(networkResponse);
+            }
             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
             int enabled = 1;
             String SQL;
@@ -1129,10 +1361,7 @@ public class UsersService implements UsersInterface {
 
             switch (userrole) {
                 case 1:
-                    // Insert the new user into tbl_users.
-                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), ?, ?)";
-                    logger.info("Executing SQL (tbl_users): " + SQL);
-                    retval = jdbcTemplate.update(SQL, new Object[]{email_address, code, enabled, ref});
+                    retval = insertAesUserRow(email_address, plainPassword, ref, enabled, mustChangeOnCreateFlag());
                     logger.info("tbl_users insert returned: " + retval);
 
                     if (retval > 0) {
@@ -1143,13 +1372,16 @@ public class UsersService implements UsersInterface {
                         logger.info("tbl_user_details insert returned: " + retval);
 
                         if (retval > 0) {
-                            // Build and return a LoginResponse.
+                            sendCredentialsEmail(email_address, plainPassword);
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
                             response.setStatus("success");
                             response.setMessage("Account created");
-                            response.setFirstname(ref); // Example: Using generated ref
-                            response.setSurname(code);   // Example: Using hashed password as a placeholder
+                            response.setFirstname(ref);
+                            response.setUsername(email_address);
+                            response.setTemporaryPassword(plainPassword);
+                            response.setMustChangePassword(mustChangeOnCreateFlag());
+                            response.setRequire2faSetup(require2faSetupFlag(0));
                             logger.info("Account created successfully for user: " + email_address);
                             return responseManager.ResponseOk(response);
                         } else {
@@ -1172,7 +1404,7 @@ public class UsersService implements UsersInterface {
                         return responseManager.ResponseOk(networkResponse);
                     }
                     // Insert a record into tbl_user_details_operations for pending creation.
-                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
+                    retval = insertPendingUserOperation(username, plainPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     if (retval > 0) {
                         logger.info("Pending account creation recorded for username: " + username);
                         return responseManager.ResponseAccepted();
@@ -1190,7 +1422,7 @@ public class UsersService implements UsersInterface {
                         networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
+                    retval = insertPendingUserOperation(username, plainPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     if (retval > 0) {
                         logger.info("Pending account creation recorded for username: " + username);
                         return responseManager.ResponseAccepted();
@@ -1273,20 +1505,23 @@ public class UsersService implements UsersInterface {
             int userrole = GetUserRole(creator, sessiontoken);
             logger.info("Retrieved user role (" + userrole + ") for creator: " + creator);
 
-            // Create hashed password.
-            String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
-            logger.info("Password hashed successfully.");
+            final String plainPassword;
+            try {
+                plainPassword = resolveAssignedPassword(password);
+            } catch (IllegalArgumentException ex) {
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage(ex.getMessage());
+                return responseManager.ResponseOk(networkResponse);
+            }
 
             String SQL;
             int retval = 0;
             switch (userrole) {
                 case 1:
-                    // In case 1, also generate additional random references.
-                    String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                     String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-                    SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                    logger.info("Executing SQL (tbl_users): " + SQL);
-                    retval = jdbcTemplate.update(SQL, new Object[]{email_address, hashPassword, ref});
+                    retval = insertAesUserRow(email_address, plainPassword, ref, 1, mustChangeOnCreateFlag());
                     logger.info("tbl_users insert result: " + retval);
 
                     if (retval > 0) {
@@ -1297,13 +1532,17 @@ public class UsersService implements UsersInterface {
 
                         if (retval > 0) {
                             mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
+                            sendCredentialsEmail(email_address, plainPassword);
 
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
                             response.setStatus("success");
                             response.setMessage("Account created");
                             response.setFirstname(ref);
-                            response.setSurname(code);
+                            response.setUsername(email_address);
+                            response.setTemporaryPassword(plainPassword);
+                            response.setMustChangePassword(mustChangeOnCreateFlag());
+                            response.setRequire2faSetup(require2faSetupFlag(0));
                             logger.info("Account creation successful. Returning LoginResponse.");
                             return responseManager.ResponseOk(response);
                         } else {
@@ -1324,7 +1563,7 @@ public class UsersService implements UsersInterface {
                         networkResponse.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
                         return responseManager.ResponseOk(networkResponse);
                     }
-                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
+                    retval = insertPendingUserOperation(username, plainPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     logger.info("tbl_user_details_operations insert result: " + retval);
 
                     if (retval > 0) {
@@ -1344,7 +1583,7 @@ public class UsersService implements UsersInterface {
                         pendingResp.setMessage("Account with username - " + username + " or email - " + email_address + " is already pending for creation");
                         return responseManager.ResponseOk(pendingResp);
                     }
-                    retval = insertPendingUserOperation(username, hashPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
+                    retval = insertPendingUserOperation(username, plainPassword, firstname, surname, phone_number, email_address, roleid, creator, "create", "Create user account");
                     if (retval > 0) {
                         mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
                         return responseManager.ResponseAccepted();
@@ -1369,15 +1608,21 @@ public class UsersService implements UsersInterface {
             String SQL;
             ResponseEntity responseEntity = GetUserById(sessiontoken, userid);
             LoginResponse loginResponse = responseEntity != null ? (LoginResponse) responseEntity.getBody() : new LoginResponse();
-            if (loginResponse.getRoleid() == 1) {
-                response.setCode(200);
-                response.setStatus("failed");
-                response.setMessage("Can not delete an administrator account");
-                return responseManager.ResponseOk(response);
-            }
             // Authorize the caller from session — path {username} is the target being deleted.
             int userrole = GetActorRole(sessiontoken);
-            logger.info("Delete user id={} target={} actorRole={}", userid, username, userrole);
+            logger.info("Delete user id={} target={} actorRole={} targetRole={}", userid, username, userrole, loginResponse.getRoleid());
+
+            // No one may delete or deactivate an Administrator account (including other Admins).
+            if (loginResponse.getRoleid() == PlatformRole.ADMIN) {
+                response.setCode(200);
+                response.setStatus("failed");
+                response.setMessage(
+                        userrole == PlatformRole.OPERATOR
+                                ? "Operators cannot delete or deactivate an Administrator account"
+                                : "Can not delete an administrator account");
+                return responseManager.ResponseOk(response);
+            }
+
             int retVal;
             switch (userrole) {
                 case PlatformRole.ADMIN:
@@ -1443,14 +1688,13 @@ public class UsersService implements UsersInterface {
             SQL = "SELECT a.password from sparkpayweb_db.tbl_users a "
                     + "WHERE a.username = ? AND a.enabled = 1";
             String security = jdbcTemplate.queryForObject(SQL, new Object[]{username}, String.class);
-            boolean comparePassword = BCrypt.checkpw(session_token, security);
+            boolean comparePassword = verifyStoredPassword(session_token, security);
             if (comparePassword) {
-                String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
-                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ? WHERE username = ?";
-                jdbcTemplate.update(SQL, new Object[]{hashPassword, username});
+                updateHashedPassword(username, password);
                 response.setCode(200);
                 response.setStatus("success");
                 response.setMessage("Password updated successfully");
+                response.setMustChangePassword(0);
                 SQL = "UPDATE tbl_user_details SET date_updated = now() WHERE username = ? AND session_token = ?";
                 jdbcTemplate.update(SQL, new Object[]{username, sessiontoken});
                 return responseManager.ResponseOk(response);
@@ -1508,6 +1752,20 @@ public class UsersService implements UsersInterface {
                 networkResponse.setStatus("failed");
                 networkResponse.setMessage("Email already in use");
                 return responseManager.ResponseOk(networkResponse);
+            }
+
+            boolean promotingToAdmin = roleid == PlatformRole.ADMIN && existing.getRoleid() != PlatformRole.ADMIN;
+            if (promotingToAdmin && userrole == PlatformRole.OPERATOR) {
+                logger.info("Edit rejected: operator cannot assign Administrator role for user id={}", userid);
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage("Operators cannot assign the Administrator role.");
+                return responseManager.ResponseOk(networkResponse);
+            }
+            if (promotingToAdmin && wouldExceedAdminCap(true)) {
+                logger.info("Edit rejected: admin cap reached ({}) for user id={}", appConfig.getMaxAdmins(), userid);
+                return adminCapExceededResponse();
             }
 
             int retVal;
@@ -1597,6 +1855,14 @@ public class UsersService implements UsersInterface {
                 if (users.size() == 1) {
                     switch (actionType) {
                         case "delete":
+                            if (users.get(0).getRoleid() == PlatformRole.ADMIN) {
+                                logger.info("UserApprovals delete rejected: cannot delete Administrator via approvals");
+                                NetworkResponse networkResponse = new NetworkResponse();
+                                networkResponse.setCode(200);
+                                networkResponse.setStatus("failed");
+                                networkResponse.setMessage("Can not delete an administrator account");
+                                return responseManager.ResponseOk(networkResponse);
+                            }
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'delete'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             SQL = "UPDATE tbl_user_details SET deleted = 1 WHERE id = ?";
@@ -1611,9 +1877,25 @@ public class UsersService implements UsersInterface {
                                 return responseManager.ResponseInternalServerError();
                             }
                         case "edit":
+                            UserModel pendingEdit = users.get(0);
+                            int previousRoleId = -1;
+                            try {
+                                Integer prevRole = jdbcTemplate.queryForObject(
+                                        "SELECT role FROM tbl_user_details WHERE id = ? AND deleted = 0",
+                                        new Object[]{pendingEdit.getId()},
+                                        Integer.class);
+                                previousRoleId = prevRole != null ? prevRole : -1;
+                            } catch (DataAccessException ignore) {
+                                previousRoleId = -1;
+                            }
+                            if (pendingEdit.getRoleid() == PlatformRole.ADMIN
+                                    && previousRoleId != PlatformRole.ADMIN
+                                    && wouldExceedAdminCap(true)) {
+                                logger.info("UserApprovals edit rejected: admin cap reached ({})", appConfig.getMaxAdmins());
+                                return adminCapExceededResponse();
+                            }
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            UserModel pendingEdit = users.get(0);
                             String previousEmail = null;
                             try {
                                 previousEmail = jdbcTemplate.queryForObject(
@@ -1669,6 +1951,12 @@ public class UsersService implements UsersInterface {
                             return responseManager.ResponseAccepted();
                         case "create":
                             UserModel pendingUser = users.get(0);
+                            // Pending create already reserved a seat; only block if live admins alone are at the cap.
+                            if (pendingUser.getRoleid() == PlatformRole.ADMIN
+                                    && countLiveAdmins() >= appConfig.getMaxAdmins()) {
+                                logger.info("UserApprovals create rejected: live admin cap reached ({})", appConfig.getMaxAdmins());
+                                return adminCapExceededResponse();
+                            }
                             if (isContact || pendingUser.getRoleid() == 4) {
                                 String institutionForContact = financialInstitutionCode;
                                 if (institutionForContact == null || institutionForContact.isEmpty()) {
@@ -1678,21 +1966,29 @@ public class UsersService implements UsersInterface {
                             }
                             SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            String reference = randomizer.GenerateReference();
-                            String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
                             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-                            SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference) VALUES(?, ?, now(), 1, ?)";
-                            jdbcTemplate.update(SQL, new Object[]{pendingUser.getEmail_address(), pendingUser.getSecurity(), ref});
+                            String pendingCipher = pendingUser.getSecurity();
+                            int mustChangeFlag = mustChangeOnCreateFlag();
+                            SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference, must_change_password) VALUES(?, ?, now(), 1, ?, ?)";
+                            jdbcTemplate.update(SQL, new Object[]{pendingUser.getEmail_address(), pendingCipher, ref, mustChangeFlag});
                             SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{pendingUser.getUsername(), pendingUser.getFirstname(), pendingUser.getSurname(), pendingUser.getPhone_number(), pendingUser.getEmail_address(), pendingUser.getRoleid()});
                             if (retVal > 0 && retVal2 > 0) {
+                                String plainForMail = decryptPasswordCipher(pendingCipher);
+                                if (plainForMail != null && !plainForMail.isEmpty()) {
+                                    sendCredentialsEmail(pendingUser.getEmail_address(), plainForMail);
+                                }
                                 LoginResponse response = new LoginResponse();
                                 response.setCode(201);
                                 response.setStatus("success");
                                 response.setMessage("Account approved");
                                 response.setFirstname(ref);
-                                response.setSurname(code);
                                 response.setUsername(pendingUser.getEmail_address());
+                                response.setMustChangePassword(mustChangeFlag);
+                                response.setRequire2faSetup(require2faSetupFlag(0));
+                                if (plainForMail != null) {
+                                    response.setTemporaryPassword(plainForMail);
+                                }
                                 return responseManager.ResponseOk(response);
                             } //                                return responseManager.ResponseAccepted();
                             else {

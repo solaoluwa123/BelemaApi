@@ -13,8 +13,8 @@ import java.util.List;
  */
 public class LoginResponse {
     
-    int id, roleid, code, twofaenabled;
-    String status, role, message, username, firstname, surname, phone_number, email_address, date_created, date_updated, session_token, last_login, financial_institution_code, financial_institution_name, twofasecretkey;
+    int id, roleid, code, twofaenabled, mustChangePassword, require2faSetup;
+    String status, role, message, username, firstname, surname, phone_number, email_address, date_created, date_updated, session_token, last_login, financial_institution_code, financial_institution_name, twofasecretkey, temporaryPassword;
     List<MenuModel> transgateMenu, sparkpayMenu;
 
     public int getCode() {
@@ -183,6 +183,30 @@ public class LoginResponse {
 
     public void setTwofasecretkey(String twofasecretkey) {
         this.twofasecretkey = twofasecretkey;
+    }
+
+    public int getMustChangePassword() {
+        return mustChangePassword;
+    }
+
+    public void setMustChangePassword(int mustChangePassword) {
+        this.mustChangePassword = mustChangePassword;
+    }
+
+    public String getTemporaryPassword() {
+        return temporaryPassword;
+    }
+
+    public void setTemporaryPassword(String temporaryPassword) {
+        this.temporaryPassword = temporaryPassword;
+    }
+
+    public int getRequire2faSetup() {
+        return require2faSetup;
+    }
+
+    public void setRequire2faSetup(int require2faSetup) {
+        this.require2faSetup = require2faSetup;
     }
     
 }

@@ -106,4 +106,33 @@ public class AppEnvironmentConfig {
         }
         return table.trim();
     }
+
+    /**
+     * Maximum number of live Administrator accounts (role id 1), including seats reserved
+     * by pending admin creates. Override with env {@code APP_MAX_ADMINS}.
+     */
+    public int getMaxAdmins() {
+        Integer max = env.getProperty("app.max-admins", Integer.class);
+        if (max == null || max < 1) {
+            return 2;
+        }
+        return max;
+    }
+
+    /**
+     * When true, newly created users get must_change_password=1 and the interceptor
+     * blocks other APIs until they update their password. Override with
+     * {@code APP_REQUIRE_PASSWORD_CHANGE}.
+     */
+    public boolean isRequirePasswordChange() {
+        return env.getProperty("app.require-password-change", Boolean.class, Boolean.TRUE);
+    }
+
+    /**
+     * When true, any user with two_fa_enabled=0 must set up 2FA before other APIs.
+     * Override with {@code APP_REQUIRE_2FA}.
+     */
+    public boolean isRequire2fa() {
+        return env.getProperty("app.require-2fa", Boolean.class, Boolean.TRUE);
+    }
 }
