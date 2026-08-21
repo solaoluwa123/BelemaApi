@@ -5,14 +5,18 @@
  */
 package com.transgate.api.app.controllers;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.transgate.api.interfaces.TransactionsInterface;
 import com.transgate.api.models.DisputeModel;
-import com.transgate.api.models.TransactionModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.SessionActorResolver;
 import com.transgate.api.app.services.Validators;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -75,6 +79,87 @@ public class TransactionsController {
                 .filter(SessionActorResolver.Actor::hasInstitutionCode)
                 .map(a -> a.institutionCode().trim())
                 .orElse(null);
+    }
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
+    /**
+     * Accepts legacy {@code srcSessionid} CSV plus FE shapes {@code sessionIds} / {@code records}.
+     */
+    private String resolveSessionIdsCsv(JsonNode body) {
+        if (body == null || body.isNull() || body.isMissingNode()) {
+            return null;
+        }
+        for (String key : new String[]{"srcSessionid", "srcSessionId", "sessionid", "sessionId"}) {
+            if (body.hasNonNull(key) && body.get(key).isTextual()) {
+                String text = body.get(key).asText().trim();
+                if (!text.isEmpty()) {
+                    return text;
+                }
+            }
+        }
+        JsonNode idsNode = body.get("sessionIds");
+        if (idsNode == null) {
+            idsNode = body.get("sessionids");
+        }
+        if (idsNode != null && idsNode.isArray()) {
+            List<String> ids = new ArrayList<>();
+            for (JsonNode n : idsNode) {
+                if (n != null && !n.isNull()) {
+                    String text = n.asText("").trim();
+                    if (!text.isEmpty()) {
+                        ids.add(text);
+                    }
+                }
+            }
+            if (!ids.isEmpty()) {
+                return ids.stream().collect(Collectors.joining(","));
+            }
+        }
+        if (body.hasNonNull("records")) {
+            JsonNode records = body.get("records");
+            if (records.isArray()) {
+                List<String> ids = new ArrayList<>();
+                for (JsonNode n : records) {
+                    String text = n.asText("").trim();
+                    if (!text.isEmpty()) {
+                        ids.add(text);
+                    }
+                }
+                if (!ids.isEmpty()) {
+                    return String.join(",", ids);
+                }
+            } else if (records.isTextual()) {
+                String raw = records.asText().trim();
+                if (raw.startsWith("[")) {
+                    try {
+                        JsonNode arr = objectMapper.readTree(raw);
+                        if (arr.isArray()) {
+                            List<String> ids = new ArrayList<>();
+                            for (JsonNode n : arr) {
+                                String text = n.asText("").trim();
+                                if (!text.isEmpty()) {
+                                    ids.add(text);
+                                }
+                            }
+                            if (!ids.isEmpty()) {
+                                return String.join(",", ids);
+                            }
+                        }
+                    } catch (Exception ignored) {
+                        // fall through to raw CSV
+                    }
+                }
+                if (!raw.isEmpty()) {
+                    return raw;
+                }
+            }
+        }
+        return null;
+    }
+
+    private ResponseEntity missingSessionIds() {
+        return responseManager.ResponseBadRequest("No valid session IDs provided.");
     }
 
     @RequestMapping(value = "/transactions", method = RequestMethod.GET, headers = "Accept=application/json")
@@ -547,11 +632,15 @@ public class TransactionsController {
     @RequestMapping(value = "/transactions-by-session-ids", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity SearchTransactionsForSessionIds(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,
-            @RequestBody TransactionModel model) {
+            @RequestBody JsonNode body) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.SearchTransactionsForSessionIds(model.getSrcSessionid());
+        String sessionIds = resolveSessionIdsCsv(body);
+        if (sessionIds == null || sessionIds.isBlank()) {
+            return missingSessionIds();
+        }
+        return transactionsInterface.SearchTransactionsForSessionIds(sessionIds);
     }
 
     @RequestMapping(value = "/transactions-by-session-ids/with/date", method = RequestMethod.POST, headers = "Accept=application/json")
@@ -560,11 +649,15 @@ public class TransactionsController {
             @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestParam("startDate") String startDate,
             @RequestParam("endDate") String endDate,
-            @RequestBody TransactionModel model) {
+            @RequestBody JsonNode body) {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.SearchTransactionsForSessionIds(model.getSrcSessionid(), startDate, endDate);
+        String sessionIds = resolveSessionIdsCsv(body);
+        if (sessionIds == null || sessionIds.isBlank()) {
+            return missingSessionIds();
+        }
+        return transactionsInterface.SearchTransactionsForSessionIds(sessionIds, startDate, endDate);
     }
 
     @RequestMapping(value = "/transactions-by-date/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")

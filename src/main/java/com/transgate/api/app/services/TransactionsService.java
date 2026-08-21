@@ -99,16 +99,22 @@ public class TransactionsService implements TransactionsInterface {
     }
 
     /**
-     * Accepts both {@code yyyy-MM-dd HH:mm:ss} and {@code yyyy-MM-dd'T'HH:mm:ss},
-     * since callers mix JDBC and ISO date formats.
+     * Normalizes common date/time inputs to {@code yyyy-MM-dd'T'HH:mm:ss}.
+     * Callers mix date-only ({@code yyyy-MM-dd}), JDBC space form, and ISO.
      */
     private static String toIsoDateTime(String value) {
         if (value == null) {
             return null;
         }
         String trimmed = value.trim();
-        if (trimmed.length() == 19 && trimmed.charAt(10) == ' ') {
-            return trimmed.replace(' ', 'T');
+        if (trimmed.length() == 10 && trimmed.charAt(4) == '-' && trimmed.charAt(7) == '-') {
+            return trimmed + "T00:00:00";
+        }
+        if (trimmed.length() >= 19 && trimmed.charAt(10) == ' ') {
+            return trimmed.substring(0, 10) + 'T' + trimmed.substring(11, Math.min(19, trimmed.length()));
+        }
+        if (trimmed.length() == 16 && trimmed.charAt(10) == 'T') {
+            return trimmed + ":00";
         }
         return trimmed;
     }
@@ -3672,6 +3678,11 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity SearchTransactionsForSessionIds(String sessionids) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
+            if (sessionids == null || sessionids.isBlank()) {
+                networkResponse.setCode(400);
+                networkResponse.setMessage("No valid session IDs provided.");
+                return responseManager.ResponseBadRequest();
+            }
             // Parse sessionids safely
             List<String> sessionIdList = Arrays.stream(sessionids.split(","))
                     .map(s -> s.replaceAll("'", "").trim())
@@ -3735,6 +3746,11 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         logger.info("Entering SearchTransactionsForSessionIds(sessionids=" + sessionids
                 + ", startDate=" + startDate + ", endDate=" + endDate + ")");
         try {
+            if (sessionids == null || sessionids.isBlank()) {
+                networkResponse.setCode(400);
+                networkResponse.setMessage("No session IDs provided.");
+                return responseManager.ResponseBadRequest();
+            }
             // 1. Parse/prepare session ID list for parameterized SQL
             List<String> sessionIdList = Arrays.stream(sessionids.split(","))
                     .map(s -> s.replaceAll("['\"]", "").trim())
