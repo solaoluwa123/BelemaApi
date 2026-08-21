@@ -496,6 +496,15 @@ public class UsersService implements UsersInterface {
             }
 
             if (randomizer.AuthorizeGoogleAuthenticatorCode(secret.trim(), Integer.parseInt(otp))) {
+                // Activate pending enrollment (secret saved with two_fa_enabled=0 during setup-2fa).
+                try {
+                    jdbcTemplate.update(
+                            "UPDATE sparkpayweb_db.tbl_users SET two_fa_enabled = 1 "
+                                    + "WHERE username = ? AND two_fa_enabled = 0",
+                            new Object[]{username});
+                } catch (DataAccessException ex) {
+                    logger.warn("Could not activate pending 2FA for {}: {}", username, ex.getMessage());
+                }
                 response.setTwofaenabled(1);
                 int dbMustChange = 0;
                 try {
@@ -1021,17 +1030,20 @@ public class UsersService implements UsersInterface {
                 String secret = "";
                 GoogleAuthenticatorKey key = randomizer.GenerateGoogleAuthenticatorSecretKey();
                 String qrCodeUri = "";
+                // Pending enrollment: store secret but keep two_fa_enabled=0 until OTP is verified via login-2fa.
+                int enabledFlag = 0;
                 response.setMessage("2FA disbaled successfully");
                 if (enable == 1) {
-//                    secret = randomizer.GenerateSecretKey();
                     secret = key.getKey();
-//                    qrCodeUri = randomizer.GetGoogleAuthenticatorBarCode(secret, username, "Sparkpay");
                     qrCodeUri = randomizer.GetGoogleAuthenticatorQRCode("Sparkpay", username, key);
-                    response.setMessage("2FA enabled successfully");
+                    response.setMessage("2FA setup started. Scan the QR code and verify with an OTP.");
+                } else {
+                    enabledFlag = 0;
+                    secret = "";
                 }
                 SQL = "UPDATE sparkpayweb_db.tbl_users SET two_fa_enabled = ?, two_fa_secret = ? "
                         + "WHERE username = ?";
-                int ret = jdbcTemplate.update(SQL, new Object[]{enable, secret, username});
+                int ret = jdbcTemplate.update(SQL, new Object[]{enabledFlag, secret, username});
                 if (ret > 0) {
                     response.setStatus("success");
                     // Escape for JSON string value — otpauth URIs can contain quotes/backslashes after encoding edge cases.
