@@ -175,7 +175,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             String SQL;
             SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
                     + "n.cbn_bank_account, n.hashkey, n.isProcessTSQ, n.issettlementbank, n.serverIP, n.neTimeout, n.ftTimeout, n.canFundWallet, "
-                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, "
+                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.created_by, a.business_address, "
                     + "a.charge_amount, a.vat, a.password, a.url, a.urlTSQ, a.neEnvelope, a.neResponseStartTag, a.neResponseEndTag, "
                     + "a.ftEnvelope, a.ftResponseStartTag, a.ftResponseEndTag, a.tsqEnvelope, a.tsqResponseStartTag, a.tsqResponseEndTag, "
                     + "a.instWithWallet, a.walletname, a.wallettype, b.name as businessTypeName "
@@ -294,7 +294,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             String SQL;
             SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.date_created, "
                     + "n.cbn_bank_account, n.isProcessTSQ, n.issettlementbank, n.serverIP, n.neTimeout, n.ftTimeout, "
-                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.business_address, "
+                    + "a.shortName, a.color, a.businessType, a.actionType, a.note, a.created_by, a.business_address, "
                     + "a.charge_amount, a.vat, a.instWithWallet, b.name as businessTypeName "
                     + "FROM tbl_nodes_pendings n "
                     + "LEFT JOIN tbl_financial_institutions_pendings a "
@@ -457,8 +457,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             networkResponse.setMessage("Institution already pending create");
                             return responseManager.ResponseOk(networkResponse);
                         }
-                        SQL = "INSERT INTO tbl_financial_institutions_pendings(code, name, shortName, color, businessType, actionType, note, business_address, charge_amount, vat, password, url, urlTSQ, neEnvelope, neResponseStartTag, neResponseEndTag, ftEnvelope, ftResponseStartTag, ftResponseEndTag, tsqEnvelope, tsqResponseStartTag, tsqResponseEndTag, instWithWallet, walletname, wallettype) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', ?, ?, ?, TO_BASE64(AES_ENCRYPT(?, ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-                        jdbcTemplate.update(SQL, new Object[]{code, name, institution.getShortName(), institution.getColor(), institution.getBusinessType(), institution.getBusiness_address(), institution.getCharge_amount(), institution.getVat(), institution.getPassword(), appConfig.getSqlEncodeString(), nz(institution.getUrl()), nz(institution.getUrlTSQ()), nz(institution.getNeEnvelope()), nz(institution.getNeResponseStartTag()), nz(institution.getNeResponseEndTag()), nz(institution.getFtEnvelope()), nz(institution.getFtResponseStartTag()), nz(institution.getFtResponseEndTag()), nz(institution.getTsqEnvelope()), nz(institution.getTsqResponseStartTag()), nz(institution.getTsqResponseEndTag()), withWallet, nz(institution.getWalletname()), institution.getWallettype()});
+                        SQL = "INSERT INTO tbl_financial_institutions_pendings(code, name, shortName, color, businessType, actionType, note, created_by, business_address, charge_amount, vat, password, url, urlTSQ, neEnvelope, neResponseStartTag, neResponseEndTag, ftEnvelope, ftResponseStartTag, ftResponseEndTag, tsqEnvelope, tsqResponseStartTag, tsqResponseEndTag, instWithWallet, walletname, wallettype) VALUES(?, ?, ?, ?, ?, 'create', 'Create financial institution', ?, ?, ?, ?, TO_BASE64(AES_ENCRYPT(?, ?)), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                        jdbcTemplate.update(SQL, new Object[]{code, name, institution.getShortName(), institution.getColor(), institution.getBusinessType(), creator, institution.getBusiness_address(), institution.getCharge_amount(), institution.getVat(), institution.getPassword(), appConfig.getSqlEncodeString(), nz(institution.getUrl()), nz(institution.getUrlTSQ()), nz(institution.getNeEnvelope()), nz(institution.getNeResponseStartTag()), nz(institution.getNeResponseEndTag()), nz(institution.getFtEnvelope()), nz(institution.getFtResponseStartTag()), nz(institution.getFtResponseEndTag()), nz(institution.getTsqEnvelope()), nz(institution.getTsqResponseStartTag()), nz(institution.getTsqResponseEndTag()), withWallet, nz(institution.getWalletname()), institution.getWallettype()});
                         SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ, issettlementbank, serverIP, neTimeout, ftTimeout, canFundWallet) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?)";
                         retval = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getPublickeylocation(), code, name, cbnAccount, institution.getHashKey(), institution.getIsProcessTSQ(), isSettlement, serverIp, neTimeout, ftTimeout, canFund});
                         if (retval > 0) 
@@ -550,8 +550,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     ResponseEntity responseEntity = GetFinancialInstitutionByCode(sessiontoken, code);
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     FinancialInstitutionModel institution = networkResponse != null ? (FinancialInstitutionModel) networkResponse.getData().get(0) : new FinancialInstitutionModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'deactivate', 'Deactivate financial institution', ?)";
-                    jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), institution.getBusiness_address()});
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, created_by, business_address) VALUES(?, ?, ?, ?, ?, 'deactivate', 'Deactivate financial institution', ?, ?)";
+                    jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), username, institution.getBusiness_address()});
                     SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
                     retVal = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getStatus(), institution.getPublickeylocation(), code, institution.getName()});
                     if (retVal > 0) 
@@ -595,8 +595,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     ResponseEntity responseEntity = GetFinancialInstitutionByCode(sessiontoken, code);
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
                     FinancialInstitutionModel institution = networkResponse != null ? (FinancialInstitutionModel) networkResponse.getData().get(0) : new FinancialInstitutionModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'activate', 'Activate financial institution', ?)";
-                    jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), institution.getBusiness_address()});
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, created_by, business_address) VALUES(?, ?, ?, ?, ?, 'activate', 'Activate financial institution', ?, ?)";
+                    jdbcTemplate.update(SQL, new Object[]{institution.getName(), institution.getShortName(), institution.getColor(), institution.getCode(), institution.getBusinessType(), username, institution.getBusiness_address()});
                     SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
                     retVal = jdbcTemplate.update(SQL, new Object[]{institution.getPort_number(), institution.getStatus(), institution.getPublickeylocation(), code, institution.getName()});
                     if (retVal > 0) 
@@ -650,13 +650,13 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     responseEntity = GetFinancialInstitutionsTypeById(sessiontoken, businessType);
                     networkResponse = (NetworkResponse) responseEntity.getBody();
                     InstitutionTypesModel typeModel = networkResponse != null ? (InstitutionTypesModel) networkResponse.getData().get(0) : new InstitutionTypesModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, business_address) VALUES(?, ?, ?, ?, ?, 'edit', ?, ?)";
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, created_by, business_address) VALUES(?, ?, ?, ?, ?, 'edit', ?, ?, ?)";
                     String note = institution.getName().equals(name) ? "" : "Change institution name from " + institution.getName() + " to " + name;
                     note = institution.getColor().equals(color) ? note : !note.equals("") ? note + ", change color from " + institution.getColor() + " to " + color : "Change color from " + institution.getColor() + " to " + color;
                     note = institution.getShortName().equals(shortName) ? note : !note.equals("") ? note + ", change short name from " + institution.getShortName() + " to " + shortName : "Change short name from " + institution.getShortName() + " to " + shortName;
                     note = institution.getBusiness_address().equals(business_address) ? note : !note.equals("") ? note + ", change address from " + institution.getBusiness_address() + " to " + business_address : "Change address from " + institution.getBusiness_address() + " to " + business_address;
                     note = institution.getBusinessType() == businessType ? note : !note.equals("") ? note + ", change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName() : "Change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName();
-                    jdbcTemplate.update(SQL, new Object[]{name, shortName, color, institution.getCode(), businessType, note, business_address});
+                    jdbcTemplate.update(SQL, new Object[]{name, shortName, color, institution.getCode(), businessType, note, editor, business_address});
                     SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
                     retVal = jdbcTemplate.update(SQL, new Object[]{port, institution.getStatus(), publickeylocation, code, name});
                     if (retVal > 0) 
