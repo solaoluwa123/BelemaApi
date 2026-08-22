@@ -1862,6 +1862,135 @@ public class UsersService implements UsersInterface {
         return note + ", " + part;
     }
 
+    /**
+     * Clear 2FA for a login username (tbl_users.username = email_address).
+     * Returns rows updated.
+     */
+    private int clearTwoFaForLogin(String email) {
+        if (email == null || email.isBlank()) {
+            return 0;
+        }
+        String login = email.trim().toLowerCase();
+        return jdbcTemplate.update(
+                "UPDATE sparkpayweb_db.tbl_users SET two_fa_enabled = 0, two_fa_secret = '' WHERE username = ?",
+                new Object[]{login});
+    }
+
+    /** Resolve live user details by id or email (for contacts that only have email). */
+    private LoginResponse resolveUserForReset2FA(String sessiontoken, int userid, String email_address) {
+        if (userid > 0) {
+            ResponseEntity existingEntity = GetUserById(sessiontoken, userid);
+            if (existingEntity != null && existingEntity.getBody() instanceof LoginResponse) {
+                LoginResponse existing = (LoginResponse) existingEntity.getBody();
+                if (existing.getId() > 0) {
+                    return existing;
+                }
+            }
+        }
+        String email = email_address != null ? email_address.trim().toLowerCase() : "";
+        if (email.isEmpty()) {
+            return null;
+        }
+        try {
+            String SQL = "SELECT a.id, a.username, a.firstname, a.surname, a.phone_number, a.email_address, a.role, a.date_created, a.date_updated, a.last_login, b.role_name, "
+                    + "c.financial_institution_code, d.name as institution_name  "
+                    + "from tbl_user_details a "
+                    + "LEFT JOIN tbl_role b ON a.role = b.id "
+                    + "LEFT JOIN tbl_financial_institution_contacts c ON a.email_address = c.email_address "
+                    + "LEFT JOIN tbl_financial_institutions d ON c.financial_institution_code = d.code "
+                    + "WHERE a.deleted = 0 AND LOWER(a.email_address) = ? LIMIT 1";
+            List<UserModel> details = jdbcTemplate.query(SQL, new Object[]{email}, new UserMapper());
+            if (details.isEmpty()) {
+                return null;
+            }
+            UserModel u = details.get(0);
+            LoginResponse response = new LoginResponse();
+            response.setId(u.getId());
+            response.setUsername(u.getUsername());
+            response.setEmail_address(u.getEmail_address());
+            response.setFirstname(u.getFirstname());
+            response.setSurname(u.getSurname());
+            response.setPhone_number(u.getPhone_number());
+            response.setRoleid(u.getRoleid());
+            response.setRole(u.getRole());
+            return response;
+        } catch (DataAccessException ex) {
+            logger.warn("resolveUserForReset2FA failed for {}: {}", email, ex.getMessage());
+            return null;
+        }
+    }
+
+    @Override
+    public ResponseEntity Reset2FA(String sessiontoken, int userid, String email_address) {
+        try {
+            NetworkResponse response = new NetworkResponse();
+            int userrole = GetActorRole(sessiontoken);
+            logger.info("Reset2FA userid={} email={} actorRole={}", userid, email_address, userrole);
+
+            LoginResponse target = resolveUserForReset2FA(sessiontoken, userid, email_address);
+            if (target == null || target.getId() == 0) {
+                response.setCode(200);
+                response.setStatus("failed");
+                response.setMessage("User not found");
+                return responseManager.ResponseOk(response);
+            }
+            String loginEmail = target.getEmail_address() != null
+                    ? target.getEmail_address().trim().toLowerCase()
+                    : "";
+            if (loginEmail.isEmpty()) {
+                response.setCode(200);
+                response.setStatus("failed");
+                response.setMessage("User email is required to reset 2FA");
+                return responseManager.ResponseOk(response);
+            }
+
+            switch (userrole) {
+                case PlatformRole.ADMIN: {
+                    int ret = clearTwoFaForLogin(loginEmail);
+                    if (ret > 0) {
+                        response.setCode(200);
+                        response.setStatus("success");
+                        response.setMessage("2FA reset successfully");
+                        return responseManager.ResponseOk(response);
+                    }
+                    response.setCode(200);
+                    response.setStatus("failed");
+                    response.setMessage("Login account not found for this user");
+                    return responseManager.ResponseOk(response);
+                }
+                case PlatformRole.OPERATOR: {
+                    boolean pending = CheckUserPending(target.getUsername(), loginEmail, "reset_2fa");
+                    if (pending) {
+                        response.setCode(200);
+                        response.setStatus("failed");
+                        response.setMessage("Account already pending for 2FA reset");
+                        return responseManager.ResponseOk(response);
+                    }
+                    String SQL = "INSERT INTO tbl_user_details_operations(id, username, firstname, surname, phone_number, email_address, role, actionType, note, date_created) "
+                            + "VALUES(?, ?, ?, ?, ?, ?, ?, 'reset_2fa', 'Reset 2FA', now())";
+                    int retVal = jdbcTemplate.update(SQL, new Object[]{
+                        target.getId(),
+                        target.getUsername(),
+                        target.getFirstname(),
+                        target.getSurname(),
+                        target.getPhone_number(),
+                        loginEmail,
+                        target.getRoleid()
+                    });
+                    if (retVal > 0) {
+                        return responseManager.ResponseAccepted();
+                    }
+                    return responseManager.ResponseInternalServerError();
+                }
+                default:
+                    return responseManager.ResponseUnathorized();
+            }
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
     @Override
     public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode) {
         try {
@@ -2018,6 +2147,37 @@ public class UsersService implements UsersInterface {
                             else {
                                 return responseManager.ResponseInternalServerError();
                             }
+                        case "reset_2fa": {
+                            UserModel pendingReset = users.get(0);
+                            String resetEmail = pendingReset.getEmail_address() != null
+                                    ? pendingReset.getEmail_address().trim().toLowerCase()
+                                    : "";
+                            if (resetEmail.isEmpty()) {
+                                NetworkResponse networkResponse = new NetworkResponse();
+                                networkResponse.setCode(200);
+                                networkResponse.setStatus("failed");
+                                networkResponse.setMessage("Pending 2FA reset is missing email");
+                                return responseManager.ResponseOk(networkResponse);
+                            }
+                            int cleared = clearTwoFaForLogin(resetEmail);
+                            SQL = "DELETE FROM tbl_user_details_operations WHERE id = ? AND actionType = 'reset_2fa'";
+                            retVal = jdbcTemplate.update(SQL, new Object[]{id});
+                            if (cleared > 0 && retVal > 0) {
+                                NetworkResponse networkResponse = new NetworkResponse();
+                                networkResponse.setCode(200);
+                                networkResponse.setStatus("success");
+                                networkResponse.setMessage("2FA reset approved");
+                                return responseManager.ResponseOk(networkResponse);
+                            }
+                            if (retVal > 0 && cleared == 0) {
+                                NetworkResponse networkResponse = new NetworkResponse();
+                                networkResponse.setCode(200);
+                                networkResponse.setStatus("failed");
+                                networkResponse.setMessage("Login account not found for this user");
+                                return responseManager.ResponseOk(networkResponse);
+                            }
+                            return responseManager.ResponseInternalServerError();
+                        }
                         default:
                             return responseManager.ResponseBadRequest();
                     }

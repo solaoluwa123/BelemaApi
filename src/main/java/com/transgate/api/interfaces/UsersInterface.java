@@ -47,6 +47,8 @@ public interface UsersInterface {
     
     public ResponseEntity UpdatePassword(String sessiontoken, String security, String session_token, String username);
     
+    public ResponseEntity Reset2FA(String sessiontoken, int userid, String email_address);
+    
     public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode);
     
     public ResponseEntity GetUsersForActions(boolean systemUsers);

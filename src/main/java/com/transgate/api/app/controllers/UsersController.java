@@ -285,6 +285,15 @@ public class UsersController {
         return usersInterface.Edit(sessiontoken, user.getId(), user.getFirstname(), user.getSurname(), user.getPhone_number(), user.getRoleid(), user.getUsername(), user.getEmail_address());
     }
 
+    @RequestMapping(value = "/users/reset-2fa", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity Reset2FA(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestBody UserModel user) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return usersInterface.Reset2FA(sessiontoken, user.getId(), user.getEmail_address());
+    }
+
     @RequestMapping(value = "/users/update-names", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity UpdateNames(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken,
             @RequestBody UserModel user) {
