@@ -1041,9 +1041,6 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             return responseManager.ResponseOk(networkResponse);
         }
 
-        if (security == null || security.trim().isEmpty()) {
-            return responseManager.ResponseBadRequest("Password is required to create a contact");
-        }
         if (institution == null || institution.isEmpty()) {
             NetworkResponse missingFi = new NetworkResponse();
             missingFi.setCode(200);
@@ -1055,9 +1052,12 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
         int userrole = GetUserRole(creator, sessiontoken);
         logger.info("Retrieved userrole: " + userrole + " for creator: " + creator);
 
+        // Blank security → CreateOther.resolveAssignedPassword generates a temporary password
+        // and UserCreatedEvent triggers the welcome email.
+        String passwordOrBlank = security == null ? "" : security;
         String institutionName = lookupInstitutionName(institution);
         ResponseEntity createLoginResponse = usersInterface.CreateOther(
-                sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, security,
+                sessiontoken, creator, email_address, firstname, surname, phone_number, email_address, 4, passwordOrBlank,
                 institution, institutionName);
         logger.info("Received response from usersInterface.CreateOther");
         Object createBody = createLoginResponse.getBody();
@@ -1066,6 +1066,11 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             userCreateOk = "success".equals(((LoginResponse) createBody).getStatus());
         } else if (createBody instanceof NetworkResponse) {
             userCreateOk = "success".equals(((NetworkResponse) createBody).getStatus());
+        }
+        // Operator pending create returns HTTP 202 Accepted (no LoginResponse body).
+        if (!userCreateOk && createLoginResponse.getStatusCode() != null
+                && createLoginResponse.getStatusCode().value() == 202) {
+            userCreateOk = true;
         }
         if (userCreateOk) {
             jdbcTemplate.update(
