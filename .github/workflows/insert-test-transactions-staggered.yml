@@ -1,0 +1,80 @@
+name: Insert test live transactions staggered
+
+on:
+  workflow_dispatch:
+    inputs:
+      total:
+        description: Total transactions to insert across all waves
+        required: false
+        default: "500"
+        type: string
+      batch_size:
+        description: Transactions per wave
+        required: false
+        default: "10"
+        type: string
+      interval_seconds:
+        description: Seconds to wait between waves
+        required: false
+        default: "20"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  insert-test-transactions-staggered:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Insert waves on Belema UAT
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+          TOTAL: ${{ inputs.total || '500' }}
+          BATCH_SIZE: ${{ inputs.batch_size || '10' }}
+          INTERVAL: ${{ inputs.interval_seconds || '20' }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=no scripts/insert-test-live-transactions-batch.sql \
+            "$BELEMA_USER@$BELEMA_HOST:/tmp/insert-test-live-transactions-batch.sql"
+
+          WAVES=$(( (TOTAL + BATCH_SIZE - 1) / BATCH_SIZE ))
+          INSERTED=0
+
+          echo "Staggered load test: ${TOTAL} txns as ${BATCH_SIZE} every ${INTERVAL}s (${WAVES} waves)"
+
+          for WAVE in $(seq 1 "$WAVES"); do
+            REMAIN=$((TOTAL - INSERTED))
+            THIS_BATCH=$BATCH_SIZE
+            if [ "$REMAIN" -lt "$BATCH_SIZE" ]; then
+              THIS_BATCH=$REMAIN
+            fi
+
+            echo "--- Wave ${WAVE}/${WAVES}: inserting ${THIS_BATCH} at $(date -u +"%Y-%m-%d %H:%M:%S UTC") ---"
+
+            OUTPUT=$(ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "set -e
+              { echo \"SET @batch_size = ${THIS_BATCH};\"
+                cat /tmp/insert-test-live-transactions-batch.sql
+              } | mysql -u ajipay -p'Admin12+' 2>/dev/null | tail -n 1")
+
+            echo "$OUTPUT"
+            INSERTED=$((INSERTED + THIS_BATCH))
+
+            if [ "$WAVE" -lt "$WAVES" ]; then
+              echo "Waiting ${INTERVAL}s before next wave..."
+              sleep "$INTERVAL"
+            fi
+          done
+
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "rm -f /tmp/insert-test-live-transactions-batch.sql"
+
+          echo "Done. Reported insert total: ${INSERTED} transactions in ${WAVES} waves."
