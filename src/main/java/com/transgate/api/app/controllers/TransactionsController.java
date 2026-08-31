@@ -574,6 +574,49 @@ public class TransactionsController {
         return transactionsInterface.GetTransactionsRates(code, startDate, endDate, true);
     }
 
+    @RequestMapping(value = "/transactions/live-monitoring", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetLiveMonitoring(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestParam("institution") Optional<String> institution,
+            @RequestParam(value = "bucketMinutes", defaultValue = "10") int bucketMinutes,
+            @RequestParam(value = "limit", defaultValue = "8") int limit) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            return transactionsInterface.GetLiveMonitoring(startDate, endDate, vendorCode, bucketMinutes, limit);
+        }
+        ResponseEntity missing = vendorMissingInstitutionOrNull(sessiontoken);
+        if (missing != null) {
+            return missing;
+        }
+        return transactionsInterface.GetLiveMonitoring(startDate, endDate, institution.orElse(""), bucketMinutes, limit);
+    }
+
+    @RequestMapping(value = "/transactions/status-summary", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetStatusSummary(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestParam(value = "isCurrent", defaultValue = "true") boolean isCurrent,
+            @RequestParam("institution") Optional<String> institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            return transactionsInterface.GetStatusSummary(startDate, endDate, isCurrent, vendorCode);
+        }
+        ResponseEntity missing = vendorMissingInstitutionOrNull(sessiontoken);
+        if (missing != null) {
+            return missing;
+        }
+        return transactionsInterface.GetStatusSummary(startDate, endDate, isCurrent, institution.orElse(""));
+    }
+
     @RequestMapping(value = "/transactions-trend/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetInsitutionTnxTrend(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,

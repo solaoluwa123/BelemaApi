@@ -10,6 +10,8 @@ import com.transgate.api.models.ChannelsTnxValueModel;
 import com.transgate.api.models.DisputeModel;
 import com.transgate.api.models.DisputeTypeModel;
 import com.transgate.api.models.FullTransactionModel;
+import com.transgate.api.models.LiveMonitoringInstitutionModel;
+import com.transgate.api.models.LiveMonitoringTimePointModel;
 import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.TNXModel;
 import com.transgate.api.models.TransactionHalfModel;
@@ -24,6 +26,7 @@ import java.math.BigInteger;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -39,6 +42,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.Locale;
+import java.util.TreeMap;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import javax.sql.DataSource;
@@ -3633,6 +3638,297 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 
         } catch (DataAccessException ex) {
             logger.info("GetTransactionsRates failed: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    private static String normalizeMonitoringDate(String value) {
+        if (value == null) {
+            return null;
+        }
+        if (value.contains("T")) {
+            return value.replace("T", " ");
+        }
+        return value;
+    }
+
+    private static int pct(long success, long total) {
+        if (total <= 0) {
+            return 0;
+        }
+        return (int) Math.round(success * 100.0 / total);
+    }
+
+    private static double pctDouble(long success, long total) {
+        if (total <= 0) {
+            return 0.0;
+        }
+        return Math.round(success * 1000.0 / total) / 10.0;
+    }
+
+    private static String formatInstitutionDisplayName(String institutionName, String shortName) {
+        if (institutionName == null || institutionName.isEmpty()) {
+            return shortName != null ? shortName : "";
+        }
+        if (shortName == null || shortName.isEmpty() || institutionName.equalsIgnoreCase(shortName)) {
+            return institutionName;
+        }
+        return institutionName + " (" + shortName + ")";
+    }
+
+    private static LocalDateTime toLocalDateTime(Object bucketTime) {
+        if (bucketTime == null) {
+            return null;
+        }
+        if (bucketTime instanceof LocalDateTime) {
+            return (LocalDateTime) bucketTime;
+        }
+        if (bucketTime instanceof Timestamp) {
+            return ((Timestamp) bucketTime).toLocalDateTime();
+        }
+        if (bucketTime instanceof java.util.Date) {
+            return new Timestamp(((java.util.Date) bucketTime).getTime()).toLocalDateTime();
+        }
+        try {
+            return LocalDateTime.parse(String.valueOf(bucketTime).replace(" ", "T"));
+        } catch (DateTimeParseException ex) {
+            return null;
+        }
+    }
+
+    private static class LiveMonitoringBucket {
+        long inflowTotal;
+        long inflowSuccess;
+        long outflowTotal;
+        long outflowSuccess;
+    }
+
+    private static class LiveMonitoringAccumulator {
+        String institutionCode;
+        String institutionName;
+        String shortName;
+        long inflowTotal;
+        long inflowSuccess;
+        long outflowTotal;
+        long outflowSuccess;
+        TreeMap<LocalDateTime, LiveMonitoringBucket> buckets = new TreeMap<>();
+    }
+
+    @Override
+    public ResponseEntity GetLiveMonitoring(String startDate, String endDate, String institution, int bucketMinutes, int limit) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            startDate = normalizeMonitoringDate(startDate);
+            endDate = normalizeMonitoringDate(endDate);
+            if (institution == null) {
+                institution = "";
+            }
+            final String institutionFilter = institution;
+            int safeBucketMinutes = bucketMinutes > 0 ? bucketMinutes : 10;
+            int safeLimit = limit > 0 ? limit : 8;
+            int bucketSeconds = safeBucketMinutes * 60;
+
+            String institutionFilterIn = institutionFilter.isEmpty() ? "" : " AND a.destination_institution_code = ? ";
+            String institutionFilterOut = institutionFilter.isEmpty() ? "" : " AND a.source_institution_code = ? ";
+
+            String inflowSql = "SELECT b.institution_code, b.institution_name, b.shortName, "
+                    + "FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(a.transaction_date_time) / ?) * ?) AS bucket_time, "
+                    + "COUNT(a.id) AS total_count, "
+                    + "SUM(CASE WHEN a.response_code IN ('00','10','11','16') THEN 1 ELSE 0 END) AS success_count "
+                    + "FROM " + TNX_LIVE_TABLE + " a "
+                    + "JOIN ajiswitch_db.tbl_nodes b ON a.destination_institution_code = b.institution_code "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + institutionFilterIn
+                    + "GROUP BY b.institution_code, b.institution_name, b.shortName, bucket_time";
+
+            String outflowSql = "SELECT b.institution_code, b.institution_name, b.shortName, "
+                    + "FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(a.transaction_date_time) / ?) * ?) AS bucket_time, "
+                    + "COUNT(a.id) AS total_count, "
+                    + "SUM(CASE WHEN a.response_code IN ('00','10','11','16') THEN 1 ELSE 0 END) AS success_count "
+                    + "FROM " + TNX_LIVE_TABLE + " a "
+                    + "JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + institutionFilterOut
+                    + "GROUP BY b.institution_code, b.institution_name, b.shortName, bucket_time";
+
+            Object[] inflowParams = institutionFilter.isEmpty()
+                    ? new Object[]{bucketSeconds, bucketSeconds, startDate, endDate}
+                    : new Object[]{bucketSeconds, bucketSeconds, startDate, endDate, institutionFilter};
+            Object[] outflowParams = institutionFilter.isEmpty()
+                    ? new Object[]{bucketSeconds, bucketSeconds, startDate, endDate}
+                    : new Object[]{bucketSeconds, bucketSeconds, startDate, endDate, institutionFilter};
+
+            List<Map<String, Object>> inflowRows = jdbcTemplate.queryForList(inflowSql, inflowParams);
+            List<Map<String, Object>> outflowRows = jdbcTemplate.queryForList(outflowSql, outflowParams);
+
+            Map<String, LiveMonitoringAccumulator> byCode = new LinkedHashMap<>();
+
+            for (Map<String, Object> row : inflowRows) {
+                String code = String.valueOf(row.get("institution_code"));
+                LiveMonitoringAccumulator acc = byCode.computeIfAbsent(code, k -> new LiveMonitoringAccumulator());
+                acc.institutionCode = code;
+                acc.institutionName = row.get("institution_name") != null ? String.valueOf(row.get("institution_name")) : code;
+                acc.shortName = row.get("shortName") != null ? String.valueOf(row.get("shortName")) : "";
+                long total = row.get("total_count") != null ? ((Number) row.get("total_count")).longValue() : 0L;
+                long success = row.get("success_count") != null ? ((Number) row.get("success_count")).longValue() : 0L;
+                acc.inflowTotal += total;
+                acc.inflowSuccess += success;
+                LocalDateTime bucket = toLocalDateTime(row.get("bucket_time"));
+                if (bucket != null) {
+                    LiveMonitoringBucket bucketData = acc.buckets.computeIfAbsent(bucket, k -> new LiveMonitoringBucket());
+                    bucketData.inflowTotal += total;
+                    bucketData.inflowSuccess += success;
+                }
+            }
+
+            for (Map<String, Object> row : outflowRows) {
+                String code = String.valueOf(row.get("institution_code"));
+                LiveMonitoringAccumulator acc = byCode.computeIfAbsent(code, k -> new LiveMonitoringAccumulator());
+                acc.institutionCode = code;
+                if (acc.institutionName == null || acc.institutionName.isEmpty()) {
+                    acc.institutionName = row.get("institution_name") != null ? String.valueOf(row.get("institution_name")) : code;
+                }
+                if (acc.shortName == null || acc.shortName.isEmpty()) {
+                    acc.shortName = row.get("shortName") != null ? String.valueOf(row.get("shortName")) : "";
+                }
+                long total = row.get("total_count") != null ? ((Number) row.get("total_count")).longValue() : 0L;
+                long success = row.get("success_count") != null ? ((Number) row.get("success_count")).longValue() : 0L;
+                acc.outflowTotal += total;
+                acc.outflowSuccess += success;
+                LocalDateTime bucket = toLocalDateTime(row.get("bucket_time"));
+                if (bucket != null) {
+                    LiveMonitoringBucket bucketData = acc.buckets.computeIfAbsent(bucket, k -> new LiveMonitoringBucket());
+                    bucketData.outflowTotal += total;
+                    bucketData.outflowSuccess += success;
+                }
+            }
+
+            List<LiveMonitoringAccumulator> ranked = new ArrayList<>(byCode.values());
+            ranked.sort((a, b) -> Long.compare(
+                    (b.inflowTotal + b.outflowTotal),
+                    (a.inflowTotal + a.outflowTotal)));
+
+            if (!institutionFilter.isEmpty()) {
+                ranked = ranked.stream()
+                        .filter(acc -> institutionFilter.equals(acc.institutionCode))
+                        .collect(Collectors.toList());
+            } else if (ranked.size() > safeLimit) {
+                ranked = ranked.subList(0, safeLimit);
+            }
+
+            DateTimeFormatter timeLabelFmt = DateTimeFormatter.ofPattern("h:mma", Locale.ENGLISH);
+            ArrayList data = new ArrayList();
+
+            for (LiveMonitoringAccumulator acc : ranked) {
+                LiveMonitoringInstitutionModel model = new LiveMonitoringInstitutionModel();
+                model.setInstitutionCode(acc.institutionCode);
+                model.setShortName(acc.shortName);
+                model.setName(formatInstitutionDisplayName(acc.institutionName, acc.shortName));
+
+                int inflowSuccessPct = pct(acc.inflowSuccess, acc.inflowTotal);
+                int outflowSuccessPct = pct(acc.outflowSuccess, acc.outflowTotal);
+                model.setInflowSuccess(inflowSuccessPct);
+                model.setInflowFailure(100 - inflowSuccessPct);
+                model.setOutflowSuccess(outflowSuccessPct);
+                model.setOutflowFailure(100 - outflowSuccessPct);
+
+                List<LiveMonitoringTimePointModel> series = new ArrayList<>();
+                for (Map.Entry<LocalDateTime, LiveMonitoringBucket> entry : acc.buckets.entrySet()) {
+                    LiveMonitoringBucket bucket = entry.getValue();
+                    LiveMonitoringTimePointModel point = new LiveMonitoringTimePointModel();
+                    point.setTime(entry.getKey().format(timeLabelFmt).toLowerCase(Locale.ENGLISH));
+                    point.setInflow(pctDouble(bucket.inflowSuccess, bucket.inflowTotal));
+                    point.setOutflow(pctDouble(bucket.outflowSuccess, bucket.outflowTotal));
+                    series.add(point);
+                }
+                model.setTimeSeries(series);
+                data.add(model);
+            }
+
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Live monitoring");
+            networkResponse.setData(data);
+            networkResponse.setMeta(String.format(
+                    "{\"windowMinutes\":90,\"bucketMinutes\":%d,\"generatedAt\":\"%s\"}",
+                    safeBucketMinutes,
+                    LocalDateTime.now().format(DTF)));
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("GetLiveMonitoring failed: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity GetStatusSummary(String startDate, String endDate, boolean isCurrent, String institution) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            startDate = normalizeMonitoringDate(startDate);
+            endDate = normalizeMonitoringDate(endDate);
+            if (institution == null) {
+                institution = "";
+            }
+
+            String table = isCurrent ? TNX_LIVE_TABLE : archiveTable();
+            String institutionFilter = institution.isEmpty()
+                    ? ""
+                    : " AND (a.source_institution_code = ? OR a.destination_institution_code = ?) ";
+
+            String SQL = "SELECT "
+                    + "CASE "
+                    + "  WHEN a.response_code IN ('00','10','11','16') THEN 'Successful' "
+                    + "  WHEN a.response_code = '09' THEN 'Pending' "
+                    + "  ELSE 'Failed' "
+                    + "END AS label, "
+                    + "COUNT(a.id) AS volume "
+                    + "FROM " + table + " a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + institutionFilter
+                    + "GROUP BY label";
+
+            Object[] params = institution.isEmpty()
+                    ? new Object[]{startDate, endDate}
+                    : new Object[]{startDate, endDate, institution, institution};
+
+            List<Map<String, Object>> rows;
+            if (table.equalsIgnoreCase(TNX_LIVE_TABLE)) {
+                rows = jdbcTemplate.queryForList(SQL, params);
+            } else if (table.equalsIgnoreCase(archiveTable())) {
+                rows = secondJdbcTemplate.queryForList(SQL, params);
+            } else {
+                throw new IllegalStateException("Unknown transaction table '" + table + "'");
+            }
+
+            Map<String, Long> counts = new LinkedHashMap<>();
+            counts.put("Successful", 0L);
+            counts.put("Pending", 0L);
+            counts.put("Failed", 0L);
+            long totalTransactions = 0L;
+
+            for (Map<String, Object> row : rows) {
+                String label = row.get("label") != null ? String.valueOf(row.get("label")) : "Failed";
+                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                counts.put(label, counts.getOrDefault(label, 0L) + volume);
+                totalTransactions += volume;
+            }
+
+            ArrayList summary = new ArrayList();
+            for (Map.Entry<String, Long> entry : counts.entrySet()) {
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("label", entry.getKey());
+                item.put("volume", entry.getValue());
+                summary.add(item);
+            }
+
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transaction status summary");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary(summary);
+            networkResponse.setTnxModel(tnxModel);
+            networkResponse.setMeta(String.format("{\"totalTransactions\":%d}", totalTransactions));
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("GetStatusSummary failed: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
     }

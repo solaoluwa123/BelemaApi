@@ -57,6 +57,10 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetInsitutionTnxTrend(String institutioncode, String type, String startDate, String endDate);
     
+    public ResponseEntity GetLiveMonitoring(String startDate, String endDate, String institution, int bucketMinutes, int limit);
+    
+    public ResponseEntity GetStatusSummary(String startDate, String endDate, boolean isCurrent, String institution);
+    
     public ResponseEntity Get(int id);
     
     public ResponseEntity Get(String institutioncode);
