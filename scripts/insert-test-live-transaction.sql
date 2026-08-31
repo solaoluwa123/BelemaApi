@@ -4,7 +4,7 @@
 
 USE ajiswitch_db;
 
-SET @session_id = CONCAT('BELEMA-TEST-', DATE_FORMAT(NOW(), '%Y%m%d%H%i%s'), '-', FLOOR(RAND() * 9000 + 1000));
+SET @session_id = CONCAT('BT', UNIX_TIMESTAMP(), LPAD(FLOOR(RAND() * 1000), 3, '0'));
 SET @now = NOW();
 
 INSERT INTO tbl_creditfundtransfers (
