@@ -869,22 +869,22 @@ public class TransactionsController {
     @RequestMapping(value = "/transactions/q/search", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity SearchTransactions(
             @RequestHeader(value = "Authorization") String header,
-            @RequestHeader(value = "auth-token") String sessiontoken,
-            @RequestParam("srcSessionid") String srcSessionid,
-            @RequestParam("channelCode") String channelCode,
-            @RequestParam("responseCode") String responseCode,
-            @RequestParam("srcAccountNumber") String srcAccountNumber,
-            @RequestParam("destAccountNumber") String destAccountNumber,
-            @RequestParam("srcInstitutioncode") String srcInstitutioncode,
-            @RequestParam("destInstitutioncode") String destInstitutioncode,
-            @RequestParam("minAmount") String minAmount,
-            @RequestParam("maxAmount") String maxAmount,
-            @RequestParam("startDate") String startDate,
-            @RequestParam("endDate") String endDate,
-            @RequestParam("page") int page,
-            @RequestParam("limit") int limit,
-            @RequestParam("isCurrent") boolean isCurrent,
-            @RequestParam("userInstitutionCode") String userInstitutionCode
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam(value = "srcSessionid", required = false, defaultValue = "") String srcSessionid,
+            @RequestParam(value = "channelCode", required = false, defaultValue = "") String channelCode,
+            @RequestParam(value = "responseCode", required = false, defaultValue = "") String responseCode,
+            @RequestParam(value = "srcAccountNumber", required = false, defaultValue = "") String srcAccountNumber,
+            @RequestParam(value = "destAccountNumber", required = false, defaultValue = "") String destAccountNumber,
+            @RequestParam(value = "srcInstitutioncode", required = false, defaultValue = "") String srcInstitutioncode,
+            @RequestParam(value = "destInstitutioncode", required = false, defaultValue = "") String destInstitutioncode,
+            @RequestParam(value = "minAmount", required = false, defaultValue = "") String minAmount,
+            @RequestParam(value = "maxAmount", required = false, defaultValue = "") String maxAmount,
+            @RequestParam(value = "startDate", required = false, defaultValue = "") String startDate,
+            @RequestParam(value = "endDate", required = false, defaultValue = "") String endDate,
+            @RequestParam(value = "page", required = false, defaultValue = "1") int page,
+            @RequestParam(value = "limit", required = false, defaultValue = "50") int limit,
+            @RequestParam(value = "isCurrent", required = false, defaultValue = "true") boolean isCurrent,
+            @RequestParam(value = "userInstitutionCode", required = false, defaultValue = "") String userInstitutionCode
     ) {
         // Log entry into the method without logging sensitive data
         logger.info("SearchTransactions called with parameters: srcSessionid=" + srcSessionid
