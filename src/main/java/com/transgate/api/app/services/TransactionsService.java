@@ -2864,6 +2864,80 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     }
 
     @Override
+    public ResponseEntity GetTsqRetries(String sessionId, String destinationInstitutionCode, int page, int limit) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            int safePage = page > 0 ? page : 1;
+            int safeLimit = limit > 0 ? limit : 50;
+            int offset = (safePage - 1) * safeLimit;
+            String sid = sessionId != null ? sessionId.trim() : "";
+            String destCode = destinationInstitutionCode != null ? destinationInstitutionCode.trim() : "";
+
+            StringBuilder where = new StringBuilder("WHERE 1=1");
+            List<Object> args = new ArrayList<>();
+            if (!sid.isEmpty()) {
+                where.append(" AND a.session_id = ?");
+                args.add(sid);
+            }
+            if (!destCode.isEmpty()) {
+                where.append(" AND a.destination_institution_code = ?");
+                args.add(destCode);
+            }
+
+            String SQL = "SELECT a.*, "
+                    + "b.institution_name as destInstitutionName "
+                    + "FROM ajiswitch_db.tbl_tsq_retry a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
+                    + "ON a.destination_institution_code = b.institution_code "
+                    + where
+                    + " ORDER BY a.transaction_date_time DESC LIMIT ? OFFSET ?";
+            List<Object> listArgs = new ArrayList<>(args);
+            listArgs.add(safeLimit);
+            listArgs.add(offset);
+            List<Map<String, Object>> retries = jdbcTemplate.queryForList(SQL, listArgs.toArray());
+
+            SQL = "SELECT COUNT(a.id) as totalRecords FROM ajiswitch_db.tbl_tsq_retry a " + where;
+            List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, args.toArray());
+            Map<String, Object> row = agg.get(0);
+            Number tRecords = (Number) row.get("totalRecords");
+            int totalRecords = tRecords != null ? tRecords.intValue() : 0;
+            String meta = "{\"totalRecords\": " + totalRecords + ", \"page\": " + safePage + ", \"limit\": " + safeLimit + "}";
+            networkResponse.setMeta(meta);
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("TSQ Retries");
+            networkResponse.setData((ArrayList) retries);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity ResetTsqRetryCounter(String sessiontoken, String username, String sessionId) {
+        try {
+            if (sessionId == null || sessionId.trim().isEmpty()) {
+                return responseManager.ResponseBadRequest("Session id is required.");
+            }
+            int userrole = GetUserRole(username, sessiontoken);
+            if (userrole != 1) {
+                return responseManager.ResponseUnathorized();
+            }
+            String sid = sessionId.trim();
+            String SQL = "UPDATE ajiswitch_db.tbl_tsq_retry SET counter = 0, responseCode = '09' WHERE session_id = ?";
+            int updated = jdbcTemplate.update(SQL, sid);
+            if (updated <= 0) {
+                return responseManager.ResponseBadRequest("TSQ retry row not found.");
+            }
+            return responseManager.ResponseAccepted("TSQ retry counter reset");
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
     public ResponseEntity SearchTimeoutRetries(String session_id,
             String response_at_reprocess,
             String destination_institution_code,

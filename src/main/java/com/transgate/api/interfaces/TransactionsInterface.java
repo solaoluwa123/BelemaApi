@@ -136,6 +136,10 @@ public interface TransactionsInterface {
             int page, 
             int limit,
             String isProcessed);
+
+    public ResponseEntity GetTsqRetries(String sessionId, String destinationInstitutionCode, int page, int limit);
+
+    public ResponseEntity ResetTsqRetryCounter(String sessiontoken, String username, String sessionId);
     
     public ResponseEntity RequestTransactionStatusChange(String sessionid, String sessiontoken, String username, String status);
     public ResponseEntity UpdateTransactionStatusChange(String id, String sessiontoken, String username, String status);

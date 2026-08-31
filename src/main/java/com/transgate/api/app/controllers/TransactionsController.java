@@ -1034,6 +1034,30 @@ public class TransactionsController {
                 isProcessed);
     }
 
+    @RequestMapping(value = "/tsq-retries", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetTsqRetries(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestParam(value = "session_id", required = false, defaultValue = "") String session_id,
+            @RequestParam(value = "destination_institution_code", required = false, defaultValue = "") String destination_institution_code,
+            @RequestParam(value = "page", required = false, defaultValue = "1") int page,
+            @RequestParam(value = "limit", required = false, defaultValue = "50") int limit) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetTsqRetries(session_id, destination_institution_code, page, limit);
+    }
+
+    @RequestMapping(value = "/tsq-retries/{sessionId}/reset-counter", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity ResetTsqRetryCounter(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("sessionId") String sessionId,
+            @RequestParam("username") String username) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.ResetTsqRetryCounter(sessiontoken, username, sessionId);
+    }
+
     @RequestMapping(value = "/transaction/status/change", method = RequestMethod.POST, headers = "Accept=application/json")
     public ResponseEntity RequestTransactionStatusChange(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,
