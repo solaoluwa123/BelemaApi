@@ -14,11 +14,13 @@ import com.transgate.api.models.NetworkResponse;
 import com.transgate.api.models.UserModel;
 import com.transgate.api.util.Randomizer;
 import com.transgate.api.util.ResponseManager;
+import java.security.SecureRandom;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Logger;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataAccessException;
@@ -43,6 +45,11 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     ResponseManager responseManager = new ResponseManager();
     
     private Logger logger = Logger.getLogger(FinancialInstitutionsService.class.getName());
+    private static final int HASH_KEY_LENGTH = 32;
+    private static final Pattern HASH_KEY_PATTERN = Pattern.compile("^[A-Za-z0-9]{32}$");
+    private static final String HASH_KEY_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    private static final int HASH_KEY_MAX_ATTEMPTS = 50;
+    private final SecureRandom hashKeyRandom = new SecureRandom();
     private final AppEnvironmentConfig appConfig;
     public FinancialInstitutionsService(AppEnvironmentConfig appConfig) {
         this.appConfig = appConfig;
@@ -99,6 +106,74 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
 
     private int defaultTimeout(int value, int fallback) {
         return value > 0 ? value : fallback;
+    }
+
+    private String generateHashKey() {
+        StringBuilder sb = new StringBuilder(HASH_KEY_LENGTH);
+        for (int i = 0; i < HASH_KEY_LENGTH; i++) {
+            sb.append(HASH_KEY_CHARS.charAt(hashKeyRandom.nextInt(HASH_KEY_CHARS.length())));
+        }
+        return sb.toString();
+    }
+
+    private int countHashKeyUsage(String hashKey, String excludeInstitutionCode) {
+        String exclude = excludeInstitutionCode != null ? excludeInstitutionCode.trim() : "";
+        Integer live = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ajiswitch_db.tbl_nodes WHERE hashkey = ? AND hashkey IS NOT NULL AND hashkey <> '' AND institution_code <> ?",
+                new Object[]{hashKey, exclude},
+                Integer.class);
+        int total = live != null ? live : 0;
+        try {
+            Integer pending = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM tbl_nodes_pendings WHERE hashkey = ? AND hashkey IS NOT NULL AND hashkey <> '' AND institution_code <> ?",
+                    new Object[]{hashKey, exclude},
+                    Integer.class);
+            total += pending != null ? pending : 0;
+        } catch (DataAccessException ex) {
+            logger.info("Pending hashkey lookup skipped: " + ex.getMessage());
+        }
+        return total;
+    }
+
+    private boolean hashKeyExists(String hashKey, String excludeInstitutionCode) {
+        return countHashKeyUsage(hashKey, excludeInstitutionCode) > 0;
+    }
+
+    private String generateUniqueHashKey(String excludeInstitutionCode) {
+        for (int attempt = 0; attempt < HASH_KEY_MAX_ATTEMPTS; attempt++) {
+            String candidate = generateHashKey();
+            if (!hashKeyExists(candidate, excludeInstitutionCode)) {
+                return candidate;
+            }
+        }
+        return null;
+    }
+
+    private boolean isValidHashKeyFormat(String hashKey) {
+        return hashKey != null && HASH_KEY_PATTERN.matcher(hashKey.trim()).matches();
+    }
+
+    private ResponseEntity resolveHashKeyForInstitution(FinancialInstitutionModel institution, boolean isCreate) {
+        String code = nz(institution.getCode()).trim();
+        String provided = nz(institution.getHashKey()).trim();
+
+        if (provided.isEmpty()) {
+            String generated = generateUniqueHashKey(code);
+            if (generated == null) {
+                return responseManager.ResponseBadRequest("Unable to generate a unique hash key. Please try again.");
+            }
+            institution.setHashKey(generated);
+            return null;
+        }
+
+        if (!isValidHashKeyFormat(provided)) {
+            return responseManager.ResponseBadRequest("Hash key must be exactly 32 letters or numbers.");
+        }
+        if (hashKeyExists(provided, code)) {
+            return responseManager.ResponseBadRequest("Hash key already exists for another institution.");
+        }
+        institution.setHashKey(provided);
+        return null;
     }
 
     private String generateWalletNumber() {
@@ -185,7 +260,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
 
     private String financialInstitutionSelectSql() {
         return "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, "
-                + "n.is_active as status, n.date_created, n.cbn_bank_account, n.isProcessTSQ, n.serverIP, n.neTimeout, n.ftTimeout, "
+                + "n.is_active as status, n.date_created, n.cbn_bank_account, n.hashkey, n.isProcessTSQ, n.serverIP, n.neTimeout, n.ftTimeout, "
                 + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
                 + "c.charge_amount, c.vat, "
                 + "e.url, e.urlTSQ, e.neEnvelope, e.neResponseStartTag, e.neResponseEndTag, "
@@ -234,7 +309,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         });
 
         SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ?, port_number = ?, publickeylocation = ?, "
-                + "cbn_bank_account = ?, isProcessTSQ = ?, serverIP = ?, neTimeout = ?, ftTimeout = ? "
+                + "cbn_bank_account = ?, isProcessTSQ = ?, serverIP = ?, neTimeout = ?, ftTimeout = ?, hashkey = ? "
                 + "WHERE institution_code = ?";
         jdbcTemplate.update(SQL, new Object[]{
             name,
@@ -245,6 +320,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             serverIp,
             neTimeout,
             ftTimeout,
+            nz(institution.getHashKey()),
             code
         });
 
@@ -511,6 +587,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             String serverIp = defaultServerIp(institution.getServerIP());
             int neTimeout = defaultTimeout(institution.getNeTimeout(), 5);
             int ftTimeout = defaultTimeout(institution.getFtTimeout(), 10);
+            ResponseEntity hashKeyError = resolveHashKeyForInstitution(institution, true);
+            if (hashKeyError != null) {
+                return hashKeyError;
+            }
             int userrole = GetUserRole(creator, sessiontoken);
             switch (userrole) {
                     case 1:
@@ -711,6 +791,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
             int retVal;
             switch (userrole) {
                 case 1:
+                    ResponseEntity hashKeyError = resolveHashKeyForInstitution(institution, false);
+                    if (hashKeyError != null) {
+                        return hashKeyError;
+                    }
                     applyInstitutionEdit(institution);
                     return responseManager.ResponseAccepted();
                 case 2:
@@ -787,7 +871,11 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     String serverIp = defaultServerIp(institution.getServerIP());
                     int neTimeout = defaultTimeout(institution.getNeTimeout(), 5);
                     int ftTimeout = defaultTimeout(institution.getFtTimeout(), 10);
-                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, isProcessTSQ, serverIP, neTimeout, ftTimeout) VALUES(?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?)";
+                    ResponseEntity pendingHashKeyError = resolveHashKeyForInstitution(institution, false);
+                    if (pendingHashKeyError != null) {
+                        return pendingHashKeyError;
+                    }
+                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ, serverIP, neTimeout, ftTimeout) VALUES(?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?)";
                     try {
                         retVal = jdbcTemplate.update(SQL, new Object[]{
                             institution.getPort_number(),
@@ -796,6 +884,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             code,
                             name,
                             institution.getCbn_bank_account(),
+                            institution.getHashKey(),
                             institution.getIsProcessTSQ(),
                             serverIp,
                             neTimeout,
@@ -861,7 +950,12 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                         case "edit":
                             SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            applyInstitutionEdit(institutions.get(0));
+                            FinancialInstitutionModel pendingEdit = institutions.get(0);
+                            ResponseEntity editHashKeyError = resolveHashKeyForInstitution(pendingEdit, false);
+                            if (editHashKeyError != null) {
+                                return editHashKeyError;
+                            }
+                            applyInstitutionEdit(pendingEdit);
                             retVal2 = 1;
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseAccepted();
@@ -869,6 +963,13 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                                 return responseManager.ResponseInternalServerError();
                         case "create":
                             FinancialInstitutionModel pendingCreate = institutions.get(0);
+                            if (!isValidHashKeyFormat(pendingCreate.getHashKey())) {
+                                pendingCreate.setHashKey("");
+                            }
+                            ResponseEntity createHashKeyError = resolveHashKeyForInstitution(pendingCreate, true);
+                            if (createHashKeyError != null) {
+                                return createHashKeyError;
+                            }
                             int isSettlement = settlementFlag(pendingCreate);
                             int canFund = instWithWalletFlag(pendingCreate);
                             String cbnAccount = isSettlement == 1 ? nz(pendingCreate.getCbn_bank_account()) : "";
@@ -1509,6 +1610,9 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
         }
         if (UsersService.hasColumn(rs, "ext_active")) {
             response.setEnableInward(rs.getInt("ext_active"));
+        }
+        if (UsersService.hasColumn(rs, "hashkey")) {
+            response.setHashKey(rs.getString("hashkey"));
         }
     }
     
