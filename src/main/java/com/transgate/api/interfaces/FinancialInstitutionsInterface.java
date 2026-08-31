@@ -24,7 +24,7 @@ public interface FinancialInstitutionsInterface {
     
     public ResponseEntity Activate(String sessiontoken, String code, String username);
     
-    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor, float charge_amount, float vat, String cbn_bank_account, int is_tsq_processed);
+    public ResponseEntity Edit(String sessiontoken, FinancialInstitutionModel institution);
     
     public ResponseEntity GetFinancialInstitutionByCode(String sessiontoken, String code);
     

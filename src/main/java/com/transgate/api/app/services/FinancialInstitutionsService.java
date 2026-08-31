@@ -146,6 +146,111 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         });
     }
 
+    private void upsertInstitutionExt(FinancialInstitutionModel institution) {
+        if (institution == null || institution.getCode() == null || institution.getCode().trim().isEmpty()) {
+            return;
+        }
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM ajiswitch_db.tbl_institution_ext WHERE institution_code = ?",
+                new Object[]{institution.getCode().trim()},
+                Integer.class);
+        if (count != null && count > 0) {
+            int withWallet = instWithWalletFlag(institution);
+            int extActive = institutionExtActive(institution);
+            String SQL = "UPDATE ajiswitch_db.tbl_institution_ext SET "
+                    + "is_active = ?, neEnvelope = ?, url = ?, neResponseStartTag = ?, neResponseEndTag = ?, "
+                    + "ftEnvelope = ?, ftResponseStartTag = ?, ftResponseEndTag = ?, tsqEnvelope = ?, urlTSQ = ?, "
+                    + "tsqResponseStartTag = ?, tsqResponseEndTag = ?, instWithWallet = ? "
+                    + "WHERE institution_code = ?";
+            jdbcTemplate.update(SQL, new Object[]{
+                extActive,
+                nz(institution.getNeEnvelope()),
+                nz(institution.getUrl()),
+                nz(institution.getNeResponseStartTag()),
+                nz(institution.getNeResponseEndTag()),
+                nz(institution.getFtEnvelope()),
+                nz(institution.getFtResponseStartTag()),
+                nz(institution.getFtResponseEndTag()),
+                nz(institution.getTsqEnvelope()),
+                nz(institution.getUrlTSQ()),
+                nz(institution.getTsqResponseStartTag()),
+                nz(institution.getTsqResponseEndTag()),
+                withWallet,
+                institution.getCode().trim()
+            });
+        } else {
+            insertInstitutionExt(institution);
+        }
+    }
+
+    private String financialInstitutionSelectSql() {
+        return "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, "
+                + "n.is_active as status, n.date_created, n.cbn_bank_account, n.isProcessTSQ, n.serverIP, n.neTimeout, n.ftTimeout, "
+                + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
+                + "c.charge_amount, c.vat, "
+                + "e.url, e.urlTSQ, e.neEnvelope, e.neResponseStartTag, e.neResponseEndTag, "
+                + "e.ftEnvelope, e.ftResponseStartTag, e.ftResponseEndTag, "
+                + "e.tsqEnvelope, e.tsqResponseStartTag, e.tsqResponseEndTag, e.is_active as ext_active "
+                + "FROM ajiswitch_db.tbl_nodes n "
+                + "LEFT JOIN ajiswitch_db.tbl_charges c ON c.institution_code = n.institution_code "
+                + "LEFT JOIN tbl_financial_institutions a ON n.institution_code = a.code "
+                + "LEFT JOIN tbl_institution_types b ON a.businessType = b.id "
+                + "LEFT JOIN ajiswitch_db.tbl_institution_ext e ON e.institution_code = n.institution_code ";
+    }
+
+    private void applyInstitutionEdit(FinancialInstitutionModel institution) {
+        String code = institution.getCode();
+        String name = institution.getName();
+        String serverIp = defaultServerIp(institution.getServerIP());
+        int neTimeout = defaultTimeout(institution.getNeTimeout(), 5);
+        int ftTimeout = defaultTimeout(institution.getFtTimeout(), 10);
+
+        String SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
+        int editRetVal = jdbcTemplate.update(SQL, new Object[]{
+            name,
+            institution.getShortName(),
+            institution.getColor(),
+            institution.getBusinessType(),
+            institution.getBusiness_address(),
+            code
+        });
+        if (editRetVal < 1) {
+            SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
+            jdbcTemplate.update(SQL, new Object[]{
+                code,
+                name,
+                institution.getShortName(),
+                institution.getColor(),
+                institution.getBusinessType(),
+                institution.getBusiness_address()
+            });
+        }
+
+        SQL = "UPDATE ajiswitch_db.tbl_charges SET charge_amount = ?, vat = ? WHERE institution_code = ?";
+        jdbcTemplate.update(SQL, new Object[]{
+            institution.getCharge_amount(),
+            institution.getVat(),
+            code
+        });
+
+        SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ?, port_number = ?, publickeylocation = ?, "
+                + "cbn_bank_account = ?, isProcessTSQ = ?, serverIP = ?, neTimeout = ?, ftTimeout = ? "
+                + "WHERE institution_code = ?";
+        jdbcTemplate.update(SQL, new Object[]{
+            name,
+            institution.getPort_number(),
+            institution.getPublickeylocation(),
+            institution.getCbn_bank_account(),
+            institution.getIsProcessTSQ(),
+            serverIp,
+            neTimeout,
+            ftTimeout,
+            code
+        });
+
+        upsertInstitutionExt(institution);
+    }
+
     private int institutionExtActive(FinancialInstitutionModel institution) {
         if (institution.getEnableInward() == 1) {
             return 1;
@@ -333,17 +438,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, n.cbn_bank_account, n.isProcessTSQ, "
-                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
-                    + "c.charge_amount, c.vat "
-                    + "FROM ajiswitch_db.tbl_nodes n "
-                    + "LEFT JOIN ajiswitch_db.tbl_charges c "
-                    + "ON c.institution_code = n.institution_code "
-                    + "LEFT JOIN tbl_financial_institutions a "
-                    + "ON n.institution_code = a.code "
-                    + "LEFT JOIN tbl_institution_types b "
-                    + "ON a.businessType = b.id "
-                    + "WHERE n.institution_code = ?";
+            SQL = financialInstitutionSelectSql() + "WHERE n.institution_code = ?";
             
             List<FinancialInstitutionModel> financialInstitutionModel = jdbcTemplate.query(SQL, new Object[]{code}, new FinancialInstitutionMapper());
             networkResponse.setCode(200);
@@ -363,17 +458,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
-            SQL = "SELECT n.id, n.institution_name as name, n.institution_code as code, n.port_number, n.publickeylocation, n.is_active as status, n.date_created, n.cbn_bank_account, n.isProcessTSQ, "
-                    + "a.shortName, a.color, a.businessType, a.business_address, a.date_updated, b.name as businessTypeName, "
-                    + "c.charge_amount, c.vat "
-                    + "FROM ajiswitch_db.tbl_nodes n "
-                    + "LEFT JOIN ajiswitch_db.tbl_charges c "
-                    + "ON c.institution_code = n.institution_code "
-                    + "LEFT JOIN tbl_financial_institutions a "
-                    + "ON n.institution_code = a.code "
-                    + "LEFT JOIN tbl_institution_types b "
-                    + "ON a.businessType = b.id "
-                    + "ORDER BY n.id DESC";
+            SQL = financialInstitutionSelectSql() + "ORDER BY n.id DESC";
             List<FinancialInstitutionModel> financialInstitutionModel = jdbcTemplate.query(SQL, new FinancialInstitutionMapper());
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
@@ -613,28 +698,21 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     }
     
     @Override
-    public ResponseEntity Edit(String sessiontoken, String code, String name, String shortName, int port, String publickeylocation, String color, String business_address, int businessType, String editor, float charge_amount, float vat, String cbn_bank_account, int is_tsq_processed) {
+    public ResponseEntity Edit(String sessiontoken, FinancialInstitutionModel institution) {
         try {
+            if (institution == null || institution.getCode() == null || institution.getCode().trim().isEmpty()) {
+                return responseManager.ResponseBadRequest();
+            }
+            String code = institution.getCode().trim();
+            institution.setCode(code);
+            String editor = institution.getCreated_by();
             String SQL;
             int userrole = GetUserRole(editor, sessiontoken);
             int retVal;
             switch (userrole) {
                 case 1:
-                    SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
-                    int editRetVal = jdbcTemplate.update(SQL, new Object[]{name, shortName, color, businessType, business_address, code});
-                    if (editRetVal < 1) {
-                        SQL = "INSERT into tbl_financial_institutions(code, name, shortName, color, businessType, business_address) VALUES(?, ?, ?, ?, ?, ?)";
-                        jdbcTemplate.update(SQL, new Object[]{code, name, shortName, color, businessType, business_address});
-                    }
-                    SQL = "UPDATE ajiswitch_db.tbl_charges SET charge_amount = ?, vat = ? WHERE institution_code = ?";
-                    jdbcTemplate.update(SQL, new Object[]{charge_amount, vat, code});
-                    SQL = "UPDATE ajiswitch_db.tbl_nodes SET institution_name = ?, cbn_bank_account = ?, isProcessTSQ = ? WHERE institution_code = ?";
-                    jdbcTemplate.update(SQL, new Object[]{name, cbn_bank_account, is_tsq_processed, code});
-                    // Belema has no tbl_nodes_temp — only tbl_nodes
-//                    if (retVal > 0)
+                    applyInstitutionEdit(institution);
                     return responseManager.ResponseAccepted();
-//                    else
-//                        return responseManager.ResponseInternalServerError();
                 case 2:
                     boolean checkPendingAction = CheckInstitutionActionPending(code, "edit");
                     if (checkPendingAction) {
@@ -646,22 +724,96 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                     }
                     ResponseEntity responseEntity = GetFinancialInstitutionByCode(sessiontoken, code);
                     NetworkResponse networkResponse = (NetworkResponse) responseEntity.getBody();
-                    FinancialInstitutionModel institution = networkResponse != null ? (FinancialInstitutionModel) networkResponse.getData().get(0) : new FinancialInstitutionModel();
-                    responseEntity = GetFinancialInstitutionsTypeById(sessiontoken, businessType);
+                    FinancialInstitutionModel existing = networkResponse != null && networkResponse.getData() != null && !networkResponse.getData().isEmpty()
+                            ? (FinancialInstitutionModel) networkResponse.getData().get(0)
+                            : new FinancialInstitutionModel();
+                    responseEntity = GetFinancialInstitutionsTypeById(sessiontoken, institution.getBusinessType());
                     networkResponse = (NetworkResponse) responseEntity.getBody();
-                    InstitutionTypesModel typeModel = networkResponse != null ? (InstitutionTypesModel) networkResponse.getData().get(0) : new InstitutionTypesModel();
-                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, created_by, business_address) VALUES(?, ?, ?, ?, ?, 'edit', ?, ?, ?)";
-                    String note = institution.getName().equals(name) ? "" : "Change institution name from " + institution.getName() + " to " + name;
-                    note = institution.getColor().equals(color) ? note : !note.equals("") ? note + ", change color from " + institution.getColor() + " to " + color : "Change color from " + institution.getColor() + " to " + color;
-                    note = institution.getShortName().equals(shortName) ? note : !note.equals("") ? note + ", change short name from " + institution.getShortName() + " to " + shortName : "Change short name from " + institution.getShortName() + " to " + shortName;
-                    note = institution.getBusiness_address().equals(business_address) ? note : !note.equals("") ? note + ", change address from " + institution.getBusiness_address() + " to " + business_address : "Change address from " + institution.getBusiness_address() + " to " + business_address;
-                    note = institution.getBusinessType() == businessType ? note : !note.equals("") ? note + ", change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName() : "Change type from " + institution.getBusinessTypeName() + " to " + typeModel.getName();
-                    jdbcTemplate.update(SQL, new Object[]{name, shortName, color, institution.getCode(), businessType, note, editor, business_address});
-                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
-                    retVal = jdbcTemplate.update(SQL, new Object[]{port, institution.getStatus(), publickeylocation, code, name});
-                    if (retVal > 0) 
+                    InstitutionTypesModel typeModel = networkResponse != null && networkResponse.getData() != null && !networkResponse.getData().isEmpty()
+                            ? (InstitutionTypesModel) networkResponse.getData().get(0)
+                            : new InstitutionTypesModel();
+                    String name = institution.getName();
+                    String shortName = institution.getShortName();
+                    String color = institution.getColor();
+                    String business_address = institution.getBusiness_address();
+                    int businessType = institution.getBusinessType();
+                    SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, created_by, business_address, charge_amount, vat, url, urlTSQ, neEnvelope, neResponseStartTag, neResponseEndTag, ftEnvelope, ftResponseStartTag, ftResponseEndTag, tsqEnvelope, tsqResponseStartTag, tsqResponseEndTag, instWithWallet) VALUES(?, ?, ?, ?, ?, 'edit', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
+                    String note = existing.getName().equals(name) ? "" : "Change institution name from " + existing.getName() + " to " + name;
+                    note = existing.getColor().equals(color) ? note : !note.equals("") ? note + ", change color from " + existing.getColor() + " to " + color : "Change color from " + existing.getColor() + " to " + color;
+                    note = existing.getShortName().equals(shortName) ? note : !note.equals("") ? note + ", change short name from " + existing.getShortName() + " to " + shortName : "Change short name from " + existing.getShortName() + " to " + shortName;
+                    note = existing.getBusiness_address().equals(business_address) ? note : !note.equals("") ? note + ", change address from " + existing.getBusiness_address() + " to " + business_address : "Change address from " + existing.getBusiness_address() + " to " + business_address;
+                    note = existing.getBusinessType() == businessType ? note : !note.equals("") ? note + ", change type from " + existing.getBusinessTypeName() + " to " + typeModel.getName() : "Change type from " + existing.getBusinessTypeName() + " to " + typeModel.getName();
+                    int withWallet = instWithWalletFlag(institution);
+                    try {
+                        jdbcTemplate.update(SQL, new Object[]{
+                            name,
+                            shortName,
+                            color,
+                            code,
+                            businessType,
+                            note,
+                            editor,
+                            business_address,
+                            institution.getCharge_amount(),
+                            institution.getVat(),
+                            nz(institution.getUrl()),
+                            nz(institution.getUrlTSQ()),
+                            nz(institution.getNeEnvelope()),
+                            nz(institution.getNeResponseStartTag()),
+                            nz(institution.getNeResponseEndTag()),
+                            nz(institution.getFtEnvelope()),
+                            nz(institution.getFtResponseStartTag()),
+                            nz(institution.getFtResponseEndTag()),
+                            nz(institution.getTsqEnvelope()),
+                            nz(institution.getTsqResponseStartTag()),
+                            nz(institution.getTsqResponseEndTag()),
+                            withWallet
+                        });
+                    } catch (DataAccessException missingColumns) {
+                        SQL = "INSERT INTO tbl_financial_institutions_pendings(name, shortName, color, code, businessType, actionType, note, created_by, business_address, charge_amount, vat) VALUES(?, ?, ?, ?, ?, 'edit', ?, ?, ?, ?, ?)";
+                        jdbcTemplate.update(SQL, new Object[]{
+                            name,
+                            shortName,
+                            color,
+                            code,
+                            businessType,
+                            note,
+                            editor,
+                            business_address,
+                            institution.getCharge_amount(),
+                            institution.getVat()
+                        });
+                    }
+                    String serverIp = defaultServerIp(institution.getServerIP());
+                    int neTimeout = defaultTimeout(institution.getNeTimeout(), 5);
+                    int ftTimeout = defaultTimeout(institution.getFtTimeout(), 10);
+                    SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, isProcessTSQ, serverIP, neTimeout, ftTimeout) VALUES(?, ?, ?, ?, ?, now(), ?, ?, ?, ?, ?)";
+                    try {
+                        retVal = jdbcTemplate.update(SQL, new Object[]{
+                            institution.getPort_number(),
+                            existing.getStatus() != null && existing.getStatus().equals("-1") ? -1 : 1,
+                            institution.getPublickeylocation(),
+                            code,
+                            name,
+                            institution.getCbn_bank_account(),
+                            institution.getIsProcessTSQ(),
+                            serverIp,
+                            neTimeout,
+                            ftTimeout
+                        });
+                    } catch (DataAccessException missingColumns) {
+                        SQL = "INSERT into tbl_nodes_pendings(port_number, is_active, publickeylocation, institution_code, institution_name, date_created) VALUES(?, ?, ?, ?, ?, now())";
+                        retVal = jdbcTemplate.update(SQL, new Object[]{
+                            institution.getPort_number(),
+                            existing.getStatus() != null && existing.getStatus().equals("-1") ? -1 : 1,
+                            institution.getPublickeylocation(),
+                            code,
+                            name
+                        });
+                    }
+                    if (retVal > 0)
                         return responseManager.ResponseAccepted();
-                    else 
+                    else
                         return responseManager.ResponseInternalServerError();
                 default:
                     return responseManager.ResponseUnathorized();
@@ -709,10 +861,8 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                         case "edit":
                             SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'edit'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            SQL = "UPDATE tbl_financial_institutions SET name = ?, shortName = ?, color = ?, businessType = ?, business_address = ? WHERE code = ?";
-                            jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getName(), institutions.get(0).getShortName(), institutions.get(0).getColor(), institutions.get(0).getBusinessType(), institutions.get(0).getBusiness_address(), institutions.get(0).getCode()});
-                            SQL = "UPDATE ajiswitch_db.tbl_nodes SET port_number = ?, publickeylocation = ?, institution_name = ? WHERE institution_code = ?";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{institutions.get(0).getPort_number(), institutions.get(0).getPublickeylocation(), institutions.get(0).getName(), institutions.get(0).getCode()});
+                            applyInstitutionEdit(institutions.get(0));
+                            retVal2 = 1;
                             if (retVal > 0 && retVal2 > 0)
                                 return responseManager.ResponseAccepted();
                             else
@@ -1309,7 +1459,56 @@ public ResponseEntity CreateContact(String sessiontoken, String creator, String 
             response.setVat(rs.getFloat("vat"));
             response.setCbn_bank_account(rs.getString("cbn_bank_account"));
             response.setIsProcessTSQ(rs.getInt("isProcessTSQ"));
+            mapOptionalInstitutionColumns(rs, response);
             return response;
+        }
+    }
+
+    private void mapOptionalInstitutionColumns(ResultSet rs, FinancialInstitutionModel response) throws SQLException {
+        if (UsersService.hasColumn(rs, "serverIP")) {
+            response.setServerIP(rs.getString("serverIP"));
+        }
+        if (UsersService.hasColumn(rs, "neTimeout")) {
+            response.setNeTimeout(rs.getInt("neTimeout"));
+        }
+        if (UsersService.hasColumn(rs, "ftTimeout")) {
+            response.setFtTimeout(rs.getInt("ftTimeout"));
+        }
+        if (UsersService.hasColumn(rs, "url")) {
+            response.setUrl(rs.getString("url"));
+        }
+        if (UsersService.hasColumn(rs, "urlTSQ")) {
+            response.setUrlTSQ(rs.getString("urlTSQ"));
+        }
+        if (UsersService.hasColumn(rs, "neEnvelope")) {
+            response.setNeEnvelope(rs.getString("neEnvelope"));
+        }
+        if (UsersService.hasColumn(rs, "neResponseStartTag")) {
+            response.setNeResponseStartTag(rs.getString("neResponseStartTag"));
+        }
+        if (UsersService.hasColumn(rs, "neResponseEndTag")) {
+            response.setNeResponseEndTag(rs.getString("neResponseEndTag"));
+        }
+        if (UsersService.hasColumn(rs, "ftEnvelope")) {
+            response.setFtEnvelope(rs.getString("ftEnvelope"));
+        }
+        if (UsersService.hasColumn(rs, "ftResponseStartTag")) {
+            response.setFtResponseStartTag(rs.getString("ftResponseStartTag"));
+        }
+        if (UsersService.hasColumn(rs, "ftResponseEndTag")) {
+            response.setFtResponseEndTag(rs.getString("ftResponseEndTag"));
+        }
+        if (UsersService.hasColumn(rs, "tsqEnvelope")) {
+            response.setTsqEnvelope(rs.getString("tsqEnvelope"));
+        }
+        if (UsersService.hasColumn(rs, "tsqResponseStartTag")) {
+            response.setTsqResponseStartTag(rs.getString("tsqResponseStartTag"));
+        }
+        if (UsersService.hasColumn(rs, "tsqResponseEndTag")) {
+            response.setTsqResponseEndTag(rs.getString("tsqResponseEndTag"));
+        }
+        if (UsersService.hasColumn(rs, "ext_active")) {
+            response.setEnableInward(rs.getInt("ext_active"));
         }
     }
     

@@ -106,7 +106,7 @@ public class FinancialInstitutionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return financialInstitutionsInterface.Edit(sessiontoken, institution.getCode(), institution.getName(), institution.getShortName(), institution.getPort_number(), institution.getPublickeylocation(), institution.getColor(), institution.getBusiness_address(), institution.getBusinessType(), institution.getCreated_by(), institution.getCharge_amount(), institution.getVat(), institution.getCbn_bank_account(), institution.getIsProcessTSQ());
+        return financialInstitutionsInterface.Edit(sessiontoken, institution);
     }
     
     @RequestMapping(value = "/financial-institutions/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
