@@ -837,6 +837,16 @@ public class TransactionsController {
         return transactionsInterface.GetDisputes(institutioncode, page, limit);
     }
 
+    @RequestMapping(value = "/transactions/arbitrated-disputes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetArbitratedDisputes(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @PathVariable("institutioncode") String institutioncode) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return transactionsInterface.GetArbitratedDisputes(institutioncode);
+    }
+
     @RequestMapping(value = "/transactions/disputes/get/{id}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetDisputesOne(@RequestHeader(value = "Authorization") String header, @RequestHeader(value = "auth-token") String sessiontoken, @PathVariable("id") int id) {
         if (!validators.validHeader().equals(header)) {

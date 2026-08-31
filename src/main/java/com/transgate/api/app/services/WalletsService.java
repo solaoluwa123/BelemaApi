@@ -656,6 +656,108 @@ public class WalletsService implements WalletsInterface {
             return responseManager.ResponseInternalServerError();
         }
     }
+
+    @Override
+    public ResponseEntity GetAllWalletActivities(String startDate, String endDate, int page, int limit) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            int safePage = page < 1 ? 1 : page;
+            int safeLimit = limit < 1 ? 500 : Math.min(limit, 2000);
+            int offset = (safePage - 1) * safeLimit;
+            boolean hasRange = startDate != null && !startDate.trim().isEmpty()
+                    && endDate != null && !endDate.trim().isEmpty();
+
+            StringBuilder sql = new StringBuilder();
+            sql.append("SELECT a.id, a.walletnumber, a.amount, a.credit_or_debit, a.actor, a.activity_date_time, a.session_id, ")
+                    .append("w.financialinstitutioncode as financialInstitutionCode, ")
+                    .append("COALESCE(NULLIF(b.name, ''), n.institution_name, '') as financialInstitutionName ")
+                    .append("FROM ajiswitch_db.tbl_wallet_activities a ")
+                    .append("LEFT JOIN ajiswitch_db.tbl_wallets w ON a.walletnumber = w.walletnumber ")
+                    .append("LEFT JOIN tbl_financial_institutions b ON w.financialinstitutioncode = b.code ")
+                    .append("LEFT JOIN ajiswitch_db.tbl_nodes n ON w.financialinstitutioncode = n.institution_code ")
+                    .append("WHERE (a.actor IS NULL OR UPPER(a.actor) <> 'SYSTEM') ");
+
+            List<Object> params = new ArrayList<>();
+            if (hasRange) {
+                sql.append("AND a.activity_date_time >= ? AND a.activity_date_time < ? ");
+                params.add(startDate.trim());
+                params.add(endDate.trim());
+            }
+            sql.append("ORDER BY a.id DESC LIMIT ? OFFSET ?");
+            params.add(safeLimit);
+            params.add(offset);
+
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(sql.toString(), params.toArray());
+
+            StringBuilder countSql = new StringBuilder();
+            countSql.append("SELECT COUNT(a.id) as totalRecords FROM ajiswitch_db.tbl_wallet_activities a ")
+                    .append("WHERE (a.actor IS NULL OR UPPER(a.actor) <> 'SYSTEM') ");
+            List<Object> countParams = new ArrayList<>();
+            if (hasRange) {
+                countSql.append("AND a.activity_date_time >= ? AND a.activity_date_time < ? ");
+                countParams.add(startDate.trim());
+                countParams.add(endDate.trim());
+            }
+            Long totalRecords = jdbcTemplate.queryForObject(countSql.toString(), countParams.toArray(), Long.class);
+            int total = totalRecords != null ? totalRecords.intValue() : 0;
+
+            String meta = "{\"totalRecords\": " + total + ", \"page\": " + safePage + ", \"limit\": " + safeLimit + "}";
+            networkResponse.setCode(200);
+            networkResponse.setMeta(meta);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("All wallet activities");
+            networkResponse.setData((ArrayList) rows);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity GetWalletActivityInstitutionAggregates(String startDate, String endDate) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            boolean hasRange = startDate != null && !startDate.trim().isEmpty()
+                    && endDate != null && !endDate.trim().isEmpty();
+
+            StringBuilder sql = new StringBuilder();
+            sql.append("SELECT DATE_FORMAT(DATE(a.activity_date_time), '%Y-%m-%dT00:00:00') as date, ")
+                    .append("COALESCE(w.financialinstitutioncode, '') as institutionId, ")
+                    .append("COALESCE(NULLIF(b.name, ''), n.institution_name, '') as institutionName, ")
+                    .append("COALESCE(SUM(CASE WHEN LOWER(a.credit_or_debit) IN ('cr', 'credit') THEN a.amount ELSE 0 END), 0) as inflow, ")
+                    .append("COALESCE(SUM(CASE WHEN LOWER(a.credit_or_debit) IN ('dr', 'debit') THEN a.amount ELSE 0 END), 0) as outflow, ")
+                    .append("COUNT(*) as transactionCount ")
+                    .append("FROM ajiswitch_db.tbl_wallet_activities a ")
+                    .append("LEFT JOIN ajiswitch_db.tbl_wallets w ON a.walletnumber = w.walletnumber ")
+                    .append("LEFT JOIN tbl_financial_institutions b ON w.financialinstitutioncode = b.code ")
+                    .append("LEFT JOIN ajiswitch_db.tbl_nodes n ON w.financialinstitutioncode = n.institution_code ")
+                    .append("WHERE (a.actor IS NULL OR UPPER(a.actor) <> 'SYSTEM') ");
+
+            List<Object> params = new ArrayList<>();
+            if (hasRange) {
+                sql.append("AND a.activity_date_time >= ? AND a.activity_date_time < ? ");
+                params.add(startDate.trim());
+                params.add(endDate.trim());
+            }
+            sql.append("GROUP BY DATE(a.activity_date_time), w.financialinstitutioncode, institutionName ")
+                    .append("ORDER BY DATE(a.activity_date_time) DESC, institutionId ASC");
+
+            List<Map<String, Object>> rows = params.isEmpty()
+                    ? jdbcTemplate.queryForList(sql.toString())
+                    : jdbcTemplate.queryForList(sql.toString(), params.toArray());
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Wallet activity institution aggregates");
+            networkResponse.setData((ArrayList) rows);
+            networkResponse.setMeta("{\"totalRecords\": " + rows.size() + "}");
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
     
     @Override
     public ResponseEntity WalletApprovals(String sessiontoken, int id, String actionType, String username) {

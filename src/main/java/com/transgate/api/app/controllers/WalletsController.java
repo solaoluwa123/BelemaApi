@@ -86,6 +86,32 @@ public class WalletsController {
         }
         return walletInterface.GetWalletActivity(walletnumber, start, end, page, limit, isCurrent);
     }
+
+    /** Combined activity feed (avoids DELETE /wallets/{x}/{y} shadowing a missing GET). */
+    @RequestMapping(value = "/wallets/activity/all", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetAllWalletActivities(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestParam(value = "startDate", required = false, defaultValue = "") String start,
+            @RequestParam(value = "endDate", required = false, defaultValue = "") String end,
+            @RequestParam(value = "page", required = false, defaultValue = "1") int page,
+            @RequestParam(value = "limit", required = false, defaultValue = "500") int limit) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return walletInterface.GetAllWalletActivities(start, end, page, limit);
+    }
+
+    /** Per-institution daily inflow/outflow aggregates for wallet activity charts. */
+    @RequestMapping(value = "/wallets/activity/institution-aggregates", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetWalletActivityInstitutionAggregates(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken,
+            @RequestParam(value = "startDate", required = false, defaultValue = "") String start,
+            @RequestParam(value = "endDate", required = false, defaultValue = "") String end) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        return walletInterface.GetWalletActivityInstitutionAggregates(start, end);
+    }
     
     @RequestMapping(value = "/wallets/get/actions", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetWalletsForActions(@RequestHeader(value = "Authorization") String header) {

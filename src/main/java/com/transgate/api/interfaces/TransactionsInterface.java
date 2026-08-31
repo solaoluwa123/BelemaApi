@@ -82,6 +82,9 @@ public interface TransactionsInterface {
     public ResponseEntity GetDisputes(int id);
     
     public ResponseEntity GetDisputes(int id, int status, String institutioncode, int page, int limit);
+
+    /** FT disputes with status = -1 and resolved = 0 (arbitrated, awaiting settlement). */
+    public ResponseEntity GetArbitratedDisputes(String institutioncode);
     
     public ResponseEntity SearchDisputes(
             String sessionid,

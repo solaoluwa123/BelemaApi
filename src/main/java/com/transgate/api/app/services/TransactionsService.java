@@ -4507,6 +4507,74 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     }
 
     @Override
+    public ResponseEntity GetArbitratedDisputes(String institutioncode) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        final String corrId = java.util.UUID.randomUUID().toString();
+        try {
+            String code = institutioncode != null ? institutioncode.trim() : "";
+            String select = "SELECT dispute.id, dispute.transactionSessionid as session_id, dispute.transactionid, dispute.amount, "
+                    + "dispute.originator_account_name, dispute.beneficiary_account_name, dispute.transaction_date_time, "
+                    + "dispute.ownerInstitutionName as srcInstitutionName, dispute.destInstitutionName, dispute.loggedBy, "
+                    + "dispute.resolvedBy, dispute.ownerInstitution, dispute.destInstitution, dispute.type, dispute.status, "
+                    + "dispute.resolved, dispute.date_modified, dispute.date_created, dispute.timeline_date, "
+                    + "dispute.proof_of_reject_uri, a.financial_institution_code "
+                    + "FROM tbl_disputes dispute "
+                    + "LEFT JOIN tbl_financial_institution_contacts a ON dispute.loggedBy = a.email_address ";
+            String where;
+            Object[] params;
+            String sumSql;
+            Double totalValue;
+
+            switch (code) {
+                case "":
+                case "-1":
+                    where = "WHERE dispute.status = -1 AND dispute.resolved = 0 ";
+                    params = new Object[]{};
+                    sumSql = "SELECT SUM(dispute.amount) FROM tbl_disputes dispute WHERE dispute.status = -1 AND dispute.resolved = 0";
+                    break;
+                default:
+                    where = "WHERE dispute.status = -1 AND dispute.resolved = 0 "
+                            + "AND (dispute.ownerInstitution = ? OR dispute.destInstitution = ?) ";
+                    params = new Object[]{code, code};
+                    sumSql = "SELECT SUM(dispute.amount) FROM tbl_disputes dispute "
+                            + "WHERE dispute.status = -1 AND dispute.resolved = 0 "
+                            + "AND (dispute.ownerInstitution = ? OR dispute.destInstitution = ?)";
+                    break;
+            }
+
+            String SQL = select + where + "ORDER BY dispute.id DESC";
+            logger.info(String.format("🟢 [corr=%s] GetArbitratedDisputes institution=%s SQL=%s", corrId, code, SQL));
+            List<DisputeModel> transactions = params.length == 0
+                    ? jdbcTemplate.query(SQL, new DisputeTransactionMapper())
+                    : jdbcTemplate.query(SQL, params, new DisputeTransactionMapper());
+
+            if (params.length == 0) {
+                totalValue = jdbcTemplate.queryForObject(sumSql, Double.class);
+            } else {
+                totalValue = jdbcTemplate.queryForObject(sumSql, params, Double.class);
+            }
+            if (totalValue == null) {
+                totalValue = 0d;
+            }
+
+            String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": "
+                    + (transactions != null ? transactions.size() : 0) + "}";
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Arbitrated disputes by institution: " + code);
+            networkResponse.setData((ArrayList) (transactions != null ? transactions : new ArrayList<>()));
+            networkResponse.setMeta(meta);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info(String.format("❌ [corr=%s] GetArbitratedDisputes DataAccessException: %s", corrId, ex.toString()));
+            return responseManager.ResponseInternalServerError();
+        } catch (Exception ex) {
+            logger.info(String.format("❌ [corr=%s] GetArbitratedDisputes exception: %s", corrId, ex.toString()));
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
     public ResponseEntity GetDisputes(int id) {
         return GetDisputes(id, 0, null, 0, 0);
     }
