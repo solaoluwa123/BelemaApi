@@ -70,7 +70,9 @@ public class LiveTransactionStreamHub {
                 return;
             }
 
-            String newest = globalSince;
+            boolean initialCatchUp = globalSince == null || globalSince.isEmpty();
+
+            String newest = globalSince != null ? globalSince : "";
             for (FullTransactionModel row : rows) {
                 if (row.getTransactiondate() != null && row.getTransactiondate().compareTo(newest) > 0) {
                     newest = row.getTransactiondate();
@@ -78,6 +80,12 @@ public class LiveTransactionStreamHub {
             }
             if (!newest.isEmpty()) {
                 globalSince = newest;
+            }
+
+            // First poll after startup (or empty cursor): establish baseline only — do not replay
+            // the latest N rows as live events or the dashboard double-counts them (+100, etc.).
+            if (initialCatchUp) {
+                return;
             }
 
             for (FullTransactionModel row : rows) {
