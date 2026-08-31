@@ -61,6 +61,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetLiveTransactionFeed(String since, int limit, String institution);
     
+    public java.util.List<com.transgate.api.models.FullTransactionModel> PollLiveTransactions(String since, int limit, String institution);
+    
     public ResponseEntity GetStatusSummary(String startDate, String endDate, boolean isCurrent, String institution);
     
     public ResponseEntity Get(int id);

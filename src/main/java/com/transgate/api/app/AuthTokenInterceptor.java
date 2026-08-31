@@ -94,6 +94,9 @@ public class AuthTokenInterceptor implements HandlerInterceptor {
         String whichToken = "auth-token";
         String authToken = request.getHeader("auth-token");
         if (authToken == null || authToken.isEmpty()) {
+            authToken = request.getParameter("auth-token");
+        }
+        if (authToken == null || authToken.isEmpty()) {
             authToken = request.getHeader("authorization");
             whichToken = "authorization";
         }

@@ -12,12 +12,15 @@ import com.transgate.api.models.DisputeModel;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.SessionActorResolver;
 import com.transgate.api.app.services.Validators;
+import com.transgate.api.app.services.LiveTransactionStreamHub;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -26,6 +29,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  *
@@ -39,6 +44,9 @@ public class TransactionsController {
 
     @Autowired
     private SessionActorResolver sessionActorResolver;
+
+    @Autowired
+    private LiveTransactionStreamHub liveTransactionStreamHub;
 
     ResponseManager responseManager = new ResponseManager();
 
@@ -618,6 +626,28 @@ public class TransactionsController {
             return missing;
         }
         return transactionsInterface.GetLiveTransactionFeed(since, limit, institution.orElse(""));
+    }
+
+    @RequestMapping(value = "/transactions/live-stream", method = RequestMethod.GET, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter GetLiveTransactionStream(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam(value = "institution", required = false) Optional<String> institution) {
+        if (!validators.validHeader().equals(header)) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Invalid authorization header");
+        }
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institution.orElse(null));
+        if (denied.isPresent()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Forbidden");
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            return liveTransactionStreamHub.subscribe(vendorCode);
+        }
+        ResponseEntity missing = vendorMissingInstitutionOrNull(sessiontoken);
+        if (missing != null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Institution required");
+        }
+        return liveTransactionStreamHub.subscribe(institution.orElse(""));
     }
 
     @RequestMapping(value = "/transactions/status-summary", method = RequestMethod.GET, headers = "Accept=application/json")
