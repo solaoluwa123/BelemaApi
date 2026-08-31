@@ -1,0 +1,39 @@
+name: Insert test live transactions batch
+
+on:
+  workflow_dispatch:
+    inputs:
+      count:
+        description: Number of transactions to insert at once
+        required: false
+        default: "100"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  insert-test-transactions-batch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Insert batch on Belema UAT
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+          BATCH_COUNT: ${{ inputs.count || '100' }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=no scripts/insert-test-live-transactions-batch.sql \
+            "$BELEMA_USER@$BELEMA_HOST:/tmp/insert-test-live-transactions-batch.sql"
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "set -e
+            { echo \"SET @batch_size = ${BATCH_COUNT};\"; cat /tmp/insert-test-live-transactions-batch.sql; } \
+              | mysql -u ajipay -p'Admin12+'
+            rm -f /tmp/insert-test-live-transactions-batch.sql"
