@@ -596,6 +596,30 @@ public class TransactionsController {
         return transactionsInterface.GetLiveMonitoring(startDate, endDate, institution.orElse(""), bucketMinutes, limit);
     }
 
+    @RequestMapping(value = "/transactions/live-feed", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetLiveTransactionFeed(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam(value = "since", required = false) String since,
+            @RequestParam(value = "limit", defaultValue = "50") int limit,
+            @RequestParam("institution") Optional<String> institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institution.orElse(null));
+        if (denied.isPresent()) {
+            return denied.get();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            return transactionsInterface.GetLiveTransactionFeed(since, limit, vendorCode);
+        }
+        ResponseEntity missing = vendorMissingInstitutionOrNull(sessiontoken);
+        if (missing != null) {
+            return missing;
+        }
+        return transactionsInterface.GetLiveTransactionFeed(since, limit, institution.orElse(""));
+    }
+
     @RequestMapping(value = "/transactions/status-summary", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetStatusSummary(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token", required = false) String sessiontoken,

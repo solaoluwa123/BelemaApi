@@ -59,6 +59,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetLiveMonitoring(String startDate, String endDate, String institution, int bucketMinutes, int limit);
     
+    public ResponseEntity GetLiveTransactionFeed(String since, int limit, String institution);
+    
     public ResponseEntity GetStatusSummary(String startDate, String endDate, boolean isCurrent, String institution);
     
     public ResponseEntity Get(int id);

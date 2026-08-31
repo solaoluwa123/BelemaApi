@@ -3860,6 +3860,68 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     }
 
     @Override
+    public ResponseEntity GetLiveTransactionFeed(String since, int limit, String institution) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            if (institution == null) {
+                institution = "";
+            }
+            int safeLimit = limit > 0 ? Math.min(limit, 100) : 50;
+            String sinceValue = since != null ? since.trim() : "";
+            boolean hasSince = !sinceValue.isEmpty();
+
+            String institutionFilter = institution.isEmpty()
+                    ? ""
+                    : " AND (a.source_institution_code = ? OR a.destination_institution_code = ?) ";
+            String sinceFilter = hasSince ? " AND a.transaction_date_time > ? " : "";
+
+            String SQL = "SELECT a.id, a.session_id, a.payment_reference, a.channel_code, a.originator_account_number, a.originator_account_name, a.originator_kyc, a.originator_bvn, a.amount, a.source_institution_code, a.response_code, a.beneficiary_account_number, a.beneficiary_account_name, a.beneficiary_kyc, a.beneficiary_bvn, a.destination_institution_code, a.narration, a.transaction_date_time, a.name_enquiry_ref, a.txn_duration, a.response_date_time, b.institution_name AS srcInstitutionName, c.institution_name AS destInstitutionName, a.destination_node "
+                    + "FROM " + TNX_LIVE_TABLE + " a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.source_institution_code = b.institution_code "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes c ON a.destination_institution_code = c.institution_code "
+                    + "WHERE 1=1 "
+                    + sinceFilter
+                    + institutionFilter
+                    + " ORDER BY a.transaction_date_time DESC LIMIT ?";
+
+            List<Object> params = new ArrayList<>();
+            if (hasSince) {
+                params.add(normalizeMonitoringDate(sinceValue));
+            }
+            if (!institution.isEmpty()) {
+                params.add(institution);
+                params.add(institution);
+            }
+            params.add(safeLimit);
+
+            List<FullTransactionModel> transactions = jdbcTemplate.query(SQL, params.toArray(), new FullTransactionMapper());
+
+            String newestTimestamp = "";
+            if (!transactions.isEmpty() && transactions.get(0).getTransactiondate() != null) {
+                newestTimestamp = transactions.get(0).getTransactiondate();
+            }
+
+            LocalDateTime serverNow = LocalDateTime.now();
+            String serverTime = serverNow.format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+            String escapedNewest = newestTimestamp.replace("\\", "\\\\").replace("\"", "\\\"");
+            String metaJson = String.format(
+                    "{\"serverTime\":\"%s\",\"newestTimestamp\":\"%s\",\"count\":%d}",
+                    serverTime,
+                    escapedNewest,
+                    transactions.size());
+
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Live transaction feed");
+            networkResponse.setData((ArrayList) transactions);
+            networkResponse.setMeta(metaJson);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("GetLiveTransactionFeed failed: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
     public ResponseEntity GetStatusSummary(String startDate, String endDate, boolean isCurrent, String institution) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
