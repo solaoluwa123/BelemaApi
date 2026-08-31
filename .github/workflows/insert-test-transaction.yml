@@ -1,0 +1,31 @@
+name: Insert test live transaction
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  insert-test-transaction:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Insert test transaction on Belema UAT
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=no scripts/insert-test-live-transaction.sql \
+            "$BELEMA_USER@$BELEMA_HOST:/tmp/insert-test-live-transaction.sql"
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "set -e
+            mysql -u ajipay -p'Admin12+' < /tmp/insert-test-live-transaction.sql
+            rm -f /tmp/insert-test-live-transaction.sql"
