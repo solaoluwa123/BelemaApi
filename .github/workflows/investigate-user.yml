@@ -42,7 +42,7 @@ jobs:
                    d.deleted,
                    CHAR_LENGTH(d.session_token) AS session_len
             FROM sparkpayweb_db.tbl_users u
-            LEFT JOIN tbl_user_details d ON d.email_address = u.username
+            LEFT JOIN transgateweb_db.tbl_user_details d ON d.email_address = u.username
             WHERE LOWER(u.username) = LOWER('${EMAIL}')
                OR LOWER(d.email_address) = LOWER('${EMAIL}')
                OR LOWER(d.username) = LOWER('${EMAIL}');
