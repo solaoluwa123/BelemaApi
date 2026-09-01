@@ -15,33 +15,83 @@ jobs:
   restore:
     runs-on: ubuntu-latest
     steps:
-      - name: Generate BCrypt hash
-        id: bcrypt
-        run: |
-          pip install bcrypt
-          HASH=$(python -c "import bcrypt; print(bcrypt.hashpw('${{ inputs.password }}'.encode(), bcrypt.gensalt()).decode())")
-          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
-
       - name: Prepare SSH
         uses: webfactory/ssh-agent@v0.9.0
         with:
           ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
 
-      - name: Reset testadmin in database
+      - name: Reset testadmin via recovery token + API
         env:
           BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
           BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
-          BCRYPT_HASH: ${{ steps.bcrypt.outputs.hash }}
+          NEW_PASSWORD: ${{ inputs.password }}
+          AUTH_HEADER: Bearer 958455015C7DB0F3CEDD56F8F3E50E94568905B636A4954A478030E2603E8A7758F8843B7A6EDC837CA5C6B57B262FDF3B44C7FF706DC3EB991EECFC7840FEC7
         run: |
           set -euo pipefail
-          ESCAPED_HASH=$(printf '%s' "$BCRYPT_HASH" | sed "s/'/''/g")
-          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "mysql -u ajipay -p'Admin12+' -e \"
-            UPDATE sparkpayweb_db.tbl_users
-            SET password = '${ESCAPED_HASH}',
-                must_change_password = 0,
-                enabled = 1
-            WHERE username = 'testadmin';
-            SELECT username, enabled, must_change_password, CHAR_LENGTH(password) AS pwd_len
-            FROM sparkpayweb_db.tbl_users
-            WHERE username = 'testadmin';
-          \""
+
+          curl -sS -X POST "http://${BELEMA_HOST}/sparkpayapi/users/recoverpassword" \
+            -H "Authorization: ${AUTH_HEADER}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d '{"username":"testadmin","password":""}' >/dev/null
+
+          read -r REF TOKEN <<< "$(ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" \
+            "mysql -N -u ajipay -p'Admin12+' -e \"SELECT reference, password FROM sparkpayweb_db.tbl_users WHERE username='testadmin' LIMIT 1;\"")"
+
+          if [ -z "$REF" ] || [ -z "$TOKEN" ]; then
+            echo "Could not read recovery reference/token for testadmin"
+            exit 1
+          fi
+
+          echo "Applying reset for testadmin (ref length ${#REF}, token length ${#TOKEN})"
+
+          export REF TOKEN NEW_PASSWORD
+          RESET_BODY=$(python3 - <<'PY'
+          import json, os
+          print(json.dumps({
+              "username": os.environ["REF"],
+              "firstname": os.environ["TOKEN"],
+              "surname": os.environ["NEW_PASSWORD"],
+          }))
+          PY
+          )
+
+          HTTP=$(curl -sS -o /tmp/reset.json -w '%{http_code}' -X POST "http://${BELEMA_HOST}/sparkpayapi/users/resetpassword" \
+            -H "Authorization: ${AUTH_HEADER}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d "$RESET_BODY")
+
+          echo "resetpassword http=${HTTP}"
+          cat /tmp/reset.json
+
+          CODE=$(python3 - <<'PY'
+          import json
+          print(json.load(open("/tmp/reset.json")).get("code", ""))
+          PY
+          )
+
+          if [ "$CODE" != "200" ]; then
+            echo "Reset failed"
+            exit 1
+          fi
+
+          LOGIN_BODY='{"username":"testadmin","password":"'"${NEW_PASSWORD}"'"}'
+          curl -sS -X POST "http://${BELEMA_HOST}/sparkpayapi/users/login" \
+            -H "Authorization: ${AUTH_HEADER}" \
+            -H "Content-Type: application/json" \
+            -H "Accept: application/json" \
+            -d "$LOGIN_BODY" | tee /tmp/login.json
+
+          LOGIN_CODE=$(python3 - <<'PY'
+          import json
+          print(json.load(open("/tmp/login.json")).get("code", ""))
+          PY
+          )
+
+          if [ "$LOGIN_CODE" != "200" ]; then
+            echo "Login verification failed"
+            exit 1
+          fi
+
+          echo "testadmin restored successfully"
