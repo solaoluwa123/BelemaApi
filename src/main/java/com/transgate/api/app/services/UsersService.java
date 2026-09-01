@@ -19,6 +19,9 @@ import com.transgate.api.util.Mailers;
 import com.transgate.api.util.PasswordUtil;
 import com.transgate.api.util.PlatformRole;
 import com.transgate.api.util.Randomizer;
+import com.transgate.api.util.SupersoftMailer;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import static java.lang.Integer.parseInt;
 import java.sql.ResultSet;
@@ -57,6 +60,9 @@ public class UsersService implements UsersInterface {
 
     @Autowired
     private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private SupersoftMailer supersoftMailer;
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
@@ -135,6 +141,31 @@ public class UsersService implements UsersInterface {
             Mailers.sendMail(toEmail, "Your account credentials", body, "supersofttechltd2023@gmail.com", "");
         } catch (Exception ex) {
             logger.warn("Failed to send credentials email to {}: {}", toEmail, ex.getMessage());
+        }
+    }
+
+    private boolean sendPasswordRecoveryEmail(String toEmail, String ref, String token) {
+        try {
+            String base = appConfig.getFrontendBaseUrl();
+            String q = "ref=" + URLEncoder.encode(ref, StandardCharsets.UTF_8)
+                    + "&token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)
+                    + "&email=" + URLEncoder.encode(toEmail, StandardCharsets.UTF_8);
+            String resetUrl = base + "/password-recovery/verify?" + q;
+            String html = "<!DOCTYPE html><html><body style=\"font-family: Arial, Helvetica, sans-serif; color: #222; line-height: 1.5;\">"
+                    + "<p>You requested a password reset for your Belema account.</p>"
+                    + "<p><a href=\"" + resetUrl + "\" style=\"display:inline-block;padding:10px 16px;background:#CEF445;color:#000;text-decoration:none;border-radius:4px;font-weight:bold;\">Reset password</a></p>"
+                    + "<p>Or copy this link into your browser:</p>"
+                    + "<p style=\"word-break:break-all;\"><a href=\"" + resetUrl + "\">" + resetUrl + "</a></p>"
+                    + "<p>This link expires once used. If you did not request this, ignore this email.</p>"
+                    + "</body></html>";
+            boolean sent = supersoftMailer.sendHtmlMail(toEmail, "Reset your Belema password", html);
+            if (!sent) {
+                logger.warn("Password recovery email was not accepted by SMTP for {}", toEmail);
+            }
+            return sent;
+        } catch (Exception ex) {
+            logger.warn("Failed to send password recovery email to {}: {}", toEmail, ex.getMessage());
+            return false;
         }
     }
 
@@ -1147,44 +1178,61 @@ public class UsersService implements UsersInterface {
     @Override
     public ResponseEntity SendPasswordRecoveryCode(String email) {
         LoginResponse response = new LoginResponse();
+        final String identifier = email != null ? email.trim() : "";
         try {
-            String SQL;
-            SQL = "SELECT attempts_left FROM tbl_user_details WHERE email_address = ?";
-            int attemptsLeft = jdbcTemplate.queryForObject(SQL, new Object[]{email}, int.class);
-            if (attemptsLeft == 0) {
+            if (identifier.isEmpty()) {
+                response.setCode(200);
+                response.setStatus("success");
+                response.setMessage("If an account exists, reset instructions have been sent.");
+                return responseManager.ResponseOk(response);
+            }
+
+            String SQL = "SELECT attempts_left FROM tbl_user_details "
+                    + "WHERE email_address = ? OR username = ? LIMIT 1";
+            List<Integer> attempts = jdbcTemplate.query(SQL, new Object[]{identifier, identifier},
+                    (rs, rowNum) -> rs.getInt("attempts_left"));
+            if (attempts.isEmpty()) {
+                response.setCode(200);
+                response.setStatus("success");
+                response.setMessage("If an account exists, reset instructions have been sent.");
+                return responseManager.ResponseOk(response);
+            }
+            if (attempts.get(0) == 0) {
                 response.setCode(404);
                 response.setStatus("failed");
                 response.setMessage("Account locked for invalid multiple attempts, try again in 15 minutes");
                 return responseManager.ResponseOk(response);
             }
-            SQL = "SELECT a.id from sparkpayweb_db.tbl_users a "
-                    + "LEFT JOIN tbl_user_details b "
-                    + "ON a.username = b.email_address "
-                    + "WHERE a.username = ? AND a.enabled = 1 AND b.deleted = 0";
-            int found = jdbcTemplate.queryForObject(SQL, new Object[]{email}, int.class);
 
-            if (found > 0) {
-                String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
-                String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-                SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
-                jdbcTemplate.update(SQL, new Object[]{ref, code, email});
+            SQL = "SELECT a.username from sparkpayweb_db.tbl_users a "
+                    + "INNER JOIN tbl_user_details b "
+                    + "ON a.username = b.email_address "
+                    + "WHERE (a.username = ? OR b.email_address = ? OR b.username = ?) "
+                    + "AND a.enabled = 1 AND b.deleted = 0 LIMIT 1";
+            List<String> usernames = jdbcTemplate.query(SQL, new Object[]{identifier, identifier, identifier},
+                    (rs, rowNum) -> rs.getString("username"));
+            if (usernames.isEmpty()) {
                 response.setCode(200);
-                response.setMessage("Password recovery done");
-                response.setFirstname(ref);
-                response.setSurname(code);
+                response.setStatus("success");
+                response.setMessage("If an account exists, reset instructions have been sent.");
                 return responseManager.ResponseOk(response);
             }
-            return responseManager.ResponseUnathorized();
+            String accountEmail = usernames.get(0);
+            String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
+            String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
+            SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
+            jdbcTemplate.update(SQL, new Object[]{ref, code, accountEmail});
+            sendPasswordRecoveryEmail(accountEmail, ref, code);
+            response.setCode(200);
+            response.setStatus("success");
+            response.setMessage("If an account exists, reset instructions have been sent.");
+            return responseManager.ResponseOk(response);
         } catch (DataAccessException ex) {
-            System.out.println(ex);
-            if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
-                response.setCode(400);
-                response.setStatus("failed");
-                response.setMessage("Email address not found");
-                return responseManager.ResponseOk(response);
-            }
-            System.out.println("error>>>>" + ex.getMessage());
-            return responseManager.ResponseInternalServerError();
+            logger.warn("SendPasswordRecoveryCode failed for {}: {}", identifier, ex.getMessage());
+            response.setCode(200);
+            response.setStatus("success");
+            response.setMessage("If an account exists, reset instructions have been sent.");
+            return responseManager.ResponseOk(response);
         }
     }
 

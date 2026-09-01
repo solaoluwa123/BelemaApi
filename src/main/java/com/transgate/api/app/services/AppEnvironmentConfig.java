@@ -155,4 +155,13 @@ public class AppEnvironmentConfig {
     public String getSupersoftMailFrom() {
         return env.getProperty("app.mail.supersoft.from");
     }
+
+    /** Public SPA base URL (no trailing slash), used in password-reset email links. */
+    public String getFrontendBaseUrl() {
+        String url = env.getProperty("app.frontend.base-url");
+        if (url == null || url.trim().isEmpty()) {
+            return "http://197.210.115.11/belema";
+        }
+        return url.trim().replaceAll("/+$", "");
+    }
 }
