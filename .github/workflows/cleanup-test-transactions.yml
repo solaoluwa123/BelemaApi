@@ -1,0 +1,31 @@
+name: Cleanup test live transactions
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup-test-transactions:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Delete BT* test rows on Belema UAT
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=no scripts/cleanup-test-live-transactions.sql \
+            "$BELEMA_USER@$BELEMA_HOST:/tmp/cleanup-test-live-transactions.sql"
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "set -e
+            mysql -u ajipay -p'Admin12+' < /tmp/cleanup-test-live-transactions.sql
+            rm -f /tmp/cleanup-test-live-transactions.sql"
