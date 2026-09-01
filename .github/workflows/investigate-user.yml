@@ -1,0 +1,49 @@
+name: Investigate user account
+
+on:
+  workflow_dispatch:
+    inputs:
+      email:
+        description: User email to inspect
+        required: true
+        default: sannifaial@gmail.com
+
+permissions:
+  contents: read
+
+jobs:
+  investigate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Query account state
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+          EMAIL: ${{ inputs.email }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "mysql -u ajipay -p'Admin12+' -e \"
+            SELECT u.username AS login_username,
+                   u.enabled,
+                   u.two_fa_enabled,
+                   CHAR_LENGTH(u.two_fa_secret) AS secret_len,
+                   u.must_change_password,
+                   CHAR_LENGTH(u.password) AS pwd_len,
+                   LEFT(u.password, 4) AS pwd_prefix,
+                   d.id AS details_id,
+                   d.username AS details_username,
+                   d.email_address,
+                   d.attempts_left,
+                   d.deleted,
+                   CHAR_LENGTH(d.session_token) AS session_len
+            FROM sparkpayweb_db.tbl_users u
+            LEFT JOIN tbl_user_details d ON d.email_address = u.username
+            WHERE LOWER(u.username) = LOWER('${EMAIL}')
+               OR LOWER(d.email_address) = LOWER('${EMAIL}')
+               OR LOWER(d.username) = LOWER('${EMAIL}');
+          \""
