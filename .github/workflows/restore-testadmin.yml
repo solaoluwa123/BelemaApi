@@ -1,0 +1,47 @@
+name: Restore testadmin password
+
+on:
+  workflow_dispatch:
+    inputs:
+      password:
+        description: New password for testadmin
+        required: false
+        default: TestAdmin@123
+
+permissions:
+  contents: read
+
+jobs:
+  restore:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Generate BCrypt hash
+        id: bcrypt
+        run: |
+          pip install bcrypt
+          HASH=$(python -c "import bcrypt; print(bcrypt.hashpw('${{ inputs.password }}'.encode(), bcrypt.gensalt()).decode())")
+          echo "hash=$HASH" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Reset testadmin in database
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+          BCRYPT_HASH: ${{ steps.bcrypt.outputs.hash }}
+        run: |
+          set -euo pipefail
+          ESCAPED_HASH=$(printf '%s' "$BCRYPT_HASH" | sed "s/'/''/g")
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "mysql -u ajipay -p'Admin12+' -e \"
+            UPDATE sparkpayweb_db.tbl_users
+            SET password = '${ESCAPED_HASH}',
+                must_change_password = 0,
+                enabled = 1
+            WHERE username = 'testadmin';
+            SELECT username, enabled, must_change_password, CHAR_LENGTH(password) AS pwd_len
+            FROM sparkpayweb_db.tbl_users
+            WHERE username = 'testadmin';
+          \""
