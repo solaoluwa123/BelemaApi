@@ -6226,4 +6226,97 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         networkResponse.setMessage("Transaction status change is not available on this Belema schema (tbl_transactions_status is missing)");
         return responseManager.ResponseOk(networkResponse);
     }
+
+    @Override
+    public ResponseEntity GetDashboardCompare(String startDate, String endDate, boolean isCurrent, String institution) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            if (institution == null) {
+                institution = "";
+            }
+            String[] priorDates = computePriorPeriodDates(startDate, endDate);
+            String priorStart = priorDates[0];
+            String priorEnd = priorDates[1];
+            boolean priorIsCurrent = rangeIncludesToday(priorStart, priorEnd);
+
+            Map<String, Object> payload = new LinkedHashMap<>();
+            Map<String, String> priorRange = new LinkedHashMap<>();
+            priorRange.put("startDate", priorStart);
+            priorRange.put("endDate", priorEnd);
+            payload.put("priorRange", priorRange);
+            payload.put("current", buildDashboardCompareSlice(startDate, endDate, isCurrent, institution));
+            payload.put("prior", buildDashboardCompareSlice(priorStart, priorEnd, priorIsCurrent, institution));
+
+            ArrayList<Object> data = new ArrayList<>();
+            data.add(payload);
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Dashboard compare");
+            networkResponse.setData(data);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (Exception ex) {
+            logger.info("GetDashboardCompare failed: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    private String[] computePriorPeriodDates(String startDate, String endDate) {
+        LocalDateTime start = parseDashboardDateTime(startDate);
+        LocalDateTime end = parseDashboardDateTime(endDate);
+        long days = java.time.temporal.ChronoUnit.DAYS.between(start.toLocalDate(), end.toLocalDate()) + 1;
+        LocalDate priorEnd = start.toLocalDate().minusDays(1);
+        LocalDate priorStart = priorEnd.minusDays(Math.max(0, days - 1));
+        DateTimeFormatter outFmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        return new String[]{
+            priorStart.atStartOfDay().format(outFmt),
+            priorEnd.atTime(23, 59, 59).format(outFmt)
+        };
+    }
+
+    private boolean rangeIncludesToday(String startDate, String endDate) {
+        LocalDate today = LocalDate.now();
+        LocalDate start = parseDashboardDateTime(startDate).toLocalDate();
+        LocalDate end = parseDashboardDateTime(endDate).toLocalDate();
+        return !start.isAfter(today) && !end.isBefore(today);
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private Map<String, Object> buildDashboardCompareSlice(String startDate, String endDate, boolean isCurrent, String institution) {
+        Map<String, Object> slice = new LinkedHashMap<>();
+
+        ResponseEntity statusResp = GetStatusSummary(startDate, endDate, isCurrent, institution);
+        if (statusResp != null && statusResp.getBody() instanceof NetworkResponse) {
+            NetworkResponse statusNr = (NetworkResponse) statusResp.getBody();
+            if (statusNr.getTnxModel() != null && statusNr.getTnxModel().getSummary() != null) {
+                slice.put("statusSummary", statusNr.getTnxModel().getSummary());
+            }
+            if (statusNr.getMeta() != null) {
+                slice.put("summaryMeta", statusNr.getMeta());
+            }
+        }
+
+        ResponseEntity failedResp = institution == null || institution.isEmpty()
+                ? GetTop6ResponseCodesTNX(startDate, endDate, isCurrent)
+                : GetTop6ResponseCodesTNX(institution, startDate, endDate, isCurrent);
+        if (failedResp != null && failedResp.getBody() instanceof NetworkResponse) {
+            NetworkResponse failedNr = (NetworkResponse) failedResp.getBody();
+            if (failedNr.getData() != null) {
+                slice.put("failedTop5Codes", failedNr.getData());
+            }
+        }
+
+        ResponseEntity byDateResp = institution == null || institution.isEmpty()
+                ? getTransactionsByDateOnly(startDate, endDate, 1, 500, isCurrent)
+                : getInstitutionTransactionsByDateOnly(institution, startDate, endDate, 1, 500, isCurrent);
+        if (byDateResp != null && byDateResp.getBody() instanceof NetworkResponse) {
+            NetworkResponse byDateNr = (NetworkResponse) byDateResp.getBody();
+            if (byDateNr.getMeta() != null) {
+                slice.put("byDateMeta", byDateNr.getMeta());
+            }
+            if (byDateNr.getData() != null) {
+                slice.put("byDateRows", byDateNr.getData());
+            }
+        }
+
+        return slice;
+    }
 }

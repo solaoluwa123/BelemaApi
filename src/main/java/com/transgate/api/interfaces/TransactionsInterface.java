@@ -65,6 +65,8 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetStatusSummary(String startDate, String endDate, boolean isCurrent, String institution);
     
+    public ResponseEntity GetDashboardCompare(String startDate, String endDate, boolean isCurrent, String institution);
+    
     public ResponseEntity Get(int id);
     
     public ResponseEntity Get(String institutioncode);

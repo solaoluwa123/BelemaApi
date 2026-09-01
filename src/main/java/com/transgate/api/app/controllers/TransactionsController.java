@@ -671,6 +671,27 @@ public class TransactionsController {
         return transactionsInterface.GetStatusSummary(startDate, endDate, isCurrent, institution.orElse(""));
     }
 
+    @RequestMapping(value = "/transactions/dashboard-compare", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetDashboardCompare(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestParam(value = "isCurrent", defaultValue = "true") boolean isCurrent,
+            @RequestParam("institution") Optional<String> institution) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            return transactionsInterface.GetDashboardCompare(startDate, endDate, isCurrent, vendorCode);
+        }
+        ResponseEntity missing = vendorMissingInstitutionOrNull(sessiontoken);
+        if (missing != null) {
+            return missing;
+        }
+        return transactionsInterface.GetDashboardCompare(startDate, endDate, isCurrent, institution.orElse(""));
+    }
+
     @RequestMapping(value = "/transactions-trend/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetInsitutionTnxTrend(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,
