@@ -35,6 +35,7 @@ import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -101,6 +102,296 @@ public class TransactionsService implements TransactionsInterface {
      */
     private boolean hasSeparateArchive() {
         return !TNX_LIVE_TABLE.equalsIgnoreCase(archiveTable());
+    }
+
+    private static final class TxnTablePlan {
+        final boolean queryLive;
+        final boolean queryArchive;
+
+        TxnTablePlan(boolean queryLive, boolean queryArchive) {
+            this.queryLive = queryLive;
+            this.queryArchive = queryArchive;
+        }
+    }
+
+    /** Same live vs archive rules as {@link #getTransactionsByDateOnly}. */
+    private TxnTablePlan planTransactionTables(String startDate, String endDate, boolean isCurrentLegacy) {
+        LocalDateTime start = parseDashboardDateTime(startDate);
+        LocalDateTime end = parseDashboardDateTime(endDate);
+        LocalDate today = LocalDate.now();
+        boolean includeCurrent = false;
+        boolean includeHistory = false;
+        if (start != null && end != null) {
+            LocalDate startDay = start.toLocalDate();
+            LocalDate endDay = end.toLocalDate();
+            if (!startDay.isBefore(today)) {
+                includeCurrent = true;
+            } else if (endDay.isBefore(today)) {
+                includeHistory = true;
+            } else {
+                includeCurrent = true;
+                includeHistory = true;
+            }
+        } else {
+            includeCurrent = isCurrentLegacy;
+            includeHistory = !isCurrentLegacy;
+        }
+        if (includeHistory && !hasSeparateArchive()) {
+            includeCurrent = true;
+            includeHistory = false;
+        }
+        return new TxnTablePlan(includeCurrent, includeHistory);
+    }
+
+    private LocalDateTime parseDashboardDateTime(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+        try {
+            return LocalDateTime.parse(toIsoDateTime(value), DTF);
+        } catch (DateTimeParseException ex) {
+            logger.warning("Unable to parse dashboard date '" + value + "': " + ex.getMessage());
+            return null;
+        }
+    }
+
+    private JdbcTemplate txnJdbc() {
+        return secondJdbcTemplate;
+    }
+
+    /** Historical reads may live on primary or secondary DB depending on tipping point. */
+    private JdbcTemplate archiveJdbcForRange(String endDate) {
+        LocalDateTime end = parseDashboardDateTime(endDate);
+        try {
+            LocalDateTime threshold = LocalDateTime.parse(toIsoDateTime(appConfig.getTippingPoint()), DTF);
+            if (end != null && end.isBefore(threshold)) {
+                return secondJdbcTemplate;
+            }
+        } catch (DateTimeParseException ex) {
+            logger.warning("Invalid tipping point: " + ex.getMessage());
+        }
+        return jdbcTemplate;
+    }
+
+    private List<Map<String, Object>> queryChartSummary(
+            String sqlTemplate,
+            Object[] liveParams,
+            Object[] archiveParams,
+            TxnTablePlan plan,
+            String endDate
+    ) {
+        List<Map<String, Object>> summary = new ArrayList<>();
+        if (plan.queryLive) {
+            summary.addAll(txnJdbc().queryForList(sqlTemplate.replace("{TABLE}", TNX_LIVE_TABLE), liveParams));
+        }
+        if (plan.queryArchive && hasSeparateArchive()) {
+            summary.addAll(
+                    archiveJdbcForRange(endDate).queryForList(sqlTemplate.replace("{TABLE}", archiveTable()), archiveParams)
+            );
+        }
+        return summary;
+    }
+
+    private List<Map<String, Object>> mergeDurationSummary(
+            List<Map<String, Object>> left,
+            List<Map<String, Object>> right
+    ) {
+        long volume = 0L;
+        long totalDuration = 0L;
+        for (List<Map<String, Object>> source : Arrays.asList(left, right)) {
+            if (source == null) {
+                continue;
+            }
+            for (Map<String, Object> row : source) {
+                if (row == null) {
+                    continue;
+                }
+                volume += row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                totalDuration += row.get("totalduration") != null ? ((Number) row.get("totalduration")).longValue() : 0L;
+                if (row.get("totalDuration") != null) {
+                    totalDuration += ((Number) row.get("totalDuration")).longValue();
+                }
+            }
+        }
+        Map<String, Object> merged = new LinkedHashMap<>();
+        merged.put("volume", volume);
+        merged.put("totalduration", totalDuration);
+        return Collections.singletonList(merged);
+    }
+
+    private List<Map<String, Object>> mergeInstitutionFailureRows(
+            List<Map<String, Object>> left,
+            List<Map<String, Object>> right
+    ) {
+        Map<String, Map<String, Object>> byCode = new LinkedHashMap<>();
+        for (List<Map<String, Object>> source : Arrays.asList(left, right)) {
+            if (source == null) {
+                continue;
+            }
+            for (Map<String, Object> row : source) {
+                if (row == null) {
+                    continue;
+                }
+                String code = row.get("destination_institution_code") != null
+                        ? String.valueOf(row.get("destination_institution_code"))
+                        : row.get("source_institution_code") != null
+                                ? String.valueOf(row.get("source_institution_code"))
+                                : String.valueOf(row.get("label"));
+                if (code.isEmpty()) {
+                    continue;
+                }
+                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                Map<String, Object> existing = byCode.get(code);
+                if (existing == null) {
+                    byCode.put(code, new LinkedHashMap<>(row));
+                } else {
+                    long mergedVolume = (existing.get("volume") != null ? ((Number) existing.get("volume")).longValue() : 0L) + volume;
+                    existing.put("volume", mergedVolume);
+                }
+            }
+        }
+        return byCode.values().stream()
+                .sorted((a, b) -> Long.compare(
+                        b.get("volume") != null ? ((Number) b.get("volume")).longValue() : 0L,
+                        a.get("volume") != null ? ((Number) a.get("volume")).longValue() : 0L
+                ))
+                .collect(Collectors.toList());
+    }
+
+    private List<Map<String, Object>> mergeStatusSummaryRows(
+            List<Map<String, Object>> left,
+            List<Map<String, Object>> right
+    ) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        counts.put("Successful", 0L);
+        counts.put("Pending", 0L);
+        counts.put("Failed", 0L);
+        for (List<Map<String, Object>> source : Arrays.asList(left, right)) {
+            if (source == null) {
+                continue;
+            }
+            for (Map<String, Object> row : source) {
+                if (row == null) {
+                    continue;
+                }
+                String label = row.get("label") != null ? String.valueOf(row.get("label")) : "Failed";
+                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                counts.put(label, counts.getOrDefault(label, 0L) + volume);
+            }
+        }
+        List<Map<String, Object>> summary = new ArrayList<>();
+        for (Map.Entry<String, Long> entry : counts.entrySet()) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("label", entry.getKey());
+            item.put("volume", entry.getValue());
+            summary.add(item);
+        }
+        return summary;
+    }
+
+    private List<Map<String, Object>> mergeVolumeByLabel(List<Map<String, Object>> left, List<Map<String, Object>> right) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        for (List<Map<String, Object>> source : Arrays.asList(left, right)) {
+            if (source == null) {
+                continue;
+            }
+            for (Map<String, Object> row : source) {
+                if (row == null) {
+                    continue;
+                }
+                String label = row.get("label") != null ? String.valueOf(row.get("label")) : "";
+                if (label.isEmpty()) {
+                    continue;
+                }
+                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                counts.merge(label, volume, Long::sum);
+            }
+        }
+        return counts.entrySet().stream()
+                .sorted((a, b) -> Long.compare(b.getValue(), a.getValue()))
+                .map(entry -> {
+                    Map<String, Object> item = new LinkedHashMap<>();
+                    item.put("label", entry.getKey());
+                    item.put("volume", entry.getValue());
+                    return item;
+                })
+                .collect(Collectors.toList());
+    }
+
+    private List<ChannelsTnxValueModel> mapChannelVolumeRows(List<Map<String, Object>> rows) {
+        List<ChannelsTnxValueModel> summary = new ArrayList<>();
+        if (rows == null) {
+            return summary;
+        }
+        for (Map<String, Object> row : rows) {
+            if (row == null) {
+                continue;
+            }
+            ChannelsTnxValueModel response = new ChannelsTnxValueModel();
+            String label = row.get("label") != null ? String.valueOf(row.get("label")) : "";
+            response.setVolume(row.get("volume") != null ? ((Number) row.get("volume")).intValue() : 0);
+            response.setChannel(label);
+            switch (label) {
+                case "1":
+                    response.setChannelCode("Bank Teller");
+                    break;
+                case "2":
+                    response.setChannelCode("Internet Banking");
+                    break;
+                case "3":
+                    response.setChannelCode("Mobile Phone");
+                    break;
+                case "4":
+                    response.setChannelCode("POS Terminals");
+                    break;
+                case "5":
+                    response.setChannelCode("ATM");
+                    break;
+                case "6":
+                    response.setChannelCode("Vendor/Merchant Portal");
+                    break;
+                case "7":
+                    response.setChannelCode("3rd Party Platform");
+                    break;
+                case "8":
+                    response.setChannelCode("USSD");
+                    break;
+                case "9":
+                    response.setChannelCode("Other Channel");
+                    break;
+                case "10":
+                    response.setChannelCode("Social Media");
+                    break;
+                default:
+                    response.setChannelCode(label.isEmpty() ? "Unknown" : label);
+                    break;
+            }
+            summary.add(response);
+        }
+        return summary;
+    }
+
+    private List<Map<String, Object>> queryLabeledVolumeSummary(
+            String sql,
+            Object[] liveParams,
+            Object[] archiveParams,
+            TxnTablePlan plan,
+            int limit,
+            String endDate
+    ) {
+        List<Map<String, Object>> summary = new ArrayList<>();
+        if (plan.queryLive) {
+            summary = new ArrayList<>(txnJdbc().queryForList(sql.replace("{TABLE}", TNX_LIVE_TABLE), liveParams));
+        }
+        if (plan.queryArchive && hasSeparateArchive()) {
+            List<Map<String, Object>> hist = archiveJdbcForRange(endDate)
+                    .queryForList(sql.replace("{TABLE}", archiveTable()), archiveParams);
+            summary = mergeVolumeByLabel(summary, hist);
+        }
+        if (limit > 0 && summary.size() > limit) {
+            return new ArrayList<>(summary.subList(0, limit));
+        }
+        return summary;
     }
 
     /**
@@ -3019,43 +3310,17 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetFTTimeAverage(String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> summary;
-            List<Map<String, Object>> summary_;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
+                    + "FROM {TABLE} a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00'";
-
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
+            Object[] params = new Object[]{startDate, endDate};
+            List<Map<String, Object>> summary = queryChartSummary(SQL, params, params, plan, endDate);
+            if (plan.queryLive && plan.queryArchive && hasSeparateArchive()) {
+                List<Map<String, Object>> liveRows = txnJdbc().queryForList(SQL.replace("{TABLE}", TNX_LIVE_TABLE), params);
+                List<Map<String, Object>> histRows = archiveJdbcForRange(endDate).queryForList(SQL.replace("{TABLE}", archiveTable()), params);
+                summary = mergeDurationSummary(liveRows, histRows);
             }
-
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-//            String table_ = isCurrent ? "ajiswitch_db.tbl_name_enquiries" : "ajiswitch_db.tbl_name_enquiries_hist_s";
-//            SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
-//                    + "FROM " + table_ + " a "
-//                    + "WHERE a.transactiondate BETWEEN ? AND ? AND a.response_code = '00'";
-//            
-//            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-//                summary_ = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-//
-//            } else if (table.equalsIgnoreCase(archiveTable())) {
-//                summary_ = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-//            } else {
-//                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-//                logger.info(msg);
-//                throw new IllegalStateException(msg);
-//            }
-//            List<Map<String, Object>> summary_ = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-//            summary.addAll(summary_);
             networkResponse.setCode(200);
             networkResponse.setMessage("Transaction Duration Average");
             TNXModel tnxModel = new TNXModel();
@@ -3072,31 +3337,17 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetFTTimeAverage(String institutioncode, String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
+                    + "FROM {TABLE} a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00' AND a.source_institution_code = ? ";
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
+            Object[] params = new Object[]{startDate, endDate, institutioncode};
+            List<Map<String, Object>> summary = queryChartSummary(SQL, params, params, plan, endDate);
+            if (plan.queryLive && plan.queryArchive && hasSeparateArchive()) {
+                List<Map<String, Object>> liveRows = txnJdbc().queryForList(SQL.replace("{TABLE}", TNX_LIVE_TABLE), params);
+                List<Map<String, Object>> histRows = archiveJdbcForRange(endDate).queryForList(SQL.replace("{TABLE}", archiveTable()), params);
+                summary = mergeDurationSummary(liveRows, histRows);
             }
-
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-//            String table_ = isCurrent ? "ajiswitch_db.tbl_name_enquiries" : "ajiswitch_db.tbl_name_enquiries_hist_s";
-//            SQL = "SELECT COUNT(a.id) as volume, SUM(a.txn_duration) as totalduration "
-//                    + "FROM " + table_ + " a "
-//                    + "WHERE a.transactiondate BETWEEN ? AND ? AND a.response_code = '00' AND a.destination_institution_code = ? ";
-//
-//            List<Map<String, Object>> summary_ = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-//            summary.addAll(summary_);
             networkResponse.setCode(200);
             networkResponse.setMessage("Transaction Duration Average");
             TNXModel tnxModel = new TNXModel();
@@ -3113,24 +3364,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetSuccessTNXVolume(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-//            SQL = "SELECT COUNT(a.id) as volume, a.transaction_date_time as label "
-//                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-//                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00'"
-//                    + "GROUP BY CAST(a.transaction_date_time as DATE) "
-//                    + "ORDER BY a.transaction_date_time DESC";
-//            
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-//            
-            SQL = "SELECT COUNT(a.id) as volume, a.transaction_date_time as label "
-                    + "FROM " + archiveTable() + " a "
-                    + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND a.response_code = '00'"
-                    + "GROUP BY CAST(a.transaction_date_time as DATE) "
-                    + "ORDER BY a.transaction_date_time DESC";
-
-            List<Map<String, Object>> summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-
-//            summary.addAll(summary_);
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, false);
+            String SQL = "SELECT COUNT(a.id) as volume, CAST(a.transaction_date_time AS DATE) as label "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00' "
+                    + "GROUP BY CAST(a.transaction_date_time AS DATE) "
+                    + "ORDER BY label ASC";
+            Object[] params = new Object[]{startDate, endDate};
+            List<Map<String, Object>> summary = queryLabeledVolumeSummary(SQL, params, params, plan, 0, endDate);
             networkResponse.setCode(200);
             networkResponse.setMessage("Successfull Transactions Summary");
             TNXModel tnxModel = new TNXModel();
@@ -3147,24 +3388,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetSuccessTNXVolume(String institutioncode, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-//            SQL = "SELECT COUNT(a.id) as volume, a.transaction_date_time as label "
-//                    + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-//                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00' AND a.source_institution_code = ? "
-//                    + "GROUP BY CAST(a.transaction_date_time as DATE) "
-//                    + "ORDER BY a.transaction_date_time DESC";
-//            
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-
-            SQL = "SELECT COUNT(a.id) as volume, a.transaction_date_time as label "
-                    + "FROM " + archiveTable() + " a "
-                    + "WHERE a.transaction_date_time >= ? AND a.transaction_date_time < ? AND a.response_code = '00' AND a.source_institution_code = ? "
-                    + "GROUP BY CAST(a.transaction_date_time as DATE) "
-                    + "ORDER BY a.transaction_date_time DESC";
-
-            List<Map<String, Object>> summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-
-//            summary.addAll(summary_);
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, false);
+            String SQL = "SELECT COUNT(a.id) as volume, CAST(a.transaction_date_time AS DATE) as label "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.response_code = '00' AND a.source_institution_code = ? "
+                    + "GROUP BY CAST(a.transaction_date_time AS DATE) "
+                    + "ORDER BY label ASC";
+            Object[] params = new Object[]{startDate, endDate, institutioncode};
+            List<Map<String, Object>> summary = queryLabeledVolumeSummary(SQL, params, params, plan, 0, endDate);
             networkResponse.setCode(200);
             networkResponse.setMessage("Successfull Transactions Summary");
             TNXModel tnxModel = new TNXModel();
@@ -3181,28 +3412,15 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetTop6ResponseCodesTNX(String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
+                    + "FROM {TABLE} a "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.response_code "
                     + "ORDER BY volume DESC "
                     + "LIMIT 5";
-
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
-            }
-
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+            Object[] params = new Object[]{startDate, endDate};
+            List<Map<String, Object>> summary = queryLabeledVolumeSummary(SQL, params, params, plan, 5, endDate);
             networkResponse.setCode(200);
             networkResponse.setMessage("Top 6 Response Codes Summary");
             TNXModel tnxModel = new TNXModel();
@@ -3219,27 +3437,15 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
+                    + "FROM {TABLE} a "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
                     + "GROUP BY a.response_code "
                     + "ORDER BY volume DESC "
                     + "LIMIT 5";
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
-            }
-
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institutioncode});
+            Object[] params = new Object[]{startDate, endDate, institutioncode};
+            List<Map<String, Object>> summary = queryLabeledVolumeSummary(SQL, params, params, plan, 5, endDate);
             networkResponse.setCode(200);
             networkResponse.setMessage("Top 6 Response Codes Summary");
             TNXModel tnxModel = new TNXModel();
@@ -3256,28 +3462,25 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetFailedTnxCountByInstitutions(String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.destination_institution_code, b.color "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.destination_institution_code, b.color "
+                    + "FROM {TABLE} a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.destination_institution_code "
+                    + "ORDER BY volume DESC "
                     + "LIMIT 20";
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
+            Object[] params = new Object[]{startDate, endDate};
+            List<Map<String, Object>> summary = queryChartSummary(SQL, params, params, plan, endDate);
+            if (plan.queryLive && plan.queryArchive && hasSeparateArchive()) {
+                List<Map<String, Object>> liveRows = txnJdbc().queryForList(SQL.replace("{TABLE}", TNX_LIVE_TABLE), params);
+                List<Map<String, Object>> histRows = archiveJdbcForRange(endDate).queryForList(SQL.replace("{TABLE}", archiveTable()), params);
+                summary = mergeInstitutionFailureRows(liveRows, histRows);
+                if (summary.size() > 20) {
+                    summary = new ArrayList<>(summary.subList(0, 20));
+                }
             }
-
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
             networkResponse.setCode(200);
             networkResponse.setMessage("Top failing institutions");
             TNXModel tnxModel = new TNXModel();
@@ -3295,28 +3498,25 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetFailedTnxCountByInstitutions(String institution, String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
+                    + "FROM {TABLE} a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ?"
+                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
                     + "GROUP BY a.source_institution_code "
+                    + "ORDER BY volume DESC "
                     + "LIMIT 20";
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution});
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution});
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
+            Object[] params = new Object[]{startDate, endDate, institution};
+            List<Map<String, Object>> summary = queryChartSummary(SQL, params, params, plan, endDate);
+            if (plan.queryLive && plan.queryArchive && hasSeparateArchive()) {
+                List<Map<String, Object>> liveRows = txnJdbc().queryForList(SQL.replace("{TABLE}", TNX_LIVE_TABLE), params);
+                List<Map<String, Object>> histRows = archiveJdbcForRange(endDate).queryForList(SQL.replace("{TABLE}", archiveTable()), params);
+                summary = mergeInstitutionFailureRows(liveRows, histRows);
+                if (summary.size() > 20) {
+                    summary = new ArrayList<>(summary.subList(0, 20));
+                }
             }
-
-//            List<Map<String, Object>> summary = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate, institution});
             networkResponse.setCode(200);
             networkResponse.setMessage("Top failing institutions");
             TNXModel tnxModel = new TNXModel();
@@ -3404,26 +3604,16 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetTransactionsVolumeByChannels(String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<ChannelsTnxValueModel> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
-                    + "FROM " + table + " a "
-                    + "WHERE a.transaction_date_time BETWEEN ? AND ?"
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.channel_code "
+                    + "ORDER BY volume DESC "
                     + "LIMIT 6";
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionChannelsSummaryMapper());
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionChannelsSummaryMapper());
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
-            }
-
-//            List<ChannelsTnxValueModel> summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate}, new TransactionChannelsSummaryMapper());
+            Object[] params = new Object[]{startDate, endDate};
+            List<Map<String, Object>> rows = queryLabeledVolumeSummary(SQL, params, params, plan, 6, endDate);
+            List<ChannelsTnxValueModel> summary = mapChannelVolumeRows(rows);
             networkResponse.setCode(200);
             networkResponse.setMessage("Transactions Volumes by Channel");
             TNXModel tnxModel = new TNXModel();
@@ -3440,27 +3630,16 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetTransactionsVolumeByChannels(String institutioncode, String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<ChannelsTnxValueModel> summary;
-            String table = isCurrent ? "ajiswitch_db.tbl_creditfundtransfers" : archiveTable();
-            SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
-                    + "FROM " + table + " a "
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, a.channel_code as label "
+                    + "FROM {TABLE} a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
                     + "GROUP BY a.channel_code "
+                    + "ORDER BY volume DESC "
                     + "LIMIT 6";
-
-            if (table.equalsIgnoreCase("ajiswitch_db.tbl_creditfundtransfers")) {
-                summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode}, new TransactionChannelsSummaryMapper());
-
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                summary = secondJdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode}, new TransactionChannelsSummaryMapper());
-            } else {
-                String msg = String.format("Unknown transaction table '%s'—cannot update response_code", table);
-                logger.info(msg);
-                throw new IllegalStateException(msg);
-            }
-//            List<ChannelsTnxValueModel> summary = jdbcTemplate.query(SQL, new Object[]{startDate, endDate, institutioncode}, new TransactionChannelsSummaryMapper());
-
+            Object[] params = new Object[]{startDate, endDate, institutioncode};
+            List<Map<String, Object>> rows = queryLabeledVolumeSummary(SQL, params, params, plan, 6, endDate);
+            List<ChannelsTnxValueModel> summary = mapChannelVolumeRows(rows);
             networkResponse.setCode(200);
             networkResponse.setMessage("Transactions Volumes by Channel");
             TNXModel tnxModel = new TNXModel();
@@ -4023,7 +4202,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 institution = "";
             }
 
-            String table = isCurrent ? TNX_LIVE_TABLE : archiveTable();
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
             String institutionFilter = institution.isEmpty()
                     ? ""
                     : " AND (a.source_institution_code = ? OR a.destination_institution_code = ?) ";
@@ -4035,7 +4214,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     + "  ELSE 'Failed' "
                     + "END AS label, "
                     + "COUNT(a.id) AS volume "
-                    + "FROM " + table + " a "
+                    + "FROM {TABLE} a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? "
                     + institutionFilter
                     + "GROUP BY label";
@@ -4045,39 +4224,24 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     : new Object[]{startDate, endDate, institution, institution};
 
             List<Map<String, Object>> rows;
-            if (table.equalsIgnoreCase(TNX_LIVE_TABLE)) {
-                rows = jdbcTemplate.queryForList(SQL, params);
-            } else if (table.equalsIgnoreCase(archiveTable())) {
-                rows = secondJdbcTemplate.queryForList(SQL, params);
+            if (plan.queryLive && plan.queryArchive && hasSeparateArchive()) {
+                List<Map<String, Object>> liveRows = txnJdbc().queryForList(SQL.replace("{TABLE}", TNX_LIVE_TABLE), params);
+                List<Map<String, Object>> histRows = archiveJdbcForRange(endDate).queryForList(SQL.replace("{TABLE}", archiveTable()), params);
+                rows = mergeStatusSummaryRows(liveRows, histRows);
             } else {
-                throw new IllegalStateException("Unknown transaction table '" + table + "'");
+                rows = queryChartSummary(SQL, params, params, plan, endDate);
+                rows = mergeStatusSummaryRows(rows, Collections.emptyList());
             }
 
-            Map<String, Long> counts = new LinkedHashMap<>();
-            counts.put("Successful", 0L);
-            counts.put("Pending", 0L);
-            counts.put("Failed", 0L);
             long totalTransactions = 0L;
-
             for (Map<String, Object> row : rows) {
-                String label = row.get("label") != null ? String.valueOf(row.get("label")) : "Failed";
-                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
-                counts.put(label, counts.getOrDefault(label, 0L) + volume);
-                totalTransactions += volume;
-            }
-
-            ArrayList summary = new ArrayList();
-            for (Map.Entry<String, Long> entry : counts.entrySet()) {
-                Map<String, Object> item = new LinkedHashMap<>();
-                item.put("label", entry.getKey());
-                item.put("volume", entry.getValue());
-                summary.add(item);
+                totalTransactions += row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
             }
 
             networkResponse.setCode(200);
             networkResponse.setMessage("Transaction status summary");
             TNXModel tnxModel = new TNXModel();
-            tnxModel.setSummary(summary);
+            tnxModel.setSummary((ArrayList) rows);
             networkResponse.setTnxModel(tnxModel);
             networkResponse.setMeta(String.format("{\"totalTransactions\":%d}", totalTransactions));
             return responseManager.ResponseOk(networkResponse);

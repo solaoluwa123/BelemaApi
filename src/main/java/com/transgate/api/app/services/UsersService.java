@@ -1376,7 +1376,7 @@ public class UsersService implements UsersInterface {
                 logger.info("User already exists with email: " + email_address);
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
-                networkResponse.setStatus("success");
+                networkResponse.setStatus("failed");
                 networkResponse.setMessage("Email address already exists");
                 return responseManager.ResponseOk(networkResponse);
             }
@@ -1386,12 +1386,15 @@ public class UsersService implements UsersInterface {
                 return responseManager.ResponseBadRequest("System users must have role 1-3");
             }
 
-            // Generate a reference and retrieve the user role.
+            // Generate a reference and retrieve the user role from the session (not body.role — that field is legacy creator identity).
             String reference = randomizer.GenerateReference();
-            int userrole = GetUserRole(creator, sessiontoken);
-            logger.info("User role for creator " + creator + ": " + userrole);
+            int userrole = GetActorRole(sessiontoken);
+            if (userrole < 0) {
+                userrole = GetUserRole(creator, sessiontoken);
+            }
+            logger.info("User role for create actor (session): {}", userrole);
 
-            // Admin and Operator (and Approver queue) must not create Administrator accounts.
+            // No one may create Administrator accounts via create (use edit/promote instead).
             if (roleid == PlatformRole.ADMIN
                     && (userrole == PlatformRole.ADMIN
                     || userrole == PlatformRole.OPERATOR
@@ -1556,7 +1559,7 @@ public class UsersService implements UsersInterface {
                 logger.info("User already exists with email: " + email_address);
                 NetworkResponse networkResponse = new NetworkResponse();
                 networkResponse.setCode(200);
-                networkResponse.setStatus("success");
+                networkResponse.setStatus("failed");
                 networkResponse.setMessage("Email address already exists");
                 return responseManager.ResponseOk(networkResponse);
             }
@@ -1568,8 +1571,11 @@ public class UsersService implements UsersInterface {
 
             // Generate a reference (if needed) and retrieve the user role.
             String reference = randomizer.GenerateReference();
-            int userrole = GetUserRole(creator, sessiontoken);
-            logger.info("Retrieved user role (" + userrole + ") for creator: " + creator);
+            int userrole = GetActorRole(sessiontoken);
+            if (userrole < 0) {
+                userrole = GetUserRole(creator, sessiontoken);
+            }
+            logger.info("Retrieved user role ({}) for create-other actor", userrole);
 
             final String plainPassword;
             try {
@@ -2043,7 +2049,10 @@ public class UsersService implements UsersInterface {
     public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode) {
         try {
             String SQL;
-            int userrole = GetUserRole(username, sessiontoken);
+            int userrole = GetActorRole(sessiontoken);
+            if (userrole < 0) {
+                userrole = GetUserRole(username, sessiontoken);
+            }
             int retVal;
             int retVal2;
             if (userrole == 1 || userrole == 3) {
