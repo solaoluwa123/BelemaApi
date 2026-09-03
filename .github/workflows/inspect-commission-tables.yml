@@ -1,0 +1,36 @@
+name: Inspect commission tables
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: List commission-related tables and schemas
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "mysql -u ajipay -p'Admin12+' -e \"
+            SELECT table_schema, table_name, table_rows, create_time, update_time
+            FROM information_schema.tables
+            WHERE table_name LIKE '%commission%'
+               OR table_name LIKE '%commision%'
+            ORDER BY table_schema, table_name;
+
+            SELECT table_schema, table_name, column_name, column_type, is_nullable, column_key, column_default
+            FROM information_schema.columns
+            WHERE table_name LIKE '%commission%'
+               OR table_name LIKE '%commision%'
+            ORDER BY table_schema, table_name, ordinal_position;
+          \""
