@@ -1023,7 +1023,12 @@ public class TransactionsController {
         if (!validators.validHeader().equals(header)) {
             return responseManager.InvalidAuthorizationHeader();
         }
-        return transactionsInterface.GetCommissions(institutioncode, startDate, endDate);
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institutioncode);
+        if (denied.isPresent()) {
+            return denied.get();
+        }
+        String code = Optional.ofNullable(vendorInstitutionOrNull(sessiontoken)).orElse(institutioncode);
+        return transactionsInterface.GetCommissions(code, startDate, endDate);
     }
 
     @RequestMapping(value = "/timeoutretries-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
