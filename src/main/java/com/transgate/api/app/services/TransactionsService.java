@@ -247,6 +247,22 @@ public class TransactionsService implements TransactionsInterface {
                 } else {
                     long mergedVolume = (existing.get("volume") != null ? ((Number) existing.get("volume")).longValue() : 0L) + volume;
                     existing.put("volume", mergedVolume);
+                    // Prefer a real institution name over a blank / code-only label.
+                    Object existingLabel = existing.get("label");
+                    Object newLabel = row.get("label");
+                    String existingLabelStr = existingLabel != null ? String.valueOf(existingLabel).trim() : "";
+                    String newLabelStr = newLabel != null ? String.valueOf(newLabel).trim() : "";
+                    if ((existingLabelStr.isEmpty() || existingLabelStr.equals(code))
+                            && !newLabelStr.isEmpty()
+                            && !newLabelStr.equals(code)) {
+                        existing.put("label", newLabel);
+                        if (row.get("institution_name") != null) {
+                            existing.put("institution_name", row.get("institution_name"));
+                        }
+                        if (row.get("shortName") != null) {
+                            existing.put("shortName", row.get("shortName"));
+                        }
+                    }
                 }
             }
         }
@@ -3463,12 +3479,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
-            String SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.destination_institution_code, b.color "
+            String SQL = "SELECT COUNT(a.id) as volume, "
+                    + "COALESCE(NULLIF(TRIM(b.institution_name), ''), NULLIF(TRIM(b.shortName), ''), a.destination_institution_code) as label, "
+                    + "b.institution_name, b.shortName, a.destination_institution_code, b.color "
                     + "FROM {TABLE} a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
-                    + "GROUP BY a.destination_institution_code "
+                    + "GROUP BY a.destination_institution_code, b.institution_name, b.shortName, b.color "
                     + "ORDER BY volume DESC "
                     + "LIMIT 20";
             Object[] params = new Object[]{startDate, endDate};
@@ -3499,12 +3517,14 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
-            String SQL = "SELECT COUNT(a.id) as volume, b.shortName as label, a.source_institution_code, b.color "
+            String SQL = "SELECT COUNT(a.id) as volume, "
+                    + "COALESCE(NULLIF(TRIM(b.institution_name), ''), NULLIF(TRIM(b.shortName), ''), a.source_institution_code) as label, "
+                    + "b.institution_name, b.shortName, a.source_institution_code, b.color "
                     + "FROM {TABLE} a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
                     + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
-                    + "GROUP BY a.source_institution_code "
+                    + "GROUP BY a.source_institution_code, b.institution_name, b.shortName, b.color "
                     + "ORDER BY volume DESC "
                     + "LIMIT 20";
             Object[] params = new Object[]{startDate, endDate, institution};
