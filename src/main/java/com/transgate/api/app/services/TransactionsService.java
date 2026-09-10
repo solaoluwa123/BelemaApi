@@ -5810,19 +5810,31 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> commissions;
+            // Match rows generated in the picker window OR whose settlement start/end overlaps it
+            // (so manual Generate for a past txn week still shows after Refresh).
+            String periodFilter = "("
+                    + " (a.generation_date >= ? AND a.generation_date < ?) "
+                    + " OR (a.start_date < ? AND a.end_date >= ?) "
+                    + ")";
+            String periodFilterAgg = "("
+                    + " (generation_date >= ? AND generation_date < ?) "
+                    + " OR (start_date < ? AND end_date >= ?) "
+                    + ")";
+            Object[] periodParams = new Object[]{startDate, endDate, endDate, startDate};
+
             if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
                 SQL = "SELECT a.*, b.institution_name "
                         + "FROM ajiswitch_db.tbl_commission_paid a "
                         + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.institution_code = b.institution_code "
-                        + "WHERE a.generation_date >= ? AND a.generation_date < ? "
+                        + "WHERE " + periodFilter + " "
                         + "ORDER BY a.generation_date DESC";
-                commissions = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                commissions = jdbcTemplate.queryForList(SQL, periodParams);
                 SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
                         + "FROM ajiswitch_db.tbl_commission_paid "
-                        + "WHERE generation_date >= ? AND generation_date < ?";
+                        + "WHERE " + periodFilterAgg;
 
-                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{startDate, endDate});
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, periodParams);
                 Map<String, Object> row = agg.get(0);
                 BigDecimal tValue = (BigDecimal) row.get("totalValue");
                 Double totalValue = tValue != null ? tValue.doubleValue() : 0;
@@ -5835,16 +5847,18 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                         + "FROM ajiswitch_db.tbl_commission_paid a "
                         + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.institution_code = b.institution_code "
-                        + "WHERE a.institution_code = ?"
-                        + "AND a.generation_date >= ? AND a.generation_date < ? "
+                        + "WHERE a.institution_code = ? AND " + periodFilter + " "
                         + "ORDER BY a.generation_date DESC";
-                commissions = jdbcTemplate.queryForList(SQL, new Object[]{institutionCode, startDate, endDate});
+                commissions = jdbcTemplate.queryForList(SQL, new Object[]{
+                    institutionCode, startDate, endDate, endDate, startDate
+                });
                 SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
                         + "FROM ajiswitch_db.tbl_commission_paid "
-                        + "WHERE institution_code = ?"
-                        + "AND generation_date >= ? AND generation_date < ?";
+                        + "WHERE institution_code = ? AND " + periodFilterAgg;
 
-                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{institutionCode, startDate, endDate});
+                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{
+                    institutionCode, startDate, endDate, endDate, startDate
+                });
                 Map<String, Object> row = agg.get(0);
                 BigDecimal tValue = (BigDecimal) row.get("totalValue");
                 Double totalValue = tValue != null ? tValue.doubleValue() : 0;
@@ -6073,7 +6087,6 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 
     @Override
     public ResponseEntity GenerateWeeklyCommissionsCron() {
-        NetworkResponse networkResponse = new NetworkResponse();
         ZoneId lagos = ZoneId.of("Africa/Lagos");
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         ZonedDateTime now = ZonedDateTime.now(lagos);
@@ -6085,94 +6098,43 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         boolean isCurrentFallback = true;
 
         logger.info(String.format(
-                "Weekly commission cron starting - window=%s to %s (Africa/Lagos); live/archive by date range",
+                "Weekly commission cron starting - window=%s to %s (Africa/Lagos); all FIs with successful txns",
                 startDate,
                 endDate
         ));
 
-        List<String> institutionCodes = new ArrayList<>();
         try {
-            List<Map<String, Object>> chargeRows = jdbcTemplate.queryForList(
-                    "SELECT DISTINCT institution_code FROM ajiswitch_db.tbl_charges "
-                            + "WHERE institution_code IS NOT NULL AND TRIM(institution_code) <> '' "
-                            + "ORDER BY institution_code ASC"
-            );
-            for (Map<String, Object> row : chargeRows) {
-                if (row == null || row.get("institution_code") == null) {
-                    continue;
+            // -1 = every source institution that completed successful txns in the window
+            // (one tbl_commission_paid row per FI; charges from tbl_charges when present).
+            ResponseEntity response = GenerateCommissions("-1", startDate, endDate, isCurrentFallback);
+            Object body = response != null ? response.getBody() : null;
+            int rowCount = 0;
+            if (body instanceof NetworkResponse) {
+                NetworkResponse nr = (NetworkResponse) body;
+                ArrayList data = nr.getData();
+                rowCount = data != null ? data.size() : 0;
+                logger.info(String.format(
+                        "Weekly commission cron finished - rows=%d message=%s",
+                        rowCount,
+                        nr.getMessage()
+                ));
+                // Enrich meta with the cron window for ops logs / callers.
+                String existingMeta = nr.getMeta();
+                String windowMeta = "\"startDate\":\"" + startDate + "\",\"endDate\":\"" + endDate + "\"";
+                if (existingMeta != null && existingMeta.trim().startsWith("{") && existingMeta.trim().endsWith("}")) {
+                    String trimmed = existingMeta.trim();
+                    nr.setMeta(trimmed.substring(0, trimmed.length() - 1) + "," + windowMeta + "}");
+                } else {
+                    nr.setMeta("{" + windowMeta + ",\"totalRecords\":" + rowCount + "}");
                 }
-                String code = String.valueOf(row.get("institution_code")).trim();
-                if (!code.isEmpty()) {
-                    institutionCodes.add(code);
-                }
+                return response;
             }
-        } catch (DataAccessException ex) {
-            logger.info("Weekly commission cron failed loading tbl_charges: " + ex.getMessage());
+            logger.info("Weekly commission cron finished - unexpected response body");
+            return response != null ? response : responseManager.ResponseInternalServerError();
+        } catch (Exception ex) {
+            logger.info("Weekly commission cron failed: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
-
-        int succeeded = 0;
-        int failed = 0;
-        int skippedEmpty = 0;
-        List<Map<String, Object>> allGenerated = new ArrayList<>();
-
-        for (String code : institutionCodes) {
-            try {
-                logger.info("Weekly commission cron generating for institution_code=" + code);
-                ResponseEntity response = GenerateCommissions(code, startDate, endDate, isCurrentFallback);
-                Object body = response != null ? response.getBody() : null;
-                if (body instanceof NetworkResponse) {
-                    NetworkResponse nr = (NetworkResponse) body;
-                    ArrayList data = nr.getData();
-                    int rowCount = data != null ? data.size() : 0;
-                    if (rowCount == 0) {
-                        skippedEmpty++;
-                        logger.info("Weekly commission cron: no successful txns for " + code);
-                    } else {
-                        succeeded++;
-                        for (Object item : data) {
-                            if (item instanceof Map) {
-                                @SuppressWarnings("unchecked")
-                                Map<String, Object> mapItem = (Map<String, Object>) item;
-                                allGenerated.add(mapItem);
-                            }
-                        }
-                    }
-                } else if (response != null && response.getStatusCode().is2xxSuccessful()) {
-                    succeeded++;
-                } else {
-                    failed++;
-                    logger.info("Weekly commission cron failed for " + code + " status="
-                            + (response != null ? response.getStatusCode() : "null"));
-                }
-            } catch (Exception ex) {
-                failed++;
-                logger.info("Weekly commission cron exception for " + code + ": " + ex.getMessage());
-            }
-        }
-
-        logger.info(String.format(
-                "Weekly commission cron finished - institutions=%d succeeded=%d empty=%d failed=%d rows=%d",
-                institutionCodes.size(),
-                succeeded,
-                skippedEmpty,
-                failed,
-                allGenerated.size()
-        ));
-
-        String meta = "{\"institutions\": " + institutionCodes.size()
-                + ", \"succeeded\": " + succeeded
-                + ", \"empty\": " + skippedEmpty
-                + ", \"failed\": " + failed
-                + ", \"totalRecords\": " + allGenerated.size()
-                + ", \"startDate\": \"" + startDate + "\""
-                + ", \"endDate\": \"" + endDate + "\"}";
-        networkResponse.setMeta(meta);
-        networkResponse.setCode(200);
-        networkResponse.setStatus(failed > 0 && succeeded == 0 ? "failed" : "success");
-        networkResponse.setMessage("Weekly commissions generated per institution");
-        networkResponse.setData((ArrayList) allGenerated);
-        return responseManager.ResponseOk(networkResponse);
     }
 
 //
