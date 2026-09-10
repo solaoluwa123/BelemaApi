@@ -23,16 +23,20 @@ import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.WhereBuilder;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.math.RoundingMode;
 import java.sql.ResultSet;
 import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.DayOfWeek;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -118,7 +122,8 @@ public class TransactionsService implements TransactionsInterface {
     private TxnTablePlan planTransactionTables(String startDate, String endDate, boolean isCurrentLegacy) {
         LocalDateTime start = parseDashboardDateTime(startDate);
         LocalDateTime end = parseDashboardDateTime(endDate);
-        LocalDate today = LocalDate.now();
+        // Align tipping with commission cron / dashboard windows (WAT).
+        LocalDate today = LocalDate.now(ZoneId.of("Africa/Lagos"));
         boolean includeCurrent = false;
         boolean includeHistory = false;
         if (start != null && end != null) {
@@ -3474,6 +3479,204 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         }
     }
 
+    private List<Map<String, Object>> withResponseCodeDescriptions(List<Map<String, Object>> rows) {
+        ResponseCodeInterpreter interpreter = new ResponseCodeInterpreter();
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (rows == null) {
+            return out;
+        }
+        for (Map<String, Object> row : rows) {
+            if (row == null) {
+                continue;
+            }
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            Object label = copy.get("label");
+            String code = label != null ? String.valueOf(label).trim() : "";
+            if (code.isEmpty() && copy.get("response_code") != null) {
+                code = String.valueOf(copy.get("response_code")).trim();
+            }
+            String description = interpreter.InterpreteCode(code);
+            if (description == null || description.isBlank() || "Unknown".equalsIgnoreCase(description)) {
+                description = code.isEmpty() ? "Unknown" : code;
+            }
+            copy.put("code", code);
+            copy.put("description", description);
+            copy.put("message", description);
+            out.add(copy);
+        }
+        return out;
+    }
+
+    @Override
+    public ResponseEntity GetResponseCodeVolumes(String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + "AND a.response_code IS NOT NULL AND TRIM(a.response_code) <> '' "
+                    + "GROUP BY a.response_code "
+                    + "ORDER BY volume DESC "
+                    + "LIMIT 12";
+            Object[] params = new Object[]{startDate, endDate};
+            List<Map<String, Object>> summary = withResponseCodeDescriptions(
+                    queryLabeledVolumeSummary(SQL, params, params, plan, 12, endDate)
+            );
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Response code volumes");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity GetResponseCodeVolumes(String institutioncode, String startDate, String endDate, boolean isCurrent) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + "AND a.response_code IS NOT NULL AND TRIM(a.response_code) <> '' "
+                    + "AND a.source_institution_code = ? "
+                    + "GROUP BY a.response_code "
+                    + "ORDER BY volume DESC "
+                    + "LIMIT 12";
+            Object[] params = new Object[]{startDate, endDate, institutioncode};
+            List<Map<String, Object>> summary = withResponseCodeDescriptions(
+                    queryLabeledVolumeSummary(SQL, params, params, plan, 12, endDate)
+            );
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Response code volumes");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    /**
+     * Default bucket: 5 minutes for a single calendar day, otherwise 1 hour.
+     * Callers may pass an explicit {@code bucketSeconds > 0} to override.
+     */
+    private int resolveTpsBucketSeconds(String startDate, String endDate, int requestedBucketSeconds) {
+        if (requestedBucketSeconds > 0) {
+            return Math.max(1, requestedBucketSeconds);
+        }
+        LocalDateTime start = parseDashboardDateTime(startDate);
+        LocalDateTime end = parseDashboardDateTime(endDate);
+        if (start != null && end != null && start.toLocalDate().equals(end.toLocalDate())) {
+            return 300;
+        }
+        return 3600;
+    }
+
+    private List<Map<String, Object>> withTpsRates(List<Map<String, Object>> rows, int bucketSeconds) {
+        List<Map<String, Object>> out = new ArrayList<>();
+        if (rows == null) {
+            return out;
+        }
+        double divisor = Math.max(1, bucketSeconds);
+        List<Map<String, Object>> sorted = new ArrayList<>();
+        for (Map<String, Object> row : rows) {
+            if (row == null) {
+                continue;
+            }
+            sorted.add(row);
+        }
+        sorted.sort((a, b) -> {
+            String la = a.get("label") != null ? String.valueOf(a.get("label")) : "";
+            String lb = b.get("label") != null ? String.valueOf(b.get("label")) : "";
+            return la.compareTo(lb);
+        });
+        for (Map<String, Object> row : sorted) {
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            long volume = copy.get("volume") != null ? ((Number) copy.get("volume")).longValue() : 0L;
+            double tps = volume / divisor;
+            copy.put("tps", tps);
+            copy.put("bucketSeconds", bucketSeconds);
+            out.add(copy);
+        }
+        return out;
+    }
+
+    private ResponseEntity buildTransactionsTpsResponse(
+            String startDate,
+            String endDate,
+            boolean isCurrent,
+            int bucketSeconds,
+            String institutioncode
+    ) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            int safeBucket = resolveTpsBucketSeconds(startDate, endDate, bucketSeconds);
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            String SQL = "SELECT COUNT(a.id) as volume, "
+                    + "FROM_UNIXTIME(FLOOR(UNIX_TIMESTAMP(a.transaction_date_time) / ?) * ?) as label "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + (institutioncode != null ? "AND a.source_institution_code = ? " : "")
+                    + "GROUP BY label "
+                    + "ORDER BY label ASC";
+            Object[] params = institutioncode != null
+                    ? new Object[]{safeBucket, safeBucket, startDate, endDate, institutioncode}
+                    : new Object[]{safeBucket, safeBucket, startDate, endDate};
+            List<Map<String, Object>> summary = withTpsRates(
+                    queryLabeledVolumeSummary(SQL, params, params, plan, 0, endDate),
+                    safeBucket
+            );
+            double peakTps = 0d;
+            double sumTps = 0d;
+            for (Map<String, Object> row : summary) {
+                double tps = row.get("tps") != null ? ((Number) row.get("tps")).doubleValue() : 0d;
+                peakTps = Math.max(peakTps, tps);
+                sumTps += tps;
+            }
+            double avgTps = summary.isEmpty() ? 0d : sumTps / summary.size();
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Transactions per second");
+            networkResponse.setMeta(String.format(
+                    java.util.Locale.US,
+                    "{\"bucketSeconds\":%d,\"peakTps\":%.4f,\"avgTps\":%.4f,\"unit\":\"tps\"}",
+                    safeBucket,
+                    peakTps,
+                    avgTps
+            ));
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity GetTransactionsTps(String startDate, String endDate, boolean isCurrent, int bucketSeconds) {
+        return buildTransactionsTpsResponse(startDate, endDate, isCurrent, bucketSeconds, null);
+    }
+
+    @Override
+    public ResponseEntity GetTransactionsTps(
+            String institutioncode,
+            String startDate,
+            String endDate,
+            boolean isCurrent,
+            int bucketSeconds
+    ) {
+        return buildTransactionsTpsResponse(startDate, endDate, isCurrent, bucketSeconds, institutioncode);
+    }
+
     @Override
     public ResponseEntity GetFailedTnxCountByInstitutions(String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -5663,17 +5866,315 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         }
     }
 
-//    @Override
-//    @Transactional
-//    public ResponseEntity RequestTransactionStatusChange(
-//            String sessionid,
-//            String sessiontoken,
-//            String username,
-//            String status) {
-//
-//        NetworkResponse networkResponse = new NetworkResponse();
-//        logger.info("Entering RequestTransactionStatusChange(sessionid=" + sessionid
-//                + ", username=" + username + ", status=" + status + ")");
+    private boolean isAllInstitutionsCommissionCode(String institutionCode) {
+        if (institutionCode == null) {
+            return true;
+        }
+        String code = institutionCode.trim();
+        return code.isEmpty() || "-1".equals(code) || "000013".equals(code);
+    }
+
+    private Map<String, Map<String, Object>> loadChargesByInstitution(Set<String> institutionCodes) {
+        Map<String, Map<String, Object>> byCode = new HashMap<>();
+        if (institutionCodes == null || institutionCodes.isEmpty()) {
+            return byCode;
+        }
+        List<String> codes = new ArrayList<>(institutionCodes);
+        String placeholders = codes.stream().map(c -> "?").collect(Collectors.joining(","));
+        String SQL = "SELECT institution_code, charge_amount, vat "
+                + "FROM ajiswitch_db.tbl_charges "
+                + "WHERE institution_code IN (" + placeholders + ")";
+        List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, codes.toArray());
+        for (Map<String, Object> row : rows) {
+            if (row == null || row.get("institution_code") == null) {
+                continue;
+            }
+            byCode.put(String.valueOf(row.get("institution_code")).trim(), row);
+        }
+        return byCode;
+    }
+
+    private BigDecimal toMoney(BigDecimal value) {
+        if (value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+        return value.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal decimalOrZero(Object value) {
+        if (value == null) {
+            return BigDecimal.ZERO;
+        }
+        if (value instanceof BigDecimal) {
+            return (BigDecimal) value;
+        }
+        if (value instanceof Number) {
+            return BigDecimal.valueOf(((Number) value).doubleValue());
+        }
+        try {
+            return new BigDecimal(String.valueOf(value).trim());
+        } catch (NumberFormatException ex) {
+            return BigDecimal.ZERO;
+        }
+    }
+
+    @Override
+    public ResponseEntity GenerateCommissions(
+            String institutionCode,
+            String startDate,
+            String endDate,
+            boolean isCurrent
+    ) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            boolean allInstitutions = isAllInstitutionsCommissionCode(institutionCode);
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+
+            String countSql = "SELECT a.source_institution_code AS label, COUNT(a.id) AS volume "
+                    + "FROM {TABLE} a "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + "AND a.response_code = '00' "
+                    + "AND a.source_institution_code IS NOT NULL AND TRIM(a.source_institution_code) <> '' "
+                    + (allInstitutions ? "" : "AND a.source_institution_code = ? ")
+                    + "GROUP BY a.source_institution_code";
+            Object[] countParams = allInstitutions
+                    ? new Object[]{startDate, endDate}
+                    : new Object[]{startDate, endDate, institutionCode.trim()};
+            List<Map<String, Object>> countRows = queryLabeledVolumeSummary(
+                    countSql, countParams, countParams, plan, 0, endDate
+            );
+
+            Set<String> codes = new LinkedHashSet<>();
+            for (Map<String, Object> row : countRows) {
+                if (row == null || row.get("label") == null) {
+                    continue;
+                }
+                String code = String.valueOf(row.get("label")).trim();
+                if (!code.isEmpty()) {
+                    codes.add(code);
+                }
+            }
+            Map<String, Map<String, Object>> chargesByCode = loadChargesByInstitution(codes);
+
+            if (allInstitutions) {
+                jdbcTemplate.update(
+                        "DELETE FROM ajiswitch_db.tbl_commission_paid WHERE start_date = ? AND end_date = ?",
+                        startDate,
+                        endDate
+                );
+            } else {
+                jdbcTemplate.update(
+                        "DELETE FROM ajiswitch_db.tbl_commission_paid "
+                                + "WHERE institution_code = ? AND start_date = ? AND end_date = ?",
+                        institutionCode.trim(),
+                        startDate,
+                        endDate
+                );
+            }
+
+            String insertSql = "INSERT INTO ajiswitch_db.tbl_commission_paid ("
+                    + "institution_code, total_count, start_date, end_date, charge_amount, "
+                    + "commission, total_vat, total_commission, generation_date, "
+                    + "is_income_acct_credited, paid_date, session_id, report_location"
+                    + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), 0, NULL, ?, NULL)";
+
+            List<Map<String, Object>> generated = new ArrayList<>();
+            double totalCommissionSum = 0d;
+
+            for (Map<String, Object> row : countRows) {
+                if (row == null || row.get("label") == null) {
+                    continue;
+                }
+                String code = String.valueOf(row.get("label")).trim();
+                if (code.isEmpty()) {
+                    continue;
+                }
+                long totalCount = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                if (totalCount <= 0) {
+                    continue;
+                }
+
+                Map<String, Object> chargeRow = chargesByCode.get(code);
+                BigDecimal chargeAmount = toMoney(decimalOrZero(chargeRow != null ? chargeRow.get("charge_amount") : null));
+                BigDecimal vatPercent = decimalOrZero(chargeRow != null ? chargeRow.get("vat") : null);
+                BigDecimal countBd = BigDecimal.valueOf(totalCount);
+
+                BigDecimal commission = toMoney(chargeAmount.multiply(countBd));
+                BigDecimal totalVat = toMoney(
+                        vatPercent.divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP).multiply(countBd)
+                );
+                BigDecimal totalCommission = toMoney(commission.add(totalVat));
+
+                jdbcTemplate.update(
+                        insertSql,
+                        code,
+                        totalCount,
+                        startDate,
+                        endDate,
+                        chargeAmount,
+                        commission,
+                        totalVat,
+                        totalCommission,
+                        ""
+                );
+
+                Map<String, Object> out = new LinkedHashMap<>();
+                out.put("institution_code", code);
+                out.put("total_count", totalCount);
+                out.put("start_date", startDate);
+                out.put("end_date", endDate);
+                out.put("charge_amount", chargeAmount);
+                out.put("commission", commission);
+                out.put("total_vat", totalVat);
+                out.put("total_commission", totalCommission);
+                out.put("is_income_acct_credited", 0);
+                out.put("paid_date", null);
+                out.put("session_id", "");
+                out.put("report_location", null);
+                generated.add(out);
+                totalCommissionSum += totalCommission.doubleValue();
+            }
+
+            // Enrich with institution names for the response (same join as GetCommissions).
+            if (!generated.isEmpty()) {
+                String enrichSql = "SELECT a.*, b.institution_name "
+                        + "FROM ajiswitch_db.tbl_commission_paid a "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.institution_code = b.institution_code "
+                        + "WHERE a.start_date = ? AND a.end_date = ? "
+                        + (allInstitutions ? "" : "AND a.institution_code = ? ")
+                        + "ORDER BY a.institution_code ASC";
+                Object[] enrichParams = allInstitutions
+                        ? new Object[]{startDate, endDate}
+                        : new Object[]{startDate, endDate, institutionCode.trim()};
+                generated = jdbcTemplate.queryForList(enrichSql, enrichParams);
+                totalCommissionSum = 0d;
+                for (Map<String, Object> g : generated) {
+                    if (g != null && g.get("total_commission") != null) {
+                        totalCommissionSum += decimalOrZero(g.get("total_commission")).doubleValue();
+                    } else if (g != null && g.get("commission") != null) {
+                        totalCommissionSum += decimalOrZero(g.get("commission")).doubleValue();
+                    }
+                }
+            }
+
+            String meta = "{\"totalValue\": " + totalCommissionSum
+                    + ", \"totalRecords\": " + generated.size() + "}";
+            networkResponse.setMeta(meta);
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Commissions generated");
+            networkResponse.setData((ArrayList) generated);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            System.out.println("error>>>>" + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity GenerateWeeklyCommissionsCron() {
+        NetworkResponse networkResponse = new NetworkResponse();
+        ZoneId lagos = ZoneId.of("Africa/Lagos");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        ZonedDateTime now = ZonedDateTime.now(lagos);
+        LocalDate friday = now.toLocalDate();
+        LocalDate sunday = friday.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
+        String startDate = sunday.atStartOfDay().format(fmt);
+        String endDate = friday.atTime(23, 59, 59).format(fmt);
+        // Dates drive live vs archive via planTransactionTables; flag is unused fallback only.
+        boolean isCurrentFallback = true;
+
+        logger.info(String.format(
+                "Weekly commission cron starting - window=%s to %s (Africa/Lagos); live/archive by date range",
+                startDate,
+                endDate
+        ));
+
+        List<String> institutionCodes = new ArrayList<>();
+        try {
+            List<Map<String, Object>> chargeRows = jdbcTemplate.queryForList(
+                    "SELECT DISTINCT institution_code FROM ajiswitch_db.tbl_charges "
+                            + "WHERE institution_code IS NOT NULL AND TRIM(institution_code) <> '' "
+                            + "ORDER BY institution_code ASC"
+            );
+            for (Map<String, Object> row : chargeRows) {
+                if (row == null || row.get("institution_code") == null) {
+                    continue;
+                }
+                String code = String.valueOf(row.get("institution_code")).trim();
+                if (!code.isEmpty()) {
+                    institutionCodes.add(code);
+                }
+            }
+        } catch (DataAccessException ex) {
+            logger.info("Weekly commission cron failed loading tbl_charges: " + ex.getMessage());
+            return responseManager.ResponseInternalServerError();
+        }
+
+        int succeeded = 0;
+        int failed = 0;
+        int skippedEmpty = 0;
+        List<Map<String, Object>> allGenerated = new ArrayList<>();
+
+        for (String code : institutionCodes) {
+            try {
+                logger.info("Weekly commission cron generating for institution_code=" + code);
+                ResponseEntity response = GenerateCommissions(code, startDate, endDate, isCurrentFallback);
+                Object body = response != null ? response.getBody() : null;
+                if (body instanceof NetworkResponse) {
+                    NetworkResponse nr = (NetworkResponse) body;
+                    ArrayList data = nr.getData();
+                    int rowCount = data != null ? data.size() : 0;
+                    if (rowCount == 0) {
+                        skippedEmpty++;
+                        logger.info("Weekly commission cron: no successful txns for " + code);
+                    } else {
+                        succeeded++;
+                        for (Object item : data) {
+                            if (item instanceof Map) {
+                                @SuppressWarnings("unchecked")
+                                Map<String, Object> mapItem = (Map<String, Object>) item;
+                                allGenerated.add(mapItem);
+                            }
+                        }
+                    }
+                } else if (response != null && response.getStatusCode().is2xxSuccessful()) {
+                    succeeded++;
+                } else {
+                    failed++;
+                    logger.info("Weekly commission cron failed for " + code + " status="
+                            + (response != null ? response.getStatusCode() : "null"));
+                }
+            } catch (Exception ex) {
+                failed++;
+                logger.info("Weekly commission cron exception for " + code + ": " + ex.getMessage());
+            }
+        }
+
+        logger.info(String.format(
+                "Weekly commission cron finished - institutions=%d succeeded=%d empty=%d failed=%d rows=%d",
+                institutionCodes.size(),
+                succeeded,
+                skippedEmpty,
+                failed,
+                allGenerated.size()
+        ));
+
+        String meta = "{\"institutions\": " + institutionCodes.size()
+                + ", \"succeeded\": " + succeeded
+                + ", \"empty\": " + skippedEmpty
+                + ", \"failed\": " + failed
+                + ", \"totalRecords\": " + allGenerated.size()
+                + ", \"startDate\": \"" + startDate + "\""
+                + ", \"endDate\": \"" + endDate + "\"}";
+        networkResponse.setMeta(meta);
+        networkResponse.setCode(200);
+        networkResponse.setStatus(failed > 0 && succeeded == 0 ? "failed" : "success");
+        networkResponse.setMessage("Weekly commissions generated per institution");
+        networkResponse.setData((ArrayList) allGenerated);
+        return responseManager.ResponseOk(networkResponse);
+    }
+
 //
 //        try {
 //            int userrole = GetUserRole(username, sessiontoken);

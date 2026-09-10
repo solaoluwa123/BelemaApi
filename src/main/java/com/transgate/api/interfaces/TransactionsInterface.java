@@ -40,6 +40,16 @@ public interface TransactionsInterface {
     public ResponseEntity GetFailedTnxCountByInstitutions(String institution, String startDate, String endDate, boolean isCurrent);
     
     public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent);
+
+    /** All response codes (including 00) with volumes for dashboard distribution chart. */
+    public ResponseEntity GetResponseCodeVolumes(String startDate, String endDate, boolean isCurrent);
+
+    public ResponseEntity GetResponseCodeVolumes(String institutioncode, String startDate, String endDate, boolean isCurrent);
+
+    /** Time-bucketed transaction throughput (TPS) for dashboard line chart. */
+    public ResponseEntity GetTransactionsTps(String startDate, String endDate, boolean isCurrent, int bucketSeconds);
+
+    public ResponseEntity GetTransactionsTps(String institutioncode, String startDate, String endDate, boolean isCurrent, int bucketSeconds);
     
     public ResponseEntity GetAllResponseCodesTNXInstitution(String institutioncode, String startDate, String endDate, boolean isCurrent);
     
@@ -130,6 +140,12 @@ public interface TransactionsInterface {
             String userInstitutionCode);
     
     public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate);
+
+    /** Count successful txns, apply tbl_charges, upsert into tbl_commission_paid. */
+    public ResponseEntity GenerateCommissions(String institutionCode, String startDate, String endDate, boolean isCurrent);
+
+    /** Weekly cron: Sun–Fri Africa/Lagos window, one GenerateCommissions call per tbl_charges institution. */
+    public ResponseEntity GenerateWeeklyCommissionsCron();
     
     public ResponseEntity GetTimeoutRetries(String startDate, String endDate, int page, int limit);
     
