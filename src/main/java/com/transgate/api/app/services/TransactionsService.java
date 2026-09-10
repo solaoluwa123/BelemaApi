@@ -3752,6 +3752,153 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         }
     }
 
+    private List<Map<String, Object>> mergeDestinationSuccessRateRows(
+            List<Map<String, Object>> left,
+            List<Map<String, Object>> right
+    ) {
+        Map<String, Map<String, Object>> byCode = new LinkedHashMap<>();
+        for (List<Map<String, Object>> source : Arrays.asList(left, right)) {
+            if (source == null) {
+                continue;
+            }
+            for (Map<String, Object> row : source) {
+                if (row == null) {
+                    continue;
+                }
+                String code = row.get("destination_institution_code") != null
+                        ? String.valueOf(row.get("destination_institution_code")).trim()
+                        : "";
+                if (code.isEmpty() && row.get("label") != null) {
+                    code = String.valueOf(row.get("label")).trim();
+                }
+                if (code.isEmpty()) {
+                    continue;
+                }
+                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                long successVolume = row.get("success_volume") != null
+                        ? ((Number) row.get("success_volume")).longValue()
+                        : 0L;
+                Map<String, Object> existing = byCode.get(code);
+                if (existing == null) {
+                    Map<String, Object> copy = new LinkedHashMap<>(row);
+                    copy.put("destination_institution_code", code);
+                    copy.put("volume", volume);
+                    copy.put("success_volume", successVolume);
+                    byCode.put(code, copy);
+                } else {
+                    long mergedVolume = (existing.get("volume") != null
+                            ? ((Number) existing.get("volume")).longValue() : 0L) + volume;
+                    long mergedSuccess = (existing.get("success_volume") != null
+                            ? ((Number) existing.get("success_volume")).longValue() : 0L) + successVolume;
+                    existing.put("volume", mergedVolume);
+                    existing.put("success_volume", mergedSuccess);
+                    Object existingLabel = existing.get("label");
+                    Object newLabel = row.get("label");
+                    String existingLabelStr = existingLabel != null ? String.valueOf(existingLabel).trim() : "";
+                    String newLabelStr = newLabel != null ? String.valueOf(newLabel).trim() : "";
+                    if ((existingLabelStr.isEmpty() || existingLabelStr.equals(code))
+                            && !newLabelStr.isEmpty()
+                            && !newLabelStr.equals(code)) {
+                        existing.put("label", newLabel);
+                        if (row.get("institution_name") != null) {
+                            existing.put("institution_name", row.get("institution_name"));
+                        }
+                        if (row.get("shortName") != null) {
+                            existing.put("shortName", row.get("shortName"));
+                        }
+                    }
+                }
+            }
+        }
+        List<Map<String, Object>> merged = new ArrayList<>(byCode.values());
+        for (Map<String, Object> row : merged) {
+            long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+            long successVolume = row.get("success_volume") != null
+                    ? ((Number) row.get("success_volume")).longValue() : 0L;
+            double rate = volume > 0 ? (successVolume * 100.0d) / volume : 0d;
+            row.put("success_rate", Math.round(rate * 100.0d) / 100.0d);
+        }
+        merged.sort((a, b) -> Long.compare(
+                b.get("volume") != null ? ((Number) b.get("volume")).longValue() : 0L,
+                a.get("volume") != null ? ((Number) a.get("volume")).longValue() : 0L
+        ));
+        return merged;
+    }
+
+    private ResponseEntity buildDestinationSuccessRatesResponse(
+            String sourceInstitution,
+            String startDate,
+            String endDate,
+            boolean isCurrent
+    ) {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
+            boolean scoped = sourceInstitution != null && !sourceInstitution.trim().isEmpty();
+            String SQL = "SELECT COUNT(a.id) AS volume, "
+                    + "SUM(CASE WHEN a.response_code = '00' THEN 1 ELSE 0 END) AS success_volume, "
+                    + "COALESCE(NULLIF(TRIM(b.institution_name), ''), NULLIF(TRIM(b.shortName), ''), "
+                    + "TRIM(a.destination_institution_code)) AS label, "
+                    + "b.institution_name, b.shortName, TRIM(a.destination_institution_code) AS destination_institution_code, "
+                    + "b.color "
+                    + "FROM {TABLE} a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
+                    + "ON TRIM(a.destination_institution_code) = TRIM(b.institution_code) "
+                    + "WHERE a.transaction_date_time BETWEEN ? AND ? "
+                    + "AND a.destination_institution_code IS NOT NULL AND TRIM(a.destination_institution_code) <> '' "
+                    + (scoped ? "AND TRIM(a.source_institution_code) = ? " : "")
+                    + "GROUP BY TRIM(a.destination_institution_code), b.institution_name, b.shortName, b.color "
+                    + "ORDER BY volume DESC "
+                    + "LIMIT 20";
+            Object[] params = scoped
+                    ? new Object[]{startDate, endDate, sourceInstitution.trim()}
+                    : new Object[]{startDate, endDate};
+
+            List<Map<String, Object>> summary;
+            if (plan.queryLive && plan.queryArchive && hasSeparateArchive()) {
+                List<Map<String, Object>> liveRows = txnJdbc().queryForList(
+                        SQL.replace("{TABLE}", TNX_LIVE_TABLE), params);
+                List<Map<String, Object>> histRows = archiveJdbcForRange(endDate).queryForList(
+                        SQL.replace("{TABLE}", archiveTable()), params);
+                summary = mergeDestinationSuccessRateRows(liveRows, histRows);
+            } else {
+                summary = mergeDestinationSuccessRateRows(
+                        queryChartSummary(SQL, params, params, plan, endDate),
+                        Collections.emptyList()
+                );
+            }
+            if (summary.size() > 20) {
+                summary = new ArrayList<>(summary.subList(0, 20));
+            }
+
+            networkResponse.setCode(200);
+            networkResponse.setMessage("Destination success rates");
+            TNXModel tnxModel = new TNXModel();
+            tnxModel.setSummary((ArrayList) summary);
+            networkResponse.setTnxModel(tnxModel);
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("error>>>>" + ex.getMessage());
+            ex.printStackTrace();
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
+    @Override
+    public ResponseEntity GetDestinationSuccessRates(String startDate, String endDate, boolean isCurrent) {
+        return buildDestinationSuccessRatesResponse(null, startDate, endDate, isCurrent);
+    }
+
+    @Override
+    public ResponseEntity GetDestinationSuccessRates(
+            String sourceInstitution,
+            String startDate,
+            String endDate,
+            boolean isCurrent
+    ) {
+        return buildDestinationSuccessRatesResponse(sourceInstitution, startDate, endDate, isCurrent);
+    }
+
     @Override
     public ResponseEntity GetAllResponseCodesTNXInstitution(String institutioncode, String startDate, String endDate, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
@@ -5895,9 +6042,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         }
         List<String> codes = new ArrayList<>(institutionCodes);
         String placeholders = codes.stream().map(c -> "?").collect(Collectors.joining(","));
-        String SQL = "SELECT institution_code, charge_amount, vat "
+        String SQL = "SELECT TRIM(institution_code) AS institution_code, charge_amount, vat "
                 + "FROM ajiswitch_db.tbl_charges "
-                + "WHERE institution_code IN (" + placeholders + ")";
+                + "WHERE TRIM(institution_code) IN (" + placeholders + ")";
         List<Map<String, Object>> rows = jdbcTemplate.queryForList(SQL, codes.toArray());
         for (Map<String, Object> row : rows) {
             if (row == null || row.get("institution_code") == null) {
@@ -5944,13 +6091,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             boolean allInstitutions = isAllInstitutionsCommissionCode(institutionCode);
             TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
 
-            String countSql = "SELECT a.source_institution_code AS label, COUNT(a.id) AS volume "
+            String countSql = "SELECT TRIM(a.source_institution_code) AS label, COUNT(a.id) AS volume "
                     + "FROM {TABLE} a "
                     + "WHERE a.transaction_date_time BETWEEN ? AND ? "
                     + "AND a.response_code = '00' "
                     + "AND a.source_institution_code IS NOT NULL AND TRIM(a.source_institution_code) <> '' "
-                    + (allInstitutions ? "" : "AND a.source_institution_code = ? ")
-                    + "GROUP BY a.source_institution_code";
+                    + (allInstitutions ? "" : "AND TRIM(a.source_institution_code) = ? ")
+                    + "GROUP BY TRIM(a.source_institution_code)";
             Object[] countParams = allInstitutions
                     ? new Object[]{startDate, endDate}
                     : new Object[]{startDate, endDate, institutionCode.trim()};
@@ -5958,16 +6105,20 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     countSql, countParams, countParams, plan, 0, endDate
             );
 
-            Set<String> codes = new LinkedHashSet<>();
+            // Re-aggregate by trimmed label in case live/archive merge produced duplicate keys.
+            Map<String, Long> volumeByCode = new LinkedHashMap<>();
             for (Map<String, Object> row : countRows) {
                 if (row == null || row.get("label") == null) {
                     continue;
                 }
                 String code = String.valueOf(row.get("label")).trim();
-                if (!code.isEmpty()) {
-                    codes.add(code);
+                if (code.isEmpty()) {
+                    continue;
                 }
+                long volume = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+                volumeByCode.merge(code, volume, Long::sum);
             }
+            Set<String> codes = volumeByCode.keySet();
             Map<String, Map<String, Object>> chargesByCode = loadChargesByInstitution(codes);
 
             if (allInstitutions) {
@@ -5994,16 +6145,11 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
 
             List<Map<String, Object>> generated = new ArrayList<>();
             double totalCommissionSum = 0d;
+            int sourceInstitutionsCounted = volumeByCode.size();
 
-            for (Map<String, Object> row : countRows) {
-                if (row == null || row.get("label") == null) {
-                    continue;
-                }
-                String code = String.valueOf(row.get("label")).trim();
-                if (code.isEmpty()) {
-                    continue;
-                }
-                long totalCount = row.get("volume") != null ? ((Number) row.get("volume")).longValue() : 0L;
+            for (Map.Entry<String, Long> entry : volumeByCode.entrySet()) {
+                String code = entry.getKey();
+                long totalCount = entry.getValue() != null ? entry.getValue() : 0L;
                 if (totalCount <= 0) {
                     continue;
                 }
@@ -6049,13 +6195,15 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 totalCommissionSum += totalCommission.doubleValue();
             }
 
+            int rowsInserted = generated.size();
+
             // Enrich with institution names for the response (same join as GetCommissions).
             if (!generated.isEmpty()) {
                 String enrichSql = "SELECT a.*, b.institution_name "
                         + "FROM ajiswitch_db.tbl_commission_paid a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON a.institution_code = b.institution_code "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON TRIM(a.institution_code) = TRIM(b.institution_code) "
                         + "WHERE a.start_date = ? AND a.end_date = ? "
-                        + (allInstitutions ? "" : "AND a.institution_code = ? ")
+                        + (allInstitutions ? "" : "AND TRIM(a.institution_code) = ? ")
                         + "ORDER BY a.institution_code ASC";
                 Object[] enrichParams = allInstitutions
                         ? new Object[]{startDate, endDate}
@@ -6072,7 +6220,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             }
 
             String meta = "{\"totalValue\": " + totalCommissionSum
-                    + ", \"totalRecords\": " + generated.size() + "}";
+                    + ", \"totalRecords\": " + generated.size()
+                    + ", \"sourceInstitutionsCounted\": " + sourceInstitutionsCounted
+                    + ", \"rowsInserted\": " + rowsInserted + "}";
             networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");

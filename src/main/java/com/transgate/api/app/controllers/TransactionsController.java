@@ -495,6 +495,44 @@ public class TransactionsController {
         return transactionsInterface.GetFailedTnxCountByInstitutions(code, startDate, endDate, isCurrent);
     }
 
+    @RequestMapping(value = "/destination-success-rates", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetDestinationSuccessRates(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        String vendorCode = vendorInstitutionOrNull(sessiontoken);
+        if (vendorCode != null) {
+            return transactionsInterface.GetDestinationSuccessRates(vendorCode, startDate, endDate, isCurrent);
+        }
+        ResponseEntity missing = vendorMissingInstitutionOrNull(sessiontoken);
+        if (missing != null) {
+            return missing;
+        }
+        return transactionsInterface.GetDestinationSuccessRates(startDate, endDate, isCurrent);
+    }
+
+    @RequestMapping(value = "/destination-success-rates/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GetDestinationSuccessRatesByInstitution(@RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token", required = false) String sessiontoken,
+            @RequestParam("startDate") String startDate,
+            @RequestParam("endDate") String endDate,
+            @PathVariable("institutioncode") String institutioncode,
+            @RequestParam("isCurrent") boolean isCurrent) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        Optional<ResponseEntity> denied = vendorInstitutionGate(sessiontoken, institutioncode);
+        if (denied.isPresent()) {
+            return denied.get();
+        }
+        String code = Optional.ofNullable(vendorInstitutionOrNull(sessiontoken)).orElse(institutioncode);
+        return transactionsInterface.GetDestinationSuccessRates(code, startDate, endDate, isCurrent);
+    }
+
     @RequestMapping(value = "/top-failed-response-codes/institution/{institutioncode}", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTop6ResponseCodesTNXInstitution(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token", required = false) String sessiontoken,

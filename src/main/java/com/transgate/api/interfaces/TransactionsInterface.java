@@ -39,6 +39,12 @@ public interface TransactionsInterface {
     
     public ResponseEntity GetFailedTnxCountByInstitutions(String institution, String startDate, String endDate, boolean isCurrent);
     
+    /** Success rate % and volumes per destination bank (transfers sent to). Success = response_code 00 only. */
+    public ResponseEntity GetDestinationSuccessRates(String startDate, String endDate, boolean isCurrent);
+
+    /** Same as above, scoped to a source institution (destinations that institution sent to). */
+    public ResponseEntity GetDestinationSuccessRates(String sourceInstitution, String startDate, String endDate, boolean isCurrent);
+
     public ResponseEntity GetTop6ResponseCodesTNX(String institutioncode, String startDate, String endDate, boolean isCurrent);
 
     /** All response codes (including 00) with volumes for dashboard distribution chart. */
