@@ -6085,6 +6085,65 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             boolean allInstitutions = isAllInstitutionsCommissionCode(institutionCode);
+
+            // Idempotent: never regenerate a settlement window that already has rows.
+            Integer existingCount;
+            if (allInstitutions) {
+                existingCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ajiswitch_db.tbl_commission_paid "
+                                + "WHERE start_date = ? AND end_date = ?",
+                        Integer.class,
+                        startDate,
+                        endDate
+                );
+            } else {
+                existingCount = jdbcTemplate.queryForObject(
+                        "SELECT COUNT(*) FROM ajiswitch_db.tbl_commission_paid "
+                                + "WHERE institution_code = ? AND start_date = ? AND end_date = ?",
+                        Integer.class,
+                        institutionCode.trim(),
+                        startDate,
+                        endDate
+                );
+            }
+            if (existingCount != null && existingCount > 0) {
+                String enrichSql = "SELECT a.*, b.institution_name "
+                        + "FROM ajiswitch_db.tbl_commission_paid a "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON TRIM(a.institution_code) = TRIM(b.institution_code) "
+                        + "WHERE a.start_date = ? AND a.end_date = ? "
+                        + (allInstitutions ? "" : "AND TRIM(a.institution_code) = ? ")
+                        + "ORDER BY a.institution_code ASC";
+                Object[] enrichParams = allInstitutions
+                        ? new Object[]{startDate, endDate}
+                        : new Object[]{startDate, endDate, institutionCode.trim()};
+                List<Map<String, Object>> existing = jdbcTemplate.queryForList(enrichSql, enrichParams);
+                double totalCommissionSum = 0d;
+                for (Map<String, Object> g : existing) {
+                    if (g != null && g.get("total_commission") != null) {
+                        totalCommissionSum += decimalOrZero(g.get("total_commission")).doubleValue();
+                    } else if (g != null && g.get("commission") != null) {
+                        totalCommissionSum += decimalOrZero(g.get("commission")).doubleValue();
+                    }
+                }
+                String meta = "{\"totalValue\": " + totalCommissionSum
+                        + ", \"totalRecords\": " + existing.size()
+                        + ", \"rowsInserted\": 0"
+                        + ", \"skipped\": true}";
+                networkResponse.setMeta(meta);
+                networkResponse.setCode(200);
+                networkResponse.setStatus("success");
+                networkResponse.setMessage("Commissions already generated for this period");
+                networkResponse.setData((ArrayList) existing);
+                logger.info(String.format(
+                        "GenerateCommissions skipped existing window start=%s end=%s institution=%s rows=%d",
+                        startDate,
+                        endDate,
+                        allInstitutions ? "-1" : institutionCode.trim(),
+                        existing.size()
+                ));
+                return responseManager.ResponseOk(networkResponse);
+            }
+
             TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
 
             String countSql = "SELECT TRIM(a.source_institution_code) AS label, COUNT(a.id) AS volume "
@@ -6116,22 +6175,6 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             }
             Set<String> codes = volumeByCode.keySet();
             Map<String, Map<String, Object>> chargesByCode = loadChargesByInstitution(codes);
-
-            if (allInstitutions) {
-                jdbcTemplate.update(
-                        "DELETE FROM ajiswitch_db.tbl_commission_paid WHERE start_date = ? AND end_date = ?",
-                        startDate,
-                        endDate
-                );
-            } else {
-                jdbcTemplate.update(
-                        "DELETE FROM ajiswitch_db.tbl_commission_paid "
-                                + "WHERE institution_code = ? AND start_date = ? AND end_date = ?",
-                        institutionCode.trim(),
-                        startDate,
-                        endDate
-                );
-            }
 
             String insertSql = "INSERT INTO ajiswitch_db.tbl_commission_paid ("
                     + "institution_code, total_count, start_date, end_date, charge_amount, "
@@ -6218,7 +6261,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             String meta = "{\"totalValue\": " + totalCommissionSum
                     + ", \"totalRecords\": " + generated.size()
                     + ", \"sourceInstitutionsCounted\": " + sourceInstitutionsCounted
-                    + ", \"rowsInserted\": " + rowsInserted + "}";
+                    + ", \"rowsInserted\": " + rowsInserted
+                    + ", \"skipped\": false}";
             networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
