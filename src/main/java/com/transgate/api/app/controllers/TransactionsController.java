@@ -1176,6 +1176,12 @@ public class TransactionsController {
         return transactionsInterface.GenerateCommissionsBackfill();
     }
 
+    /** Ops: empty tbl_commission_paid. */
+    @RequestMapping(value = "/app/crons/truncate-commission-paid", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity TruncateCommissionPaid() {
+        return transactionsInterface.TruncateCommissionPaid();
+    }
+
     @RequestMapping(value = "/timeoutretries-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTimeoutRetries(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,

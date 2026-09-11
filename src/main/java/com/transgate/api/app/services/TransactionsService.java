@@ -6370,6 +6370,40 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         }
     }
 
+    @Override
+    public ResponseEntity TruncateCommissionPaid() {
+        NetworkResponse networkResponse = new NetworkResponse();
+        try {
+            Integer before = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM ajiswitch_db.tbl_commission_paid",
+                    Integer.class
+            );
+            jdbcTemplate.update("TRUNCATE TABLE ajiswitch_db.tbl_commission_paid");
+            Integer after = jdbcTemplate.queryForObject(
+                    "SELECT COUNT(*) FROM ajiswitch_db.tbl_commission_paid",
+                    Integer.class
+            );
+            int removed = before != null ? before : 0;
+            logger.info(String.format(
+                    "TRUNCATE tbl_commission_paid complete - before=%d after=%s",
+                    removed,
+                    after
+            ));
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("tbl_commission_paid truncated");
+            networkResponse.setMeta(
+                    "{\"rowsBefore\":" + removed + ",\"rowsAfter\":" + (after != null ? after : 0) + "}"
+            );
+            networkResponse.setData(new ArrayList());
+            return responseManager.ResponseOk(networkResponse);
+        } catch (DataAccessException ex) {
+            logger.info("TRUNCATE tbl_commission_paid failed: " + ex.getMessage());
+            ex.printStackTrace();
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
 //
 //        try {
 //            int userrole = GetUserRole(username, sessiontoken);

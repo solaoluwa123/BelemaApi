@@ -155,6 +155,9 @@ public interface TransactionsInterface {
 
     /** One-time ops cron: generate commissions for each Sun–Fri week in the last 4 months. */
     public ResponseEntity GenerateCommissionsBackfill();
+
+    /** Ops: delete all rows from tbl_commission_paid. */
+    public ResponseEntity TruncateCommissionPaid();
     
     public ResponseEntity GetTimeoutRetries(String startDate, String endDate, int page, int limit);
     
