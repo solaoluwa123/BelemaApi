@@ -5972,10 +5972,10 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 return responseManager.ResponseOk(networkResponse);
             }
 
-            // Filter by settlement-window overlap. Ignore absurd legacy rows (e.g. start_date
-            // 2000-01-01 → today from an "All time" Generate) which would match every picker range.
-            // Return one row per institution: weekly Sun–Fri windows in the picker range are summed.
-            String periodFilter = "(a.start_date < ? AND a.end_date >= ? "
+            // Include a weekly batch only if its full Sun–Fri window sits inside the picker
+            // (half-open [startDate, endDate)). Ignore absurd multi-year legacy rows.
+            // One row per institution: sum those fully contained weeks.
+            String periodFilter = "(a.start_date >= ? AND a.end_date < ? "
                     + "AND DATEDIFF(a.end_date, a.start_date) BETWEEN 0 AND 14)";
             String selectAgg = "SELECT TRIM(a.institution_code) AS institution_code, "
                     + "MAX(b.institution_name) AS institution_name, "
@@ -6002,13 +6002,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                         + "WHERE " + periodFilter + " "
                         + "GROUP BY TRIM(a.institution_code) "
                         + "ORDER BY institution_name ASC, institution_code ASC";
-                commissions = jdbcTemplate.queryForList(SQL, endDate, startDate);
+                commissions = jdbcTemplate.queryForList(SQL, startDate, endDate);
             } else {
                 String SQL = selectAgg
                         + "WHERE TRIM(a.institution_code) = ? AND " + periodFilter + " "
                         + "GROUP BY TRIM(a.institution_code) "
                         + "ORDER BY institution_name ASC, institution_code ASC";
-                commissions = jdbcTemplate.queryForList(SQL, institutionCode.trim(), endDate, startDate);
+                commissions = jdbcTemplate.queryForList(SQL, institutionCode.trim(), startDate, endDate);
             }
 
             double totalValue = 0d;
