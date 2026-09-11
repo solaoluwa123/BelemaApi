@@ -1,5 +1,6 @@
 -- Institution email + unique hashkey
 -- Safe to re-run (skips columns/indexes that already exist).
+-- Unique hashkey indexes are skipped when legacy duplicate hashkeys exist.
 
 USE transgateweb_db;
 
@@ -46,7 +47,17 @@ SET @sql = IF(
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+-- Unique hashkey only when no duplicate non-null values exist
+SET @nodes_hash_dupes = (
+  SELECT COUNT(*) FROM (
+    SELECT hashkey FROM ajiswitch_db.tbl_nodes
+    WHERE hashkey IS NOT NULL
+    GROUP BY hashkey
+    HAVING COUNT(*) > 1
+  ) d
+);
 SET @sql = IF(
+  @nodes_hash_dupes = 0 AND
   (SELECT COUNT(*) FROM information_schema.STATISTICS
     WHERE TABLE_SCHEMA = @aj AND TABLE_NAME = 'tbl_nodes' AND INDEX_NAME = 'uk_nodes_hashkey') = 0,
   'ALTER TABLE ajiswitch_db.tbl_nodes ADD UNIQUE INDEX uk_nodes_hashkey (hashkey)',
@@ -54,10 +65,21 @@ SET @sql = IF(
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
+SET @pend_hash_dupes = (
+  SELECT COUNT(*) FROM (
+    SELECT hashkey FROM tbl_nodes_pendings
+    WHERE hashkey IS NOT NULL
+    GROUP BY hashkey
+    HAVING COUNT(*) > 1
+  ) d
+);
 SET @sql = IF(
+  @pend_hash_dupes = 0 AND
   (SELECT COUNT(*) FROM information_schema.STATISTICS
     WHERE TABLE_SCHEMA = @db AND TABLE_NAME = 'tbl_nodes_pendings' AND INDEX_NAME = 'uk_nodes_pendings_hashkey') = 0,
   'ALTER TABLE tbl_nodes_pendings ADD UNIQUE INDEX uk_nodes_pendings_hashkey (hashkey)',
   'SELECT 1'
 );
 PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SELECT @nodes_hash_dupes AS nodes_hash_duplicate_groups, @pend_hash_dupes AS pending_hash_duplicate_groups;
