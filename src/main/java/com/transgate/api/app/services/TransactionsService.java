@@ -5955,62 +5955,59 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            String SQL;
-            List<Map<String, Object>> commissions;
             // Filter by settlement-window overlap. Ignore absurd legacy rows (e.g. start_date
             // 2000-01-01 → today from an "All time" Generate) which would match every picker range.
+            // Return one row per institution: weekly Sun–Fri windows in the picker range are summed.
             String periodFilter = "(a.start_date < ? AND a.end_date >= ? "
                     + "AND DATEDIFF(a.end_date, a.start_date) BETWEEN 0 AND 14)";
-            String periodFilterAgg = "(start_date < ? AND end_date >= ? "
-                    + "AND DATEDIFF(end_date, start_date) BETWEEN 0 AND 14)";
-            Object[] periodParams = new Object[]{endDate, startDate};
+            String selectAgg = "SELECT TRIM(a.institution_code) AS institution_code, "
+                    + "MAX(b.institution_name) AS institution_name, "
+                    + "SUM(a.total_count) AS total_count, "
+                    + "MIN(a.start_date) AS start_date, "
+                    + "MAX(a.end_date) AS end_date, "
+                    + "MAX(a.charge_amount) AS charge_amount, "
+                    + "SUM(a.commission) AS commission, "
+                    + "SUM(a.total_vat) AS total_vat, "
+                    + "SUM(a.total_commission) AS total_commission, "
+                    + "MAX(a.generation_date) AS generation_date, "
+                    + "MAX(a.paid_date) AS paid_date, "
+                    + "MAX(a.is_income_acct_credited) AS is_income_acct_credited, "
+                    + "NULL AS session_id, "
+                    + "NULL AS report_location "
+                    + "FROM ajiswitch_db.tbl_commission_paid a "
+                    + "LEFT JOIN ajiswitch_db.tbl_nodes b "
+                    + "ON TRIM(a.institution_code) = TRIM(b.institution_code) ";
 
-            if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
-                SQL = "SELECT a.*, b.institution_name "
-                        + "FROM ajiswitch_db.tbl_commission_paid a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
-                        + "ON a.institution_code = b.institution_code "
+            List<Map<String, Object>> commissions;
+            boolean allInstitutions = isAllInstitutionsCommissionCode(institutionCode);
+            if (allInstitutions) {
+                String SQL = selectAgg
                         + "WHERE " + periodFilter + " "
-                        + "ORDER BY a.start_date DESC, a.institution_code ASC";
-                commissions = jdbcTemplate.queryForList(SQL, periodParams);
-                SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
-                        + "FROM ajiswitch_db.tbl_commission_paid "
-                        + "WHERE " + periodFilterAgg;
-
-                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, periodParams);
-                Map<String, Object> row = agg.get(0);
-                BigDecimal tValue = (BigDecimal) row.get("totalValue");
-                Double totalValue = tValue != null ? tValue.doubleValue() : 0;
-                Long tRecords = (Long) row.get("totalRecords");
-                int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-                String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + "}";
-                networkResponse.setMeta(meta);
+                        + "GROUP BY TRIM(a.institution_code) "
+                        + "ORDER BY institution_name ASC, institution_code ASC";
+                commissions = jdbcTemplate.queryForList(SQL, endDate, startDate);
             } else {
-                SQL = "SELECT a.*, b.institution_name "
-                        + "FROM ajiswitch_db.tbl_commission_paid a "
-                        + "LEFT JOIN ajiswitch_db.tbl_nodes b "
-                        + "ON a.institution_code = b.institution_code "
-                        + "WHERE a.institution_code = ? AND " + periodFilter + " "
-                        + "ORDER BY a.start_date DESC, a.institution_code ASC";
-                commissions = jdbcTemplate.queryForList(SQL, new Object[]{
-                    institutionCode, endDate, startDate
-                });
-                SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
-                        + "FROM ajiswitch_db.tbl_commission_paid "
-                        + "WHERE institution_code = ? AND " + periodFilterAgg;
-
-                List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{
-                    institutionCode, endDate, startDate
-                });
-                Map<String, Object> row = agg.get(0);
-                BigDecimal tValue = (BigDecimal) row.get("totalValue");
-                Double totalValue = tValue != null ? tValue.doubleValue() : 0;
-                Long tRecords = (Long) row.get("totalRecords");
-                int totalRecords = tRecords != null ? tRecords.intValue() : 0;
-                String meta = "{\"totalValue\": " + totalValue + ", \"totalRecords\": " + totalRecords + "}";
-                networkResponse.setMeta(meta);
+                String SQL = selectAgg
+                        + "WHERE TRIM(a.institution_code) = ? AND " + periodFilter + " "
+                        + "GROUP BY TRIM(a.institution_code) "
+                        + "ORDER BY institution_name ASC, institution_code ASC";
+                commissions = jdbcTemplate.queryForList(SQL, institutionCode.trim(), endDate, startDate);
             }
 
+            double totalValue = 0d;
+            for (Map<String, Object> row : commissions) {
+                if (row == null) {
+                    continue;
+                }
+                if (row.get("total_commission") != null) {
+                    totalValue += decimalOrZero(row.get("total_commission")).doubleValue();
+                } else if (row.get("commission") != null) {
+                    totalValue += decimalOrZero(row.get("commission")).doubleValue();
+                }
+            }
+            String meta = "{\"totalValue\": " + totalValue
+                    + ", \"totalRecords\": " + commissions.size() + "}";
+            networkResponse.setMeta(meta);
             networkResponse.setCode(200);
             networkResponse.setStatus("success");
             networkResponse.setMessage("All commission");
