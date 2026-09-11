@@ -5955,6 +5955,23 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
+            // FE sends half-open [start, end); DATEDIFF equals inclusive calendar days selected.
+            // Weekly batches only — ranges shorter than 7 days return nothing.
+            Integer rangeDays = jdbcTemplate.queryForObject(
+                    "SELECT DATEDIFF(?, ?)",
+                    Integer.class,
+                    endDate,
+                    startDate
+            );
+            if (rangeDays == null || rangeDays < 7) {
+                networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0}");
+                networkResponse.setCode(200);
+                networkResponse.setStatus("success");
+                networkResponse.setMessage("Date range must be at least 7 days");
+                networkResponse.setData(new ArrayList());
+                return responseManager.ResponseOk(networkResponse);
+            }
+
             // Filter by settlement-window overlap. Ignore absurd legacy rows (e.g. start_date
             // 2000-01-01 → today from an "All time" Generate) which would match every picker range.
             // Return one row per institution: weekly Sun–Fri windows in the picker range are summed.
