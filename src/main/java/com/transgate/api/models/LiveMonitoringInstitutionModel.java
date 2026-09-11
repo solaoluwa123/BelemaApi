@@ -15,6 +15,10 @@ public class LiveMonitoringInstitutionModel {
     private int inflowFailure;
     private int outflowSuccess;
     private int outflowFailure;
+    private long inflowTotal;
+    private long inflowSuccessCount;
+    private long outflowTotal;
+    private long outflowSuccessCount;
 
     public String getName() {
         return name;
@@ -78,5 +82,37 @@ public class LiveMonitoringInstitutionModel {
 
     public void setOutflowFailure(int outflowFailure) {
         this.outflowFailure = outflowFailure;
+    }
+
+    public long getInflowTotal() {
+        return inflowTotal;
+    }
+
+    public void setInflowTotal(long inflowTotal) {
+        this.inflowTotal = inflowTotal;
+    }
+
+    public long getInflowSuccessCount() {
+        return inflowSuccessCount;
+    }
+
+    public void setInflowSuccessCount(long inflowSuccessCount) {
+        this.inflowSuccessCount = inflowSuccessCount;
+    }
+
+    public long getOutflowTotal() {
+        return outflowTotal;
+    }
+
+    public void setOutflowTotal(long outflowTotal) {
+        this.outflowTotal = outflowTotal;
+    }
+
+    public long getOutflowSuccessCount() {
+        return outflowSuccessCount;
+    }
+
+    public void setOutflowSuccessCount(long outflowSuccessCount) {
+        this.outflowSuccessCount = outflowSuccessCount;
     }
 }

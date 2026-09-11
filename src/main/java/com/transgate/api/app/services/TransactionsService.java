@@ -4451,9 +4451,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 int inflowSuccessPct = pct(acc.inflowSuccess, acc.inflowTotal);
                 int outflowSuccessPct = pct(acc.outflowSuccess, acc.outflowTotal);
                 model.setInflowSuccess(inflowSuccessPct);
-                model.setInflowFailure(100 - inflowSuccessPct);
+                model.setInflowFailure(acc.inflowTotal > 0 ? 100 - inflowSuccessPct : 0);
                 model.setOutflowSuccess(outflowSuccessPct);
-                model.setOutflowFailure(100 - outflowSuccessPct);
+                model.setOutflowFailure(acc.outflowTotal > 0 ? 100 - outflowSuccessPct : 0);
+                model.setInflowTotal(acc.inflowTotal);
+                model.setInflowSuccessCount(acc.inflowSuccess);
+                model.setOutflowTotal(acc.outflowTotal);
+                model.setOutflowSuccessCount(acc.outflowSuccess);
 
                 List<LiveMonitoringTimePointModel> series = new ArrayList<>();
                 for (Map.Entry<LocalDateTime, LiveMonitoringBucket> entry : acc.buckets.entrySet()) {
@@ -4462,6 +4466,10 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     point.setTime(entry.getKey().format(timeLabelFmt).toLowerCase(Locale.ENGLISH));
                     point.setInflow(pctDouble(bucket.inflowSuccess, bucket.inflowTotal));
                     point.setOutflow(pctDouble(bucket.outflowSuccess, bucket.outflowTotal));
+                    point.setInflowTotal(bucket.inflowTotal);
+                    point.setInflowSuccessCount(bucket.inflowSuccess);
+                    point.setOutflowTotal(bucket.outflowTotal);
+                    point.setOutflowSuccessCount(bucket.outflowSuccess);
                     series.add(point);
                 }
                 model.setTimeSeries(series);
