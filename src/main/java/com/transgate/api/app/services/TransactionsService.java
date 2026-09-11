@@ -6346,7 +6346,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         ZoneId lagos = ZoneId.of("Africa/Lagos");
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         LocalDate today = LocalDate.now(lagos);
-        LocalDate cutoff = today.minusMonths(4);
+        // Ops backfill through December 2025 (inclusive of weeks ending on/after 2025-12-01).
+        LocalDate cutoff = LocalDate.of(2025, 12, 1);
         LocalDate friday = today.getDayOfWeek() == DayOfWeek.FRIDAY
                 ? today
                 : today.with(TemporalAdjusters.previous(DayOfWeek.FRIDAY));
@@ -6371,7 +6372,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             logger.info("Commission backfill removed absurd rows: " + removedAbsurd);
 
             while (!friday.isBefore(cutoff)) {
-                LocalDate sunday = friday.minusDays(6);
+                // Same Sun–Fri window as GenerateWeeklyCommissionsCron (not Fri-minus-6 = Saturday).
+                LocalDate sunday = friday.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
                 String startDate = sunday.atStartOfDay().format(fmt);
                 String endDate = friday.atTime(23, 59, 59).format(fmt);
                 boolean isCurrentFallback = true;
