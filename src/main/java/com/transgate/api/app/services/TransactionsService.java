@@ -5957,17 +5957,12 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> commissions;
-            // Match rows generated in the picker window OR whose settlement start/end overlaps it
-            // (so manual Generate for a past txn week still shows after Refresh).
-            String periodFilter = "("
-                    + " (a.generation_date >= ? AND a.generation_date < ?) "
-                    + " OR (a.start_date < ? AND a.end_date >= ?) "
-                    + ")";
-            String periodFilterAgg = "("
-                    + " (generation_date >= ? AND generation_date < ?) "
-                    + " OR (start_date < ? AND end_date >= ?) "
-                    + ")";
-            Object[] periodParams = new Object[]{startDate, endDate, endDate, startDate};
+            // Filter by settlement window overlap only. generation_date is when the row
+            // was written (cron/backfill), so OR-ing it makes "Last 30 days" return every
+            // historically generated week after a bulk backfill.
+            String periodFilter = "(a.start_date < ? AND a.end_date >= ?)";
+            String periodFilterAgg = "(start_date < ? AND end_date >= ?)";
+            Object[] periodParams = new Object[]{endDate, startDate};
 
             if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
                 SQL = "SELECT a.*, b.institution_name "
@@ -5975,7 +5970,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                         + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.institution_code = b.institution_code "
                         + "WHERE " + periodFilter + " "
-                        + "ORDER BY a.generation_date DESC";
+                        + "ORDER BY a.start_date DESC, a.institution_code ASC";
                 commissions = jdbcTemplate.queryForList(SQL, periodParams);
                 SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
                         + "FROM ajiswitch_db.tbl_commission_paid "
@@ -5995,16 +5990,16 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                         + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                         + "ON a.institution_code = b.institution_code "
                         + "WHERE a.institution_code = ? AND " + periodFilter + " "
-                        + "ORDER BY a.generation_date DESC";
+                        + "ORDER BY a.start_date DESC, a.institution_code ASC";
                 commissions = jdbcTemplate.queryForList(SQL, new Object[]{
-                    institutionCode, startDate, endDate, endDate, startDate
+                    institutionCode, endDate, startDate
                 });
                 SQL = "SELECT COUNT(id) as totalRecords, SUM(commission) as totalValue "
                         + "FROM ajiswitch_db.tbl_commission_paid "
                         + "WHERE institution_code = ? AND " + periodFilterAgg;
 
                 List<Map<String, Object>> agg = jdbcTemplate.queryForList(SQL, new Object[]{
-                    institutionCode, startDate, endDate, endDate, startDate
+                    institutionCode, endDate, startDate
                 });
                 Map<String, Object> row = agg.get(0);
                 BigDecimal tValue = (BigDecimal) row.get("totalValue");
