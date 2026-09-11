@@ -5957,11 +5957,12 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         try {
             String SQL;
             List<Map<String, Object>> commissions;
-            // Filter by settlement window overlap only. generation_date is when the row
-            // was written (cron/backfill), so OR-ing it makes "Last 30 days" return every
-            // historically generated week after a bulk backfill.
-            String periodFilter = "(a.start_date < ? AND a.end_date >= ?)";
-            String periodFilterAgg = "(start_date < ? AND end_date >= ?)";
+            // Filter by settlement-window overlap. Ignore absurd legacy rows (e.g. start_date
+            // 2000-01-01 → today from an "All time" Generate) which would match every picker range.
+            String periodFilter = "(a.start_date < ? AND a.end_date >= ? "
+                    + "AND DATEDIFF(a.end_date, a.start_date) BETWEEN 0 AND 14)";
+            String periodFilterAgg = "(start_date < ? AND end_date >= ? "
+                    + "AND DATEDIFF(end_date, start_date) BETWEEN 0 AND 14)";
             Object[] periodParams = new Object[]{endDate, startDate};
 
             if (institutionCode.equals("-1") || institutionCode.equals("000013")) {
@@ -6304,6 +6305,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         ));
 
         try {
+            // Drop poisoned rows from old "All time" Generate (start_date ~2000 spanning years).
+            int removedAbsurd = jdbcTemplate.update(
+                    "DELETE FROM ajiswitch_db.tbl_commission_paid "
+                            + "WHERE DATEDIFF(end_date, start_date) > 14 OR start_date < '2020-01-01'"
+            );
+            logger.info("Commission backfill removed absurd rows: " + removedAbsurd);
+
             while (!friday.isBefore(cutoff)) {
                 LocalDate sunday = friday.minusDays(6);
                 String startDate = sunday.atStartOfDay().format(fmt);
