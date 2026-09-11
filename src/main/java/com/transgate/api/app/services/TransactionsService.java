@@ -6287,6 +6287,86 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         }
     }
 
+    @Override
+    public ResponseEntity GenerateCommissionsBackfill() {
+        ZoneId lagos = ZoneId.of("Africa/Lagos");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+        LocalDate today = LocalDate.now(lagos);
+        LocalDate cutoff = today.minusMonths(4);
+        LocalDate friday = today.getDayOfWeek() == DayOfWeek.FRIDAY
+                ? today
+                : today.with(TemporalAdjusters.previous(DayOfWeek.FRIDAY));
+
+        NetworkResponse networkResponse = new NetworkResponse();
+        List<Map<String, Object>> weekSummaries = new ArrayList<>();
+        int weeksProcessed = 0;
+        int totalRows = 0;
+
+        logger.info(String.format(
+                "Commission backfill starting - cutoff=%s through friday=%s (Africa/Lagos)",
+                cutoff,
+                friday
+        ));
+
+        try {
+            while (!friday.isBefore(cutoff)) {
+                LocalDate sunday = friday.minusDays(6);
+                String startDate = sunday.atStartOfDay().format(fmt);
+                String endDate = friday.atTime(23, 59, 59).format(fmt);
+                boolean isCurrentFallback = true;
+
+                logger.info(String.format(
+                        "Commission backfill week %d - window=%s to %s",
+                        weeksProcessed + 1,
+                        startDate,
+                        endDate
+                ));
+
+                ResponseEntity response = GenerateCommissions("-1", startDate, endDate, isCurrentFallback);
+                Object body = response != null ? response.getBody() : null;
+                int rowCount = 0;
+                String message = "";
+                if (body instanceof NetworkResponse) {
+                    NetworkResponse nr = (NetworkResponse) body;
+                    ArrayList data = nr.getData();
+                    rowCount = data != null ? data.size() : 0;
+                    message = nr.getMessage() != null ? nr.getMessage() : "";
+                }
+
+                Map<String, Object> weekOut = new LinkedHashMap<>();
+                weekOut.put("startDate", startDate);
+                weekOut.put("endDate", endDate);
+                weekOut.put("rowsInserted", rowCount);
+                weekOut.put("message", message);
+                weekSummaries.add(weekOut);
+                weeksProcessed++;
+                totalRows += rowCount;
+
+                friday = friday.minusWeeks(1);
+            }
+
+            networkResponse.setCode(200);
+            networkResponse.setStatus("success");
+            networkResponse.setMessage("Commission backfill completed");
+            networkResponse.setData((ArrayList) weekSummaries);
+            networkResponse.setMeta(
+                    "{\"weeksProcessed\":" + weeksProcessed
+                            + ",\"totalRows\":" + totalRows
+                            + ",\"cutoff\":\"" + cutoff + "\"}"
+            );
+            logger.info(String.format(
+                    "Commission backfill finished - weeks=%d totalRows=%d",
+                    weeksProcessed,
+                    totalRows
+            ));
+            return responseManager.ResponseOk(networkResponse);
+        } catch (Exception ex) {
+            logger.info("Commission backfill failed: " + ex.getMessage());
+            ex.printStackTrace();
+            return responseManager.ResponseInternalServerError();
+        }
+    }
+
 //
 //        try {
 //            int userrole = GetUserRole(username, sessiontoken);

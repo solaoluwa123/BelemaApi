@@ -129,5 +129,8 @@ public class TransgateApi //extends SpringBootServletInitializer
     public void generateWeeklyCommissions() {
         executeGet("app/crons/generate-commissions");
     }
+
+    // One-time historical backfill (last 4 months): GET /app/crons/backfill-commissions
+    // Not scheduled — invoke manually after deploy, then rely on generateWeeklyCommissions only.
     
 }

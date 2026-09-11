@@ -1170,6 +1170,12 @@ public class TransactionsController {
         return transactionsInterface.GenerateWeeklyCommissionsCron();
     }
 
+    /** One-time ops: backfill Sun–Fri commission weeks for the last 4 months (Africa/Lagos). */
+    @RequestMapping(value = "/app/crons/backfill-commissions", method = RequestMethod.GET, headers = "Accept=application/json")
+    public ResponseEntity GenerateCommissionsBackfill() {
+        return transactionsInterface.GenerateCommissionsBackfill();
+    }
+
     @RequestMapping(value = "/timeoutretries-by-date", method = RequestMethod.GET, headers = "Accept=application/json")
     public ResponseEntity GetTimeoutRetries(@RequestHeader(value = "Authorization") String header,
             @RequestHeader(value = "auth-token") String sessiontoken,

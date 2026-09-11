@@ -150,8 +150,11 @@ public interface TransactionsInterface {
     /** Count successful txns, apply tbl_charges, upsert into tbl_commission_paid. */
     public ResponseEntity GenerateCommissions(String institutionCode, String startDate, String endDate, boolean isCurrent);
 
-    /** Weekly cron: Sun–Fri Africa/Lagos window, one GenerateCommissions call per tbl_charges institution. */
+    /** Weekly cron: Sun–Fri Africa/Lagos window, all source FIs with successful txns. */
     public ResponseEntity GenerateWeeklyCommissionsCron();
+
+    /** One-time ops cron: generate commissions for each Sun–Fri week in the last 4 months. */
+    public ResponseEntity GenerateCommissionsBackfill();
     
     public ResponseEntity GetTimeoutRetries(String startDate, String endDate, int page, int limit);
     
