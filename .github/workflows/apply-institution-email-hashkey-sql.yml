@@ -1,0 +1,32 @@
+name: Apply institution email/hashkey SQL
+
+# Manual only. Adds email columns + unique indexes for institution email and hashkey.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  apply-sql:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Apply SQL on Belema
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+        run: |
+          set -euo pipefail
+          scp -o StrictHostKeyChecking=no \
+            scripts/sql/add-institution-email-and-unique-hashkey.sql \
+            "$BELEMA_USER@$BELEMA_HOST:/tmp/add-institution-email-and-unique-hashkey.sql"
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" \
+            "mysql -u ajipay -p'Admin12+' < /tmp/add-institution-email-and-unique-hashkey.sql && echo OK"

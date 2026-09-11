@@ -12,7 +12,7 @@ package com.transgate.api.models;
 public class FinancialInstitutionModel {
     int id, businessType, port_number, isProcessTSQ;
     String name, shortName, code, color, business_address, date_created, businessTypeName, created_by, actionType, note, status, date_updated;
-    String publickeylocation, cbn_bank_account, switch_code, publickeylocationLinux, password, hashKey;
+    String publickeylocation, cbn_bank_account, switch_code, publickeylocationLinux, password, hashKey, email;
     float vat, charge_amount;
     
     public int getId() {
@@ -197,6 +197,14 @@ public class FinancialInstitutionModel {
 
     public void setHashKey(String hashKey) {
         this.hashKey = hashKey;
+    }
+
+    public String getEmail() {
+        return email;
+    }
+
+    public void setEmail(String email) {
+        this.email = email;
     }
 
     public int getIsProcessTSQ() {
