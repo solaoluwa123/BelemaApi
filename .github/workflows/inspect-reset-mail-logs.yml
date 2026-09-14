@@ -1,0 +1,41 @@
+name: Inspect reset-mail logs
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Prepare SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.BELEMA_SSH_KEY }}
+
+      - name: Grep API logs for password-reset / SMTP
+        env:
+          BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
+          BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+        run: |
+          set -euo pipefail
+          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" 'set -euo pipefail
+            echo "=== log files ==="
+            ls -lt /home/*/supersoft/belemaApi/run/*.log 2>/dev/null || true
+            ls -lt /home/*/supersoft/belemaApi/logs 2>/dev/null || true
+            echo
+            echo "=== recent recoverpassword / mail lines ==="
+            grep -nEi "recoverpassword|password recovery|SendPasswordRecovery|reset your belema|supersoft mail|smtp|MessagingException|Mail error|mail sent|mail failed|javax.mail" \
+              /home/*/supersoft/belemaApi/run/*.log \
+              /home/*/supersoft/belemaApi/logs/*.log \
+              2>/dev/null | tail -n 200 || true
+            echo
+            echo "=== last 120 API log lines ==="
+            for f in /home/*/supersoft/belemaApi/run/*.log; do
+              [ -f "$f" ] || continue
+              echo "----- $f -----"
+              tail -n 120 "$f"
+            done
+          '
