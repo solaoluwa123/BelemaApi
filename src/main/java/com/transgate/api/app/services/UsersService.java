@@ -32,6 +32,7 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,6 +64,10 @@ public class UsersService implements UsersInterface {
 
     @Autowired
     private SupersoftMailer supersoftMailer;
+
+    @Autowired
+    @Qualifier("mailExecutor")
+    private Executor mailExecutor;
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
@@ -158,7 +163,10 @@ public class UsersService implements UsersInterface {
                     + "<p style=\"word-break:break-all;\"><a href=\"" + resetUrl + "\">" + resetUrl + "</a></p>"
                     + "<p>This link expires once used. If you did not request this, ignore this email.</p>"
                     + "</body></html>";
+            long started = System.currentTimeMillis();
             boolean sent = supersoftMailer.sendHtmlMail(toEmail, "Reset your Belema password", html);
+            logger.info("Password recovery email to {} sent={} in {}ms",
+                    toEmail, sent, System.currentTimeMillis() - started);
             if (!sent) {
                 logger.warn("Password recovery email was not accepted by SMTP for {}", toEmail);
             }
@@ -1222,7 +1230,8 @@ public class UsersService implements UsersInterface {
             String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
             SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
             jdbcTemplate.update(SQL, new Object[]{ref, code, accountEmail});
-            sendPasswordRecoveryEmail(accountEmail, ref, code);
+            logger.info("Password recovery token stored for {}; queueing reset email", accountEmail);
+            mailExecutor.execute(() -> sendPasswordRecoveryEmail(accountEmail, ref, code));
             response.setCode(200);
             response.setStatus("success");
             response.setMessage("If an account exists, reset instructions have been sent.");

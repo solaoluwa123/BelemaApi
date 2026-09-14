@@ -21,16 +21,16 @@ jobs:
           BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
         run: |
           set -euo pipefail
-          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" 'set -euo pipefail
+          ssh -o StrictHostKeyChecking=no -o ConnectTimeout=15 "$BELEMA_USER@$BELEMA_HOST" 'set +e
             echo "=== log files ==="
-            ls -lt /home/*/supersoft/belemaApi/run/*.log 2>/dev/null || true
-            ls -lt /home/*/supersoft/belemaApi/logs 2>/dev/null || true
+            ls -lt /home/*/supersoft/belemaApi/run/*.log 2>/dev/null
+            ls -lt /home/*/supersoft/belemaApi/logs 2>/dev/null
             echo
             echo "=== recent recoverpassword / mail lines ==="
             grep -nEi "recoverpassword|password recovery|SendPasswordRecovery|reset your belema|supersoft mail|smtp|MessagingException|Mail error|mail sent|mail failed|javax.mail" \
               /home/*/supersoft/belemaApi/run/*.log \
               /home/*/supersoft/belemaApi/logs/*.log \
-              2>/dev/null | tail -n 200 || true
+              2>/dev/null | tail -n 200
             echo
             echo "=== last 120 API log lines ==="
             for f in /home/*/supersoft/belemaApi/run/*.log; do
@@ -38,4 +38,5 @@ jobs:
               echo "----- $f -----"
               tail -n 120 "$f"
             done
+            exit 0
           '

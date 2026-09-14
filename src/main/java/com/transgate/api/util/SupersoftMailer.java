@@ -95,6 +95,10 @@ public class SupersoftMailer {
         props.put("mail.smtp.port", port);
         props.put("mail.smtp.auth", "true");
         props.put("mail.smtp.ssl.enable", "true");
+        // Bound SMTP waits so recover-password cannot hang the request (or a worker) for minutes.
+        props.put("mail.smtp.connectiontimeout", "8000");
+        props.put("mail.smtp.timeout", "12000");
+        props.put("mail.smtp.writetimeout", "12000");
         // Force TLS 1.2 — old javax.mail 1.5 + modern JDKs otherwise fail with
         // "No appropriate protocol (protocol is disabled or cipher suites are inappropriate)"
         props.put("mail.smtp.ssl.protocols", "TLSv1.2");
@@ -132,11 +136,15 @@ public class SupersoftMailer {
             message.setSubject(subject);
             message.setContent(htmlBody, "text/html; charset=utf-8");
 
+            long started = System.currentTimeMillis();
             Transport.send(message);
-            logger.info("Supersoft mail sent to " + toEmail);
+            logger.info("Supersoft mail sent to " + toEmail
+                    + " via " + host + ":" + port
+                    + " in " + (System.currentTimeMillis() - started) + "ms");
             return true;
         } catch (MessagingException e) {
-            logger.log(Level.SEVERE, "Supersoft mail error for " + toEmail + ": " + e.getMessage(), e);
+            logger.log(Level.SEVERE, "Supersoft mail error for " + toEmail
+                    + " via " + host + ":" + port + ": " + e.getMessage(), e);
             return false;
         }
     }
