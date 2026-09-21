@@ -80,18 +80,41 @@ jobs:
         run: |
           set -euo pipefail
           DATE_TAG="$(date +%Y%m%d_%H%M%S)"
+          # Host can sleep after inactivity; retry connect and keep the session alive.
+          SSH_OPTS=(
+            -o StrictHostKeyChecking=no
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=8
+            -o TCPKeepAlive=yes
+          )
+
+          echo "Waiting for SSH (host may be waking from idle)..."
+          ok=0
+          for i in $(seq 1 12); do
+            if ssh "${SSH_OPTS[@]}" "$BELEMA_USER@$BELEMA_HOST" "echo ssh_ok"; then
+              ok=1
+              break
+            fi
+            echo "SSH attempt $i failed; retrying in 20s..."
+            sleep 20
+          done
+          if [ "$ok" != 1 ]; then
+            echo "SSH still unreachable after retries"
+            exit 1
+          fi
 
           BACKEND_JAR="target/sparkpayapi.jar"
           FRONTEND_WAR="belema_frontend/spring-wrapper/target/spring-wrapper-0.0.1-SNAPSHOT.war"
 
-          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "set -e
+          ssh "${SSH_OPTS[@]}" "$BELEMA_USER@$BELEMA_HOST" "set -e
             cp -f /home/${BELEMA_USER}/supersoft/belemaApi/releases/sparkpayapi.jar \
                   /home/${BELEMA_USER}/supersoft/belemaApi/releases/sparkpayapi.jar.bak.${DATE_TAG} || true
             cp -f /home/${BELEMA_USER}/supersoft/belema_frontend/releases/belema_frontend.war \
                   /home/${BELEMA_USER}/supersoft/belema_frontend/releases/belema_frontend.war.bak.${DATE_TAG} || true"
 
-          scp -o StrictHostKeyChecking=no "$BACKEND_JAR" "$BELEMA_USER@$BELEMA_HOST:/home/${BELEMA_USER}/supersoft/belemaApi/releases/sparkpayapi.jar"
-          scp -o StrictHostKeyChecking=no "$FRONTEND_WAR" "$BELEMA_USER@$BELEMA_HOST:/home/${BELEMA_USER}/supersoft/belema_frontend/releases/belema_frontend.war"
+          scp "${SSH_OPTS[@]}" "$BACKEND_JAR" "$BELEMA_USER@$BELEMA_HOST:/home/${BELEMA_USER}/supersoft/belemaApi/releases/sparkpayapi.jar"
+          scp "${SSH_OPTS[@]}" "$FRONTEND_WAR" "$BELEMA_USER@$BELEMA_HOST:/home/${BELEMA_USER}/supersoft/belema_frontend/releases/belema_frontend.war"
 
       - name: Restart Belema services
         env:
@@ -99,7 +122,14 @@ jobs:
           BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
         run: |
           set -euo pipefail
-          ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" "set -e
+          SSH_OPTS=(
+            -o StrictHostKeyChecking=no
+            -o ConnectTimeout=30
+            -o ServerAliveInterval=15
+            -o ServerAliveCountMax=8
+            -o TCPKeepAlive=yes
+          )
+          ssh "${SSH_OPTS[@]}" "$BELEMA_USER@$BELEMA_HOST" "set -e
             kill_port() {
               port=\"\$1\"
               for p in \$(ss -lntp 2>/dev/null | awk -v p=\":\$port\" '\$0 ~ p {print}' | grep -o 'pid=[0-9]*' | cut -d= -f2 | sort -u || true); do
