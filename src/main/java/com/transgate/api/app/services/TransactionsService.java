@@ -6220,7 +6220,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     + "is_income_acct_credited, paid_date, session_id, report_location"
                     + ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW(), 0, NULL, ?, NULL)";
 
-            List<Map<String, Object>> generated = new ArrayList<>();
+            final List<Map<String, Object>> inserted = new ArrayList<>();
             double totalCommissionSum = 0d;
             int sourceInstitutionsCounted = volumeByCode.size();
             int alreadyPresent = 0;
@@ -6311,14 +6311,15 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     out.put("paid_date", null);
                     out.put("session_id", "");
                     out.put("report_location", null);
-                    generated.add(out);
+                    inserted.add(out);
                 }
             });
 
-            int rowsInserted = generated.size();
+            int rowsInserted = inserted.size();
+            List<Map<String, Object>> generated = inserted;
 
             // Enrich with institution names for the response (same join as GetCommissions).
-            if (!generated.isEmpty()) {
+            if (!inserted.isEmpty()) {
                 String enrichSql = "SELECT a.*, b.institution_name "
                         + "FROM ajiswitch_db.tbl_commission_paid a "
                         + "LEFT JOIN ajiswitch_db.tbl_nodes b ON TRIM(a.institution_code) = TRIM(b.institution_code) "
