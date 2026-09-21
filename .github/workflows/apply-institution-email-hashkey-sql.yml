@@ -1,6 +1,7 @@
 name: Apply institution email/hashkey SQL
 
 # Manual only. Adds email columns + unique indexes for institution email and hashkey.
+# Requires repo secrets BELEMA_MYSQL_USER and BELEMA_MYSQL_PASSWORD.
 on:
   workflow_dispatch:
 
@@ -23,10 +24,12 @@ jobs:
         env:
           BELEMA_HOST: ${{ secrets.BELEMA_SSH_HOST }}
           BELEMA_USER: ${{ secrets.BELEMA_SSH_USER }}
+          MYSQL_USER: ${{ secrets.BELEMA_MYSQL_USER }}
+          MYSQL_PASSWORD: ${{ secrets.BELEMA_MYSQL_PASSWORD }}
         run: |
           set -euo pipefail
           scp -o StrictHostKeyChecking=no \
             scripts/sql/add-institution-email-and-unique-hashkey.sql \
             "$BELEMA_USER@$BELEMA_HOST:/tmp/add-institution-email-and-unique-hashkey.sql"
           ssh -o StrictHostKeyChecking=no "$BELEMA_USER@$BELEMA_HOST" \
-            "mysql -u ajipay -p'Admin12+' < /tmp/add-institution-email-and-unique-hashkey.sql && echo OK"
+            "mysql -u '$MYSQL_USER' -p'$MYSQL_PASSWORD' < /tmp/add-institution-email-and-unique-hashkey.sql && echo OK"

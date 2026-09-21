@@ -41,6 +41,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -61,7 +62,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  *
@@ -80,6 +83,9 @@ public class TransactionsService implements TransactionsInterface {
     @Autowired
     @Qualifier("secondJdbcTemplate")
     private JdbcTemplate secondJdbcTemplate;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     ResponseManager responseManager = new ResponseManager();
     DateUtil dateUtil = new DateUtil();
@@ -6073,6 +6079,32 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         return byCode;
     }
 
+    private Set<String> loadExistingCommissionInstitutionCodes(
+            String startDate,
+            String endDate,
+            boolean allInstitutions,
+            String institutionCode
+    ) {
+        String sql = "SELECT TRIM(institution_code) AS institution_code "
+                + "FROM ajiswitch_db.tbl_commission_paid "
+                + "WHERE start_date = ? AND end_date = ? "
+                + (allInstitutions ? "" : "AND TRIM(institution_code) = ?");
+        Object[] params = allInstitutions
+                ? new Object[]{startDate, endDate}
+                : new Object[]{startDate, endDate, institutionCode.trim()};
+        Set<String> codes = new HashSet<>();
+        for (Map<String, Object> row : jdbcTemplate.queryForList(sql, params)) {
+            if (row == null || row.get("institution_code") == null) {
+                continue;
+            }
+            String code = String.valueOf(row.get("institution_code")).trim();
+            if (!code.isEmpty()) {
+                codes.add(code);
+            }
+        }
+        return codes;
+    }
+
     private BigDecimal toMoney(BigDecimal value) {
         if (value == null) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -6107,38 +6139,22 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         NetworkResponse networkResponse = new NetworkResponse();
         try {
             boolean allInstitutions = isAllInstitutionsCommissionCode(institutionCode);
+            Set<String> existingCodes = loadExistingCommissionInstitutionCodes(
+                    startDate, endDate, allInstitutions, institutionCode
+            );
 
-            // Idempotent: never regenerate a settlement window that already has rows.
-            Integer existingCount;
-            if (allInstitutions) {
-                existingCount = jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM ajiswitch_db.tbl_commission_paid "
-                                + "WHERE start_date = ? AND end_date = ?",
-                        Integer.class,
-                        startDate,
-                        endDate
-                );
-            } else {
-                existingCount = jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM ajiswitch_db.tbl_commission_paid "
-                                + "WHERE institution_code = ? AND start_date = ? AND end_date = ?",
-                        Integer.class,
-                        institutionCode.trim(),
-                        startDate,
-                        endDate
-                );
-            }
-            if (existingCount != null && existingCount > 0) {
+            // Single-FI: never regenerate a row that already exists for this window.
+            // All-FI: only skip institutions that already have a row; insert the rest.
+            if (!allInstitutions && !existingCodes.isEmpty()) {
                 String enrichSql = "SELECT a.*, b.institution_name "
                         + "FROM ajiswitch_db.tbl_commission_paid a "
                         + "LEFT JOIN ajiswitch_db.tbl_nodes b ON TRIM(a.institution_code) = TRIM(b.institution_code) "
                         + "WHERE a.start_date = ? AND a.end_date = ? "
-                        + (allInstitutions ? "" : "AND TRIM(a.institution_code) = ? ")
+                        + "AND TRIM(a.institution_code) = ? "
                         + "ORDER BY a.institution_code ASC";
-                Object[] enrichParams = allInstitutions
-                        ? new Object[]{startDate, endDate}
-                        : new Object[]{startDate, endDate, institutionCode.trim()};
-                List<Map<String, Object>> existing = jdbcTemplate.queryForList(enrichSql, enrichParams);
+                List<Map<String, Object>> existing = jdbcTemplate.queryForList(
+                        enrichSql, startDate, endDate, institutionCode.trim()
+                );
                 double totalCommissionSum = 0d;
                 for (Map<String, Object> g : existing) {
                     if (g != null && g.get("total_commission") != null) {
@@ -6160,7 +6176,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                         "GenerateCommissions skipped existing window start=%s end=%s institution=%s rows=%d",
                         startDate,
                         endDate,
-                        allInstitutions ? "-1" : institutionCode.trim(),
+                        institutionCode.trim(),
                         existing.size()
                 ));
                 return responseManager.ResponseOk(networkResponse);
@@ -6207,54 +6223,97 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             List<Map<String, Object>> generated = new ArrayList<>();
             double totalCommissionSum = 0d;
             int sourceInstitutionsCounted = volumeByCode.size();
-
-            for (Map.Entry<String, Long> entry : volumeByCode.entrySet()) {
-                String code = entry.getKey();
-                long totalCount = entry.getValue() != null ? entry.getValue() : 0L;
-                if (totalCount <= 0) {
-                    continue;
+            int alreadyPresent = 0;
+            for (String code : volumeByCode.keySet()) {
+                if (existingCodes.contains(code)) {
+                    alreadyPresent++;
                 }
-
-                Map<String, Object> chargeRow = chargesByCode.get(code);
-                BigDecimal chargeAmount = toMoney(decimalOrZero(chargeRow != null ? chargeRow.get("charge_amount") : null));
-                BigDecimal vatPercent = decimalOrZero(chargeRow != null ? chargeRow.get("vat") : null);
-                BigDecimal countBd = BigDecimal.valueOf(totalCount);
-
-                BigDecimal commission = toMoney(chargeAmount.multiply(countBd));
-                BigDecimal totalVat = toMoney(
-                        vatPercent.divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP).multiply(countBd)
-                );
-                BigDecimal totalCommission = toMoney(commission.add(totalVat));
-
-                jdbcTemplate.update(
-                        insertSql,
-                        code,
-                        totalCount,
+            }
+            if (allInstitutions && alreadyPresent > 0 && alreadyPresent == sourceInstitutionsCounted) {
+                String enrichSql = "SELECT a.*, b.institution_name "
+                        + "FROM ajiswitch_db.tbl_commission_paid a "
+                        + "LEFT JOIN ajiswitch_db.tbl_nodes b ON TRIM(a.institution_code) = TRIM(b.institution_code) "
+                        + "WHERE a.start_date = ? AND a.end_date = ? "
+                        + "ORDER BY a.institution_code ASC";
+                List<Map<String, Object>> existing = jdbcTemplate.queryForList(enrichSql, startDate, endDate);
+                for (Map<String, Object> g : existing) {
+                    if (g != null && g.get("total_commission") != null) {
+                        totalCommissionSum += decimalOrZero(g.get("total_commission")).doubleValue();
+                    } else if (g != null && g.get("commission") != null) {
+                        totalCommissionSum += decimalOrZero(g.get("commission")).doubleValue();
+                    }
+                }
+                String meta = "{\"totalValue\": " + totalCommissionSum
+                        + ", \"totalRecords\": " + existing.size()
+                        + ", \"rowsInserted\": 0"
+                        + ", \"skipped\": true}";
+                networkResponse.setMeta(meta);
+                networkResponse.setCode(200);
+                networkResponse.setStatus("success");
+                networkResponse.setMessage("Commissions already generated for this period");
+                networkResponse.setData((ArrayList) existing);
+                logger.info(String.format(
+                        "GenerateCommissions skipped existing window start=%s end=%s institution=-1 rows=%d",
                         startDate,
                         endDate,
-                        chargeAmount,
-                        commission,
-                        totalVat,
-                        totalCommission,
-                        ""
-                );
-
-                Map<String, Object> out = new LinkedHashMap<>();
-                out.put("institution_code", code);
-                out.put("total_count", totalCount);
-                out.put("start_date", startDate);
-                out.put("end_date", endDate);
-                out.put("charge_amount", chargeAmount);
-                out.put("commission", commission);
-                out.put("total_vat", totalVat);
-                out.put("total_commission", totalCommission);
-                out.put("is_income_acct_credited", 0);
-                out.put("paid_date", null);
-                out.put("session_id", "");
-                out.put("report_location", null);
-                generated.add(out);
-                totalCommissionSum += totalCommission.doubleValue();
+                        existing.size()
+                ));
+                return responseManager.ResponseOk(networkResponse);
             }
+
+            TransactionTemplate tx = new TransactionTemplate(transactionManager);
+            tx.executeWithoutResult(status -> {
+                for (Map.Entry<String, Long> entry : volumeByCode.entrySet()) {
+                    String code = entry.getKey();
+                    if (existingCodes.contains(code)) {
+                        continue;
+                    }
+                    long totalCount = entry.getValue() != null ? entry.getValue() : 0L;
+                    if (totalCount <= 0) {
+                        continue;
+                    }
+
+                    Map<String, Object> chargeRow = chargesByCode.get(code);
+                    BigDecimal chargeAmount = toMoney(decimalOrZero(chargeRow != null ? chargeRow.get("charge_amount") : null));
+                    BigDecimal vatPercent = decimalOrZero(chargeRow != null ? chargeRow.get("vat") : null);
+                    BigDecimal countBd = BigDecimal.valueOf(totalCount);
+
+                    // vat is per txn (not % of commission): total_vat = (vat / 100) * totalCount
+                    BigDecimal commission = toMoney(chargeAmount.multiply(countBd));
+                    BigDecimal totalVat = toMoney(
+                            vatPercent.divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP).multiply(countBd)
+                    );
+                    BigDecimal totalCommission = toMoney(commission.add(totalVat));
+
+                    jdbcTemplate.update(
+                            insertSql,
+                            code,
+                            totalCount,
+                            startDate,
+                            endDate,
+                            chargeAmount,
+                            commission,
+                            totalVat,
+                            totalCommission,
+                            ""
+                    );
+
+                    Map<String, Object> out = new LinkedHashMap<>();
+                    out.put("institution_code", code);
+                    out.put("total_count", totalCount);
+                    out.put("start_date", startDate);
+                    out.put("end_date", endDate);
+                    out.put("charge_amount", chargeAmount);
+                    out.put("commission", commission);
+                    out.put("total_vat", totalVat);
+                    out.put("total_commission", totalCommission);
+                    out.put("is_income_acct_credited", 0);
+                    out.put("paid_date", null);
+                    out.put("session_id", "");
+                    out.put("report_location", null);
+                    generated.add(out);
+                }
+            });
 
             int rowsInserted = generated.size();
 
@@ -6302,7 +6361,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         ZoneId lagos = ZoneId.of("Africa/Lagos");
         DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
         ZonedDateTime now = ZonedDateTime.now(lagos);
-        LocalDate friday = now.toLocalDate();
+        // previous(FRIDAY) never returns today, so a Friday call cannot close an in-progress week.
+        LocalDate friday = now.toLocalDate().with(TemporalAdjusters.previous(DayOfWeek.FRIDAY));
         LocalDate sunday = friday.with(TemporalAdjusters.previousOrSame(DayOfWeek.SUNDAY));
         String startDate = sunday.atStartOfDay().format(fmt);
         String endDate = friday.atTime(23, 59, 59).format(fmt);

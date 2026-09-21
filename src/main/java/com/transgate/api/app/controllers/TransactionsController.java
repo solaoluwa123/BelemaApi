@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.transgate.api.interfaces.TransactionsInterface;
 import com.transgate.api.models.DisputeModel;
+import com.transgate.api.util.PlatformRole;
 import com.transgate.api.util.ResponseManager;
 import com.transgate.api.util.SessionActorResolver;
 import com.transgate.api.app.services.Validators;
@@ -1176,9 +1177,19 @@ public class TransactionsController {
         return transactionsInterface.GenerateCommissionsBackfill();
     }
 
-    /** Ops: empty tbl_commission_paid. */
-    @RequestMapping(value = "/app/crons/truncate-commission-paid", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity TruncateCommissionPaid() {
+    /** Ops: empty tbl_commission_paid. Requires API key + session; platform operators only. */
+    @RequestMapping(value = "/app/crons/truncate-commission-paid", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity TruncateCommissionPaid(
+            @RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        Optional<SessionActorResolver.Actor> actorOpt = sessionActorResolver.resolve(sessiontoken);
+        if (actorOpt.isEmpty() || !PlatformRole.isSystemUserRole(actorOpt.get().role())) {
+            return responseManager.ResponseForbidden(
+                    "Only platform operators can truncate commission records.");
+        }
         return transactionsInterface.TruncateCommissionPaid();
     }
 

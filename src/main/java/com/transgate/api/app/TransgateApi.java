@@ -124,8 +124,8 @@ public class TransgateApi //extends SpringBootServletInitializer
         executeGet("app/crons/senddisputesreminders");
     }
 
-    /** Friday 11:30pm Africa/Lagos — generate commissions per institution for Sun–Fri week. */
-    @Scheduled(cron = "0 30 23 * * FRI", zone = "Africa/Lagos")
+    /** Saturday 00:05 Africa/Lagos — generate commissions for the Sun–Fri week that just closed. */
+    @Scheduled(cron = "0 5 0 * * SAT", zone = "Africa/Lagos")
     public void generateWeeklyCommissions() {
         executeGet("app/crons/generate-commissions");
     }

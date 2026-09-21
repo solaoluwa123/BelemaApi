@@ -52,7 +52,6 @@ public class AuthTokenInterceptor implements HandlerInterceptor {
         "/sparkpayapi/app/crons/autopassarbitrateddisputesforsettlement",
         "/sparkpayapi/app/crons/generate-commissions",
         "/sparkpayapi/app/crons/backfill-commissions",
-        "/sparkpayapi/app/crons/truncate-commission-paid",
         "/sparkpayapi/users/crons/reducelocktime",
         "/sparkpayapi/users/crons/unlock",
         "/sparkpayapi/app/crons/cards/disputes/update-nuban",
