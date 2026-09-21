@@ -78,13 +78,13 @@ public class LiveTransactionStreamHub {
                     newest = row.getTransactiondate();
                 }
             }
-            if (!newest.isEmpty()) {
-                globalSince = newest;
-            }
 
             // First poll after startup (or empty cursor): establish baseline only — do not replay
             // the latest N rows as live events or the dashboard double-counts them (+100, etc.).
             if (initialCatchUp) {
+                if (!newest.isEmpty()) {
+                    globalSince = newest;
+                }
                 return;
             }
 
@@ -102,8 +102,34 @@ public class LiveTransactionStreamHub {
                     broadcastMetricsDelta(scope, bucket);
                 }
             }
+
+            // Advance cursor only after a successful broadcast pass so a dead subscriber
+            // cannot swallow rows (reload-only symptom).
+            if (!newest.isEmpty()) {
+                globalSince = newest;
+            }
         } catch (Exception ex) {
             logger.log(Level.INFO, "Live stream poll failed: " + ex.getMessage());
+        }
+    }
+
+    /** Keep SSE connections alive through nginx (default proxy_read_timeout is often 60–120s). */
+    @Scheduled(fixedDelay = 15000)
+    public void heartbeat() {
+        if (subscribers.isEmpty()) {
+            return;
+        }
+        for (StreamSubscriber subscriber : subscribers) {
+            try {
+                subscriber.emitter.send(SseEmitter.event().comment("keepalive"));
+            } catch (Exception ex) {
+                subscribers.remove(subscriber);
+                try {
+                    subscriber.emitter.completeWithError(ex);
+                } catch (Exception ignored) {
+                    // already dead
+                }
+            }
         }
     }
 
@@ -136,9 +162,15 @@ public class LiveTransactionStreamHub {
             subscriber.emitter.send(SseEmitter.event()
                     .name(eventName)
                     .data(objectMapper.writeValueAsString(payload)));
-        } catch (IOException ex) {
+        } catch (Exception ex) {
+            // Tomcat may throw IllegalStateException (AsyncContext) after the client/nginx
+            // dropped the stream — must not abort the whole poll batch.
             subscribers.remove(subscriber);
-            subscriber.emitter.completeWithError(ex);
+            try {
+                subscriber.emitter.completeWithError(ex);
+            } catch (Exception ignored) {
+                // already dead
+            }
         }
     }
 
