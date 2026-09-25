@@ -93,7 +93,6 @@ public class TransactionsService implements TransactionsInterface {
     DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyyMMddHHmmssSSS");
     private static final DateTimeFormatter DTF = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
 
-
     private final AppEnvironmentConfig appConfig;
 
     public TransactionsService(AppEnvironmentConfig appConfig) {
@@ -5969,27 +5968,25 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     public ResponseEntity GetCommissions(String institutionCode, String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
-            // FE sends half-open [start, end); DATEDIFF equals inclusive calendar days selected.
-            // Weekly batches only — ranges shorter than 7 days return nothing.
+            // Sun–Fri week is 5 calendar days. Accept that, and also a half-open 7-day picker.
             Integer rangeDays = jdbcTemplate.queryForObject(
                     "SELECT DATEDIFF(?, ?)",
                     Integer.class,
                     endDate,
                     startDate
             );
-            if (rangeDays == null || rangeDays < 7) {
+            if (rangeDays == null || rangeDays < 5) {
                 networkResponse.setMeta("{\"totalValue\": 0, \"totalRecords\": 0}");
                 networkResponse.setCode(200);
                 networkResponse.setStatus("success");
-                networkResponse.setMessage("Date range must be at least 7 days");
+                networkResponse.setMessage("Date range must cover at least one Sun-Fri week");
                 networkResponse.setData(new ArrayList());
                 return responseManager.ResponseOk(networkResponse);
             }
 
-            // Include a weekly batch only if its full Sun–Fri window sits inside the picker
-            // (half-open [startDate, endDate)). Ignore absurd multi-year legacy rows.
-            // One row per institution: sum those fully contained weeks.
-            String periodFilter = "(a.start_date >= ? AND a.end_date < ? "
+            // Include a weekly batch if its Sun–Fri window sits inside the picker.
+            // Inclusive end so Friday 23:59:59 is kept when the picker ends on that timestamp.
+            String periodFilter = "(a.start_date >= ? AND a.end_date <= ? "
                     + "AND DATEDIFF(a.end_date, a.start_date) BETWEEN 0 AND 14)";
             String selectAgg = "SELECT TRIM(a.institution_code) AS institution_code, "
                     + "MAX(b.institution_name) AS institution_name, "
@@ -6274,8 +6271,11 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     }
 
                     Map<String, Object> chargeRow = chargesByCode.get(code);
-                    BigDecimal chargeAmount = toMoney(decimalOrZero(chargeRow != null ? chargeRow.get("charge_amount") : null));
-                    BigDecimal vatPercent = decimalOrZero(chargeRow != null ? chargeRow.get("vat") : null);
+                    if (chargeRow == null) {
+                        continue;
+                    }
+                    BigDecimal chargeAmount = toMoney(decimalOrZero(chargeRow.get("charge_amount")));
+                    BigDecimal vatPercent = decimalOrZero(chargeRow.get("vat"));
                     BigDecimal countBd = BigDecimal.valueOf(totalCount);
 
                     // vat is per txn (not % of commission): total_vat = (vat / 100) * totalCount
@@ -6417,9 +6417,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
         LocalDate today = LocalDate.now(lagos);
         // Ops backfill through December 2025 (inclusive of weeks ending on/after 2025-12-01).
         LocalDate cutoff = LocalDate.of(2025, 12, 1);
-        LocalDate friday = today.getDayOfWeek() == DayOfWeek.FRIDAY
-                ? today
-                : today.with(TemporalAdjusters.previous(DayOfWeek.FRIDAY));
+        // Never use an in-progress Friday; same closed-week rule as the Saturday cron.
+        LocalDate friday = today.with(TemporalAdjusters.previous(DayOfWeek.FRIDAY));
 
         NetworkResponse networkResponse = new NetworkResponse();
         List<Map<String, Object>> weekSummaries = new ArrayList<>();

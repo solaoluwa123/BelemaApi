@@ -1171,9 +1171,19 @@ public class TransactionsController {
         return transactionsInterface.GenerateWeeklyCommissionsCron();
     }
 
-    /** One-time ops: backfill Sun–Fri commission weeks for the last 4 months (Africa/Lagos). */
-    @RequestMapping(value = "/app/crons/backfill-commissions", method = RequestMethod.GET, headers = "Accept=application/json")
-    public ResponseEntity GenerateCommissionsBackfill() {
+    /** Ops: backfill closed Sun–Fri weeks. Requires API key + session; platform operators only. */
+    @RequestMapping(value = "/app/crons/backfill-commissions", method = RequestMethod.POST, headers = "Accept=application/json")
+    public ResponseEntity GenerateCommissionsBackfill(
+            @RequestHeader(value = "Authorization") String header,
+            @RequestHeader(value = "auth-token") String sessiontoken) {
+        if (!validators.validHeader().equals(header)) {
+            return responseManager.InvalidAuthorizationHeader();
+        }
+        Optional<SessionActorResolver.Actor> actorOpt = sessionActorResolver.resolve(sessiontoken);
+        if (actorOpt.isEmpty() || !PlatformRole.isSystemUserRole(actorOpt.get().role())) {
+            return responseManager.ResponseForbidden(
+                    "Only platform operators can backfill commission records.");
+        }
         return transactionsInterface.GenerateCommissionsBackfill();
     }
 
