@@ -5,6 +5,7 @@
  */
 package com.transgate.api.app.services;
 
+import com.transgate.api.events.FinancialInstitutionCreatedEvent;
 import com.transgate.api.interfaces.FinancialInstitutionsInterface;
 import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.models.FinancialInstitutionModel;
@@ -23,6 +24,7 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -42,6 +44,12 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     @Autowired
     private UsersInterface usersInterface;
 
+    @Autowired
+    private ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    private FiCreatedOutboxService fiCreatedOutboxService;
+
     ResponseManager responseManager = new ResponseManager();
     
     private Logger logger = Logger.getLogger(FinancialInstitutionsService.class.getName());
@@ -53,6 +61,52 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     private final AppEnvironmentConfig appConfig;
     public FinancialInstitutionsService(AppEnvironmentConfig appConfig) {
         this.appConfig = appConfig;
+    }
+
+    /** Persist outbox row then publish FI-created queue message after a live institution insert (never for pending-only). */
+    private void publishFiCreatedEvent(FinancialInstitutionModel institution) {
+        if (institution == null) {
+            return;
+        }
+        Long outboxId = null;
+        try {
+            FiCreatedOutboxService.Record outbox = fiCreatedOutboxService.recordPending(institution);
+            if (outbox != null) {
+                outboxId = outbox.getId();
+                if (outbox.alreadyHandled()) {
+                    logger.info("FI created outbox already handled for code=" + institution.getCode()
+                            + " status=" + outbox.getStatus() + "; skip publish");
+                    return;
+                }
+            }
+        } catch (Exception ex) {
+            logger.warning("FI created outbox insert failed for code="
+                    + institution.getCode() + ": " + ex.getMessage());
+        }
+        try {
+            eventPublisher.publishEvent(new FinancialInstitutionCreatedEvent(institution, outboxId));
+        } catch (Exception ex) {
+            logger.warning("FI created event publish failed for code="
+                    + institution.getCode() + ": " + ex.getMessage());
+        }
+    }
+
+    /** Decrypt pending AES password for queue payload (approve-create path). */
+    private String decryptPendingInstitutionPassword(String code) {
+        if (code == null || code.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return jdbcTemplate.queryForObject(
+                    "SELECT CAST(AES_DECRYPT(FROM_BASE64(password), ?) AS CHAR) "
+                            + "FROM tbl_financial_institutions_pendings "
+                            + "WHERE code = ? AND actionType = 'create' AND password IS NOT NULL LIMIT 1",
+                    new Object[]{appConfig.getSqlEncodeString(), code.trim()},
+                    String.class);
+        } catch (DataAccessException ex) {
+            logger.warning("Could not decrypt pending FI password for code=" + code + ": " + ex.getMessage());
+            return null;
+        }
     }
     
     private boolean CheckExistingContact(String email_address, String institution) {
@@ -696,9 +750,16 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                                 jdbcTemplate.update("UPDATE ajiswitch_db.tbl_nodes SET walletnumber = ? WHERE institution_code = ?", new Object[]{walletnumber, code});
                             }
                         }
-                        if (retval > 0)
+                        if (retval > 0) {
+                            institution.setServerIP(serverIp);
+                            institution.setNeTimeout(neTimeout);
+                            institution.setFtTimeout(ftTimeout);
+                            institution.setIssettlementbank(isSettlement);
+                            institution.setInstWithWallet(withWallet);
+                            institution.setCbn_bank_account(cbnAccount);
+                            publishFiCreatedEvent(institution);
                             return responseManager.ResponseAccepted();
-                        else
+                        } else
                             return responseManager.ResponseInternalServerError();
                     case 2:
                         boolean checkPendingAction = CheckInstitutionActionPending(code, "create");
@@ -1100,11 +1161,22 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             SQL = "INSERT into ajiswitch_db.tbl_nodes(port_number, is_active, publickeylocation, institution_code, institution_name, date_created, cbn_bank_account, hashkey, isProcessTSQ, issettlementbank, serverIP, neTimeout, ftTimeout, canFundWallet, walletnumber) VALUES(?, 1, ?, ?, ?, now(), ?, ?, ?, ?, ?, ?, ?, ?, ?)";
                             retVal2 = jdbcTemplate.update(SQL, new Object[]{pendingCreate.getPort_number(), pendingCreate.getPublickeylocation(), pendingCreate.getCode(), pendingCreate.getName(), cbnAccount, pendingCreate.getHashKey(), pendingCreate.getIsProcessTSQ(), isSettlement, serverIp, neTimeout, ftTimeout, canFund, walletnumber});
                             insertInstitutionExt(pendingCreate);
+                            String plainPassword = decryptPendingInstitutionPassword(pendingCreate.getCode());
+                            if (plainPassword != null && !plainPassword.isEmpty()) {
+                                pendingCreate.setPassword(plainPassword);
+                            }
+                            pendingCreate.setServerIP(serverIp);
+                            pendingCreate.setNeTimeout(neTimeout);
+                            pendingCreate.setFtTimeout(ftTimeout);
+                            pendingCreate.setIssettlementbank(isSettlement);
+                            pendingCreate.setInstWithWallet(canFund);
+                            pendingCreate.setCbn_bank_account(cbnAccount);
                             SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
-                            if (retVal > 0 && retVal2 > 0)
+                            if (retVal > 0 && retVal2 > 0) {
+                                publishFiCreatedEvent(pendingCreate);
                                 return responseManager.ResponseAccepted();
-                            else
+                            } else
                                 return responseManager.ResponseInternalServerError();
                         default:
                             return responseManager.ResponseBadRequest();
