@@ -197,6 +197,35 @@ public class LiveTransactionStreamHub {
         return bucket;
     }
 
+    /**
+     * Broadcast a manual status flip (pending → success/failed) so dashboard KPIs
+     * update without waiting for a new insert or a hard refresh.
+     * Assumes the row was previously pending (09); delta is pending −1 and +1 on the new bucket.
+     */
+    public void publishStatusChange(FullTransactionModel row) {
+        if (row == null || subscribers.isEmpty()) {
+            return;
+        }
+        MetricsBucket after = classify(row);
+        MetricsBucket delta = new MetricsBucket();
+        delta.pending = -1;
+        delta.successful = after.successful;
+        delta.failed = after.failed;
+        // total() = successful + pending + failed → 0 for a status flip (not a new txn)
+
+        Map<String, Boolean> scopesNotified = new HashMap<>();
+        for (StreamSubscriber subscriber : subscribers) {
+            if (!matchesScope(row, subscriber.institutionScope)) {
+                continue;
+            }
+            sendTransaction(subscriber, row);
+            scopesNotified.put(subscriber.institutionScope, Boolean.TRUE);
+        }
+        for (String scope : scopesNotified.keySet()) {
+            broadcastMetricsDelta(scope, delta);
+        }
+    }
+
     private static String escapeJson(String value) {
         return value.replace("\\", "\\\\").replace("\"", "\\\"");
     }

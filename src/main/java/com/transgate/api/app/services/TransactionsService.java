@@ -87,6 +87,10 @@ public class TransactionsService implements TransactionsInterface {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    @org.springframework.context.annotation.Lazy
+    private LiveTransactionStreamHub liveTransactionStreamHub;
+
     ResponseManager responseManager = new ResponseManager();
     DateUtil dateUtil = new DateUtil();
     private Logger logger = Logger.getLogger(TransactionsService.class.getName());
@@ -100,6 +104,10 @@ public class TransactionsService implements TransactionsInterface {
     }
 
     private static final String TNX_LIVE_TABLE = "ajiswitch_db.tbl_creditfundtransfers";
+
+    /** Failed = not success and not pending — same as GetStatusSummary. */
+    private static final String FAILED_RESPONSE_CODE_SQL
+            = "a.response_code NOT IN ('00','10','11','16','09')";
 
     private String archiveTable() {
         return appConfig.getTransactionsArchiveTable();
@@ -2995,8 +3003,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     wb.add("a.channel_code = ?", channel_code);
     if (response_code != null && !response_code.isBlank()) {
         if ("111".equals(response_code)) {
-            wb.addRaw("a.response_code != ?");
-            wb.params().add("00");
+            // Sentinel "Failed" tab: exclude success + pending (matches status-summary).
+            wb.addRaw(FAILED_RESPONSE_CODE_SQL);
         } else {
             wb.add("a.response_code = ?", response_code);
         }
@@ -3275,7 +3283,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             if (!response_at_reprocess.equals("")) {
                 whereQuery = !whereQuery.equals("WHERE") ? whereQuery + " AND " : whereQuery + "";
                 if (response_at_reprocess.equals("111")) {
-                    whereQuery += " a.response_code != 00";
+                    whereQuery += " " + FAILED_RESPONSE_CODE_SQL;
                 } else {
                     whereQuery += " a.response_at_reprocess = " + response_at_reprocess;
                 }
@@ -3441,7 +3449,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
             String SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM {TABLE} a "
-                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
+                    + "WHERE " + FAILED_RESPONSE_CODE_SQL + " AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.response_code "
                     + "ORDER BY volume DESC "
                     + "LIMIT 5";
@@ -3466,7 +3474,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             TxnTablePlan plan = planTransactionTables(startDate, endDate, isCurrent);
             String SQL = "SELECT COUNT(a.id) as volume, a.response_code as label "
                     + "FROM {TABLE} a "
-                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
+                    + "WHERE " + FAILED_RESPONSE_CODE_SQL + " AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
                     + "GROUP BY a.response_code "
                     + "ORDER BY volume DESC "
                     + "LIMIT 5";
@@ -3693,7 +3701,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     + "FROM {TABLE} a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.destination_institution_code = b.institution_code "
-                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? "
+                    + "WHERE " + FAILED_RESPONSE_CODE_SQL + " AND a.transaction_date_time BETWEEN ? AND ? "
                     + "GROUP BY a.destination_institution_code, b.institution_name, b.shortName, b.color "
                     + "ORDER BY volume DESC "
                     + "LIMIT 20";
@@ -3731,7 +3739,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     + "FROM {TABLE} a "
                     + "LEFT JOIN ajiswitch_db.tbl_nodes b "
                     + "ON a.source_institution_code = b.institution_code "
-                    + "WHERE a.response_code != '00' AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
+                    + "WHERE " + FAILED_RESPONSE_CODE_SQL + " AND a.transaction_date_time BETWEEN ? AND ? AND a.source_institution_code = ? "
                     + "GROUP BY a.source_institution_code, b.institution_name, b.shortName, b.color "
                     + "ORDER BY volume DESC "
                     + "LIMIT 20";
@@ -6862,6 +6870,15 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     } catch (DataAccessException delEx) {
                         logger.info(String.format("%s :: tsq_retry delete skipped: %s", sid, delEx.getMessage()));
                     }
+                    try {
+                        if (liveTransactionStreamHub != null) {
+                            liveTransactionStreamHub.publishStatusChange(
+                                    toLiveStreamModel(txn, newCode));
+                        }
+                    } catch (Exception streamEx) {
+                        logger.info(String.format("%s :: live stream status publish skipped: %s",
+                                sid, streamEx.getMessage()));
+                    }
                 }
             }
 
@@ -6881,6 +6898,60 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             logger.info("Exception in RequestTransactionStatusChange: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
         }
+    }
+
+    /** Minimal model for SSE after a pending → success/failed flip. */
+    private FullTransactionModel toLiveStreamModel(Map<String, Object> txn, String newCode) {
+        FullTransactionModel row = new FullTransactionModel();
+        ResponseCodeInterpreter interpreter = new ResponseCodeInterpreter();
+        Object id = txn.get("id");
+        if (id != null) {
+            try {
+                row.setId(new BigInteger(id.toString()));
+            } catch (Exception ignored) {
+                // optional for stream
+            }
+        }
+        row.setSrcSessionid(txnValue(txn, "session_id"));
+        row.setPaymentReference(txnValue(txn, "payment_reference"));
+        row.setSrcAccountNumber(txnValue(txn, "originator_account_number"));
+        row.setSrcAccountName(txnValue(txn, "originator_account_name"));
+        row.setSrcAmount(txnValue(txn, "amount"));
+        row.setSrcInstitutioncode(txnValue(txn, "source_institution_code"));
+        row.setDestSessionId(txnValue(txn, "session_id"));
+        row.setSrcResponsecode(newCode);
+        row.setDestResponseCode(newCode);
+        row.setResponseCodeDefinition(interpreter.InterpreteCode(newCode == null ? "" : newCode));
+        row.setDestAccountNumber(txnValue(txn, "beneficiary_account_number"));
+        row.setDestAccountName(txnValue(txn, "beneficiary_account_name"));
+        row.setDestAmount(txnValue(txn, "amount"));
+        row.setDestInstitutioncode(txnValue(txn, "destination_institution_code"));
+        row.setNarration(txnValue(txn, "narration"));
+        row.setTransactiondate(txnValue(txn, "transaction_date_time"));
+        row.setSrcInstitutionName(firstTxnValue(txn, "source_institution_name", "srcInstitutionName"));
+        row.setDestInstitutionName(firstTxnValue(txn, "destination_institution_name", "destInstitutionName"));
+        return row;
+    }
+
+    private static String txnValue(Map<String, Object> txn, String key) {
+        if (txn == null || key == null) {
+            return null;
+        }
+        Object v = txn.get(key);
+        return v == null ? null : v.toString();
+    }
+
+    private static String firstTxnValue(Map<String, Object> txn, String... keys) {
+        if (txn == null || keys == null) {
+            return null;
+        }
+        for (String key : keys) {
+            String v = txnValue(txn, key);
+            if (v != null) {
+                return v;
+            }
+        }
+        return null;
     }
 
     @SuppressWarnings("unused")
