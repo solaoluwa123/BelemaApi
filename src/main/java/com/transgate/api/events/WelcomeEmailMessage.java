@@ -1,35 +1,58 @@
 package com.transgate.api.events;
 
+import java.time.Instant;
+
 /**
- * Durable welcome-email payload published to RabbitMQ.
+ * Welcome-email payload published to the sw RabbitMQ broker.
  */
 public class WelcomeEmailMessage {
 
+    public static final String EVENT_TYPE = "USER_CREATED";
+
+    private String eventType;
+    private String createdAt;
     private String userEmail;
     private String userName;
     private String userPassword;
     private String firstname;
     private String surname;
+    private String institutionCode;
+    private String institutionName;
 
     public WelcomeEmailMessage() {
     }
 
-    public WelcomeEmailMessage(String userEmail, String userName, String userPassword,
-            String firstname, String surname) {
-        this.userEmail = userEmail;
-        this.userName = userName;
-        this.userPassword = userPassword;
-        this.firstname = firstname;
-        this.surname = surname;
+    public static WelcomeEmailMessage from(UserCreatedEvent event) {
+        WelcomeEmailMessage msg = new WelcomeEmailMessage();
+        msg.setEventType(EVENT_TYPE);
+        msg.setCreatedAt(Instant.now().toString());
+        if (event == null) {
+            return msg;
+        }
+        msg.setUserEmail(event.getUserEmail());
+        msg.setUserName(event.getUserName());
+        msg.setUserPassword(event.getUserPassword());
+        msg.setFirstname(event.getFirstname());
+        msg.setSurname(event.getSurname());
+        msg.setInstitutionCode(event.getInstitutionCode());
+        msg.setInstitutionName(event.getInstitutionName());
+        return msg;
     }
 
-    public static WelcomeEmailMessage from(UserCreatedEvent event) {
-        return new WelcomeEmailMessage(
-                event.getUserEmail(),
-                event.getUserName(),
-                event.getUserPassword(),
-                event.getFirstname(),
-                event.getSurname());
+    public String getEventType() {
+        return eventType;
+    }
+
+    public void setEventType(String eventType) {
+        this.eventType = eventType;
+    }
+
+    public String getCreatedAt() {
+        return createdAt;
+    }
+
+    public void setCreatedAt(String createdAt) {
+        this.createdAt = createdAt;
     }
 
     public String getUserEmail() {
@@ -70,5 +93,21 @@ public class WelcomeEmailMessage {
 
     public void setSurname(String surname) {
         this.surname = surname;
+    }
+
+    public String getInstitutionCode() {
+        return institutionCode;
+    }
+
+    public void setInstitutionCode(String institutionCode) {
+        this.institutionCode = institutionCode;
+    }
+
+    public String getInstitutionName() {
+        return institutionName;
+    }
+
+    public void setInstitutionName(String institutionName) {
+        this.institutionName = institutionName;
     }
 }

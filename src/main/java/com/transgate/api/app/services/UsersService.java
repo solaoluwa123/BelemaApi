@@ -1614,7 +1614,8 @@ public class UsersService implements UsersInterface {
                         if (retval > 0) {
                             mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
                             eventPublisher.publishEvent(new UserCreatedEvent(
-                                    email_address, username, plainPassword, firstname, surname));
+                                    email_address, username, plainPassword, firstname, surname,
+                                    institutionid, institutionname));
 
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
@@ -2195,7 +2196,9 @@ public class UsersService implements UsersInterface {
                                             pendingUser.getUsername(),
                                             plainForMail,
                                             pendingUser.getFirstname(),
-                                            pendingUser.getSurname()));
+                                            pendingUser.getSurname(),
+                                            firstNonEmpty(financialInstitutionCode, pendingUser.getInstitution()),
+                                            pendingUser.getInstitutionName()));
                                 }
                                 LoginResponse response = new LoginResponse();
                                 response.setCode(201);
@@ -2463,6 +2466,16 @@ public class UsersService implements UsersInterface {
             }
         }
         return false;
+    }
+
+    private static String firstNonEmpty(String primary, String fallback) {
+        if (primary != null && !primary.trim().isEmpty()) {
+            return primary.trim();
+        }
+        if (fallback != null && !fallback.trim().isEmpty()) {
+            return fallback.trim();
+        }
+        return null;
     }
 
 }

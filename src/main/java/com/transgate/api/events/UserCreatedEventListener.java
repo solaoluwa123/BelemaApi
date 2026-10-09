@@ -4,6 +4,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -17,12 +18,13 @@ public class UserCreatedEventListener {
     private static final Logger logger = Logger.getLogger(UserCreatedEventListener.class.getName());
 
     @Autowired
+    @Qualifier("fiRabbitTemplate")
     private RabbitTemplate rabbitTemplate;
 
     @Value("${app.mail.welcome.exchange}")
     private String exchangeName;
 
-    @Value("${app.mail.welcome.queue}")
+    @Value("${app.mail.welcome.routing-key:${app.mail.welcome.queue}}")
     private String routingKey;
 
     @EventListener

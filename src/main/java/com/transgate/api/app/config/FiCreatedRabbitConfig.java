@@ -8,16 +8,17 @@ import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import org.springframework.amqp.support.converter.Jackson2JsonMessageConverter;
 import org.springframework.amqp.support.converter.MessageConverter;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
- * Second RabbitMQ connection for financial-institution-created events.
- * Topology is declared only on this broker (not the welcome-mail Belema broker).
+ * Single RabbitMQ connection (user {@code sw}) for FI-created and welcome-email publishes.
  */
 @Configuration
 public class FiCreatedRabbitConfig {
@@ -38,15 +39,25 @@ public class FiCreatedRabbitConfig {
     private String virtualHost;
 
     @Value("${app.rabbitmq.fi.exchange}")
-    private String exchangeName;
+    private String fiExchangeName;
 
     @Value("${app.rabbitmq.fi.queue}")
-    private String queueName;
+    private String fiQueueName;
 
     @Value("${app.rabbitmq.fi.routing-key}")
-    private String routingKey;
+    private String fiRoutingKey;
 
-    @Bean(name = "fiConnectionFactory")
+    @Value("${app.mail.welcome.exchange}")
+    private String welcomeExchangeName;
+
+    @Value("${app.mail.welcome.queue}")
+    private String welcomeQueueName;
+
+    @Value("${app.mail.welcome.routing-key:${app.mail.welcome.queue}}")
+    private String welcomeRoutingKey;
+
+    @Bean(name = {"connectionFactory", "fiConnectionFactory"})
+    @Primary
     public CachingConnectionFactory fiConnectionFactory() {
         CachingConnectionFactory factory = new CachingConnectionFactory(host, port);
         factory.setUsername(username);
@@ -55,7 +66,13 @@ public class FiCreatedRabbitConfig {
         return factory;
     }
 
+    @Bean
+    public MessageConverter jacksonMessageConverter() {
+        return new Jackson2JsonMessageConverter();
+    }
+
     @Bean(name = "fiRabbitTemplate")
+    @Primary
     public RabbitTemplate fiRabbitTemplate(
             @Qualifier("fiConnectionFactory") ConnectionFactory fiConnectionFactory,
             MessageConverter jacksonMessageConverter) {
@@ -72,24 +89,28 @@ public class FiCreatedRabbitConfig {
     }
 
     /**
-     * Declare durable exchange/queue/binding on the FI broker only
-     * (avoid registering AmqpAdmin beans that the default RabbitAdmin would declare on Belema).
-     * Failures are logged so an unreachable FI broker does not block API startup.
+     * Declare durable FI and welcome topology on the sw broker.
+     * Failures are logged so an unreachable broker does not block API startup.
      */
     @Bean
     public ApplicationRunner fiTopologyDeclarator(@Qualifier("fiRabbitAdmin") RabbitAdmin fiRabbitAdmin) {
         return args -> {
             try {
-                DirectExchange exchange = new DirectExchange(exchangeName, true, false);
-                Queue queue = QueueBuilder.durable(queueName).build();
-                fiRabbitAdmin.declareExchange(exchange);
-                fiRabbitAdmin.declareQueue(queue);
-                fiRabbitAdmin.declareBinding(BindingBuilder.bind(queue).to(exchange).with(routingKey));
+                declareDirect(fiRabbitAdmin, fiExchangeName, fiQueueName, fiRoutingKey);
+                declareDirect(fiRabbitAdmin, welcomeExchangeName, welcomeQueueName, welcomeRoutingKey);
             } catch (Exception ex) {
                 org.slf4j.LoggerFactory.getLogger(FiCreatedRabbitConfig.class).warn(
-                        "Could not declare FI RabbitMQ topology on {}:{} (FI publish may fail until broker is reachable): {}",
+                        "Could not declare RabbitMQ topology on {}:{} (publish may fail until broker is reachable): {}",
                         host, port, ex.getMessage());
             }
         };
+    }
+
+    private static void declareDirect(RabbitAdmin admin, String exchangeName, String queueName, String routingKey) {
+        DirectExchange exchange = new DirectExchange(exchangeName, true, false);
+        Queue queue = QueueBuilder.durable(queueName).build();
+        admin.declareExchange(exchange);
+        admin.declareQueue(queue);
+        admin.declareBinding(BindingBuilder.bind(queue).to(exchange).with(routingKey));
     }
 }
