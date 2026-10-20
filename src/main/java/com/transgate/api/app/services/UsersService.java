@@ -39,6 +39,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -360,6 +361,32 @@ public class UsersService implements UsersInterface {
             System.out.println("error>>>>" + ex.getMessage());
             return false;
         }
+    }
+
+    /** Message for an existing unique-username failure. Null when this username is not the conflicting row. */
+    private ResponseEntity usernameConflictResponse(String username, Integer excludeId) {
+        try {
+            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
+                    "SELECT id, deleted FROM tbl_user_details WHERE LOWER(TRIM(username)) = LOWER(TRIM(?)) ORDER BY deleted ASC",
+                    new Object[]{username == null ? "" : username});
+            for (Map<String, Object> row : rows) {
+                Object idObj = row.get("id");
+                int id = idObj instanceof Number ? ((Number) idObj).intValue() : -1;
+                if (excludeId != null && id == excludeId) {
+                    continue;
+                }
+                Object deletedObj = row.get("deleted");
+                int deleted = deletedObj instanceof Number ? ((Number) deletedObj).intValue() : 1;
+                NetworkResponse networkResponse = new NetworkResponse();
+                networkResponse.setCode(200);
+                networkResponse.setStatus("failed");
+                networkResponse.setMessage(deleted == 0 ? "Username is already taken." : "Username not available.");
+                return responseManager.ResponseOk(networkResponse);
+            }
+        } catch (DataAccessException ex) {
+            logger.info("Username conflict lookup failed: " + ex.getMessage());
+        }
+        return responseManager.ResponseInternalServerError();
     }
 
     private int insertPendingUserOperation(String username, String plainPassword, String firstname, String surname,
@@ -1512,6 +1539,9 @@ public class UsersService implements UsersInterface {
                     logger.info("Unauthorized user role (" + userrole + ") for creator: " + creator);
                     return responseManager.ResponseUnathorized();
             }
+        } catch (DuplicateKeyException ex) {
+            logger.info("Duplicate username on create: " + ex.getMessage());
+            return usernameConflictResponse(username, null);
         } catch (DataAccessException ex) {
             logger.info("DataAccessException in Create method: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
@@ -1678,6 +1708,9 @@ public class UsersService implements UsersInterface {
                     logger.info("Unauthorized user role: " + userrole + " for creator " + creator);
                     return responseManager.ResponseUnathorized();
             }
+        } catch (DuplicateKeyException ex) {
+            logger.info("Duplicate username on create-other: " + ex.getMessage());
+            return usernameConflictResponse(username, null);
         } catch (DataAccessException ex) {
             logger.info("DataAccessException in CreateOther: " + ex.getMessage());
             return responseManager.ResponseInternalServerError();
@@ -1908,6 +1941,9 @@ public class UsersService implements UsersInterface {
                 default:
                     return responseManager.ResponseUnathorized();
             }
+        } catch (DuplicateKeyException ex) {
+            logger.info("Duplicate username on edit: " + ex.getMessage());
+            return usernameConflictResponse(username, userid);
         } catch (DataAccessException ex) {
             System.out.println("error>>>>" + ex.getMessage());
             return responseManager.ResponseInternalServerError();
@@ -2187,7 +2223,12 @@ public class UsersService implements UsersInterface {
                             SQL = "INSERT into sparkpayweb_db.tbl_users(username, password, date_created, enabled, reference, must_change_password) VALUES(?, ?, now(), 1, ?, ?)";
                             jdbcTemplate.update(SQL, new Object[]{pendingUser.getEmail_address(), pendingCipher, ref, mustChangeFlag});
                             SQL = "INSERT into tbl_user_details(username, firstname, surname, phone_number, email_address, role, date_created) VALUES(?, ?, ?, ?, ?, ?, now())";
-                            retVal2 = jdbcTemplate.update(SQL, new Object[]{pendingUser.getUsername(), pendingUser.getFirstname(), pendingUser.getSurname(), pendingUser.getPhone_number(), pendingUser.getEmail_address(), pendingUser.getRoleid()});
+                            try {
+                                retVal2 = jdbcTemplate.update(SQL, new Object[]{pendingUser.getUsername(), pendingUser.getFirstname(), pendingUser.getSurname(), pendingUser.getPhone_number(), pendingUser.getEmail_address(), pendingUser.getRoleid()});
+                            } catch (DuplicateKeyException ex) {
+                                logger.info("Duplicate username on approve create: " + ex.getMessage());
+                                return usernameConflictResponse(pendingUser.getUsername(), null);
+                            }
                             if (retVal > 0 && retVal2 > 0) {
                                 String plainForMail = decryptPasswordCipher(pendingCipher);
                                 if (plainForMail != null && !plainForMail.isEmpty()) {

@@ -26,6 +26,11 @@ import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Service;
 import com.transgate.api.interfaces.WalletsInterface;
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.logging.Logger;
 
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -610,19 +615,56 @@ public class WalletsService implements WalletsInterface {
 
 
 
+    /** Wallet activity is stored on the database clock (Africa/Lagos). The UI sends UTC instants. */
+    private static final ZoneId WALLET_ACTIVITY_ZONE = ZoneId.of("Africa/Lagos");
+    private static final DateTimeFormatter WALLET_ACTIVITY_SQL_TIME = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
+
+    private String walletActivitySqlDateTime(String raw) {
+        if (raw == null) {
+            return raw;
+        }
+        String value = raw.trim();
+        if (value.isEmpty()) {
+            return value;
+        }
+        try {
+            return WALLET_ACTIVITY_SQL_TIME.format(Instant.parse(value).atZone(WALLET_ACTIVITY_ZONE));
+        } catch (DateTimeParseException ignored) {
+            // already a local date or datetime
+        }
+        String local = value.replace('T', ' ');
+        if (local.endsWith("Z")) {
+            local = local.substring(0, local.length() - 1).trim();
+        }
+        int dot = local.indexOf('.');
+        if (dot > 0) {
+            local = local.substring(0, dot);
+        }
+        if (local.length() == 10) {
+            local = local + " 00:00:00";
+        }
+        try {
+            LocalDateTime.parse(local, WALLET_ACTIVITY_SQL_TIME);
+            return local;
+        } catch (DateTimeParseException ignored) {
+            return value;
+        }
+    }
+
     @Override
     public ResponseEntity GetWalletActivity(String walletnumber, String startDate, String endDate, int page, int limit, boolean isCurrent) {
         NetworkResponse networkResponse = new NetworkResponse();
         try{
+            startDate = walletActivitySqlDateTime(startDate);
+            endDate = walletActivitySqlDateTime(endDate);
             int offset = page > 1 ? (page - 1) * limit : 0;
 //            String meta;
 //            int offset = page > 1 ? (page - 1) * limit : 0;
             String table = isCurrent ? "ajiswitch_db.tbl_wallet_activities " : "ajiswitch_db.tbl_wallet_activities ";
-            String debitActors = "('eseoghene.onoriode@habaripay@com','omoyosola.afolayan@habaripay.com','valerie.ejegi@habaripay.com')";
             String SQL = "SELECT * FROM "+table
                     + "WHERE walletnumber = ? "
                     + "AND activity_date_time >= ? AND activity_date_time < ? "
-                    + "AND credit_or_debit = 'cr' AND actor != 'SYSTEM' "
+                    + "AND (actor IS NULL OR UPPER(actor) <> 'SYSTEM') "
                     + "ORDER BY id DESC LIMIT ? OFFSET ?";
 //            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
 //                    + "WHERE walletnumber = ? "
@@ -634,7 +676,7 @@ public class WalletsService implements WalletsInterface {
                     + "FROM "+table
                     + "WHERE walletnumber = ? "
                     + "AND activity_date_time >= ? AND activity_date_time < ? "
-                    + "AND credit_or_debit = 'cr' AND actor != 'SYSTEM' ";
+                    + "AND (actor IS NULL OR UPPER(actor) <> 'SYSTEM') ";
 //            SQL = "SELECT COUNT(id) as totalRecords "
 //                    + "FROM ajiswitch_db.tbl_wallet_activities "
 //                    + "WHERE walletnumber = ? "
@@ -664,11 +706,13 @@ public class WalletsService implements WalletsInterface {
             int safePage = page < 1 ? 1 : page;
             int safeLimit = limit < 1 ? 500 : Math.min(limit, 2000);
             int offset = (safePage - 1) * safeLimit;
+            startDate = walletActivitySqlDateTime(startDate);
+            endDate = walletActivitySqlDateTime(endDate);
             boolean hasRange = startDate != null && !startDate.trim().isEmpty()
                     && endDate != null && !endDate.trim().isEmpty();
 
             StringBuilder sql = new StringBuilder();
-            sql.append("SELECT a.id, a.walletnumber, a.amount, a.credit_or_debit, a.actor, a.activity_date_time, a.session_id, ")
+            sql.append("SELECT a.id, a.walletnumber, a.amount, a.transaction_amount, a.fee, a.charge, a.credit_or_debit, a.actor, a.activity_date_time, a.session_id, ")
                     .append("w.financialinstitutioncode as financialInstitutionCode, ")
                     .append("COALESCE(NULLIF(b.name, ''), n.institution_name, '') as financialInstitutionName ")
                     .append("FROM ajiswitch_db.tbl_wallet_activities a ")
@@ -718,6 +762,8 @@ public class WalletsService implements WalletsInterface {
     public ResponseEntity GetWalletActivityInstitutionAggregates(String startDate, String endDate) {
         NetworkResponse networkResponse = new NetworkResponse();
         try {
+            startDate = walletActivitySqlDateTime(startDate);
+            endDate = walletActivitySqlDateTime(endDate);
             boolean hasRange = startDate != null && !startDate.trim().isEmpty()
                     && endDate != null && !endDate.trim().isEmpty();
 
