@@ -6112,52 +6112,16 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
     }
 
     /**
-     * Log a successful switch transfer on the source and destination institution wallets.
-     * Outbound total is transaction amount + charge + fee. Inbound total is transaction
-     * amount minus that institution's own charge and fee. Balance may go negative.
+     * Formerly scheduled SWITCH_OUT / SWITCH_IN wallet posting. Disabled so AjiPay
+     * (actor SYSTEM on tbl_wallet_activities / tbl_wallets) remains the only debit path.
      */
-    @Scheduled(fixedDelay = 60000)
+    // @Scheduled(fixedDelay = 60000) — disabled to avoid double debit with switch core
     public void chargeRecentSuccessfulTransactionFees() {
-        try {
-            List<Map<String, Object>> rows = jdbcTemplate.queryForList(
-                    "SELECT a.session_id, a.amount, "
-                            + "TRIM(a.source_institution_code) AS source_institution_code, "
-                            + "TRIM(a.destination_institution_code) AS destination_institution_code "
-                            + "FROM ajiswitch_db.tbl_creditfundtransfers a "
-                            + "WHERE a.response_code = '00' "
-                            + "AND a.transaction_date_time >= DATE_SUB(NOW(), INTERVAL 1 DAY) "
-                            + "AND a.session_id IS NOT NULL AND TRIM(a.session_id) <> '' "
-                            + "AND ("
-                            + "SELECT COUNT(*) FROM ajiswitch_db.tbl_wallet_activities w "
-                            + "WHERE w.session_id = a.session_id AND UPPER(w.actor) LIKE 'SWITCH%'"
-                            + ") < 2 "
-                            + "ORDER BY a.transaction_date_time ASC LIMIT 200");
-            for (Map<String, Object> row : rows) {
-                if (row == null || row.get("session_id") == null || row.get("amount") == null) {
-                    continue;
-                }
-                postSwitchWalletMovement(
-                        String.valueOf(row.get("session_id")).trim(),
-                        row.get("source_institution_code") == null ? "" : String.valueOf(row.get("source_institution_code")).trim(),
-                        row.get("destination_institution_code") == null ? "" : String.valueOf(row.get("destination_institution_code")).trim(),
-                        decimalOrZero(row.get("amount")));
-            }
-        } catch (Exception ex) {
-            logger.info("Switch wallet sweep failed: " + ex.getMessage());
-        }
+        // no-op
     }
 
     private void postSwitchWalletMovement(String sessionId, String sourceInstitutionCode, String destinationInstitutionCode, BigDecimal transactionAmount) {
-        if (sessionId == null || sessionId.trim().isEmpty() || transactionAmount == null) {
-            return;
-        }
-        BigDecimal txnAmount = toMoney(transactionAmount);
-        if (txnAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            return;
-        }
-        String sid = sessionId.trim();
-        postSwitchWalletLeg(sid, sourceInstitutionCode, txnAmount, true);
-        postSwitchWalletLeg(sid, destinationInstitutionCode, txnAmount, false);
+        // no-op — switch core already debits FI wallets
     }
 
     private void postSwitchWalletLeg(String sessionId, String institutionCode, BigDecimal transactionAmount, boolean outbound) {
@@ -6189,8 +6153,8 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                     code);
             if (!charges.isEmpty()) {
                 charge = toMoney(decimalOrZero(charges.get(0).get("charge_amount")));
-                fee = toMoney(charge.multiply(decimalOrZero(charges.get(0).get("vat"))
-                        .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP)));
+                // tbl_charges.vat is an absolute amount (not a percentage).
+                fee = toMoney(decimalOrZero(charges.get(0).get("vat")));
             }
 
             BigDecimal total = outbound
@@ -6229,9 +6193,9 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
             try {
                 jdbcTemplate.update(
                         "INSERT INTO ajiswitch_db.tbl_wallet_activities "
-                                + "(walletnumber, amount, transaction_amount, fee, charge, credit_or_debit, actor, activity_date_time, session_id) "
-                                + "VALUES (?, ?, ?, ?, ?, ?, ?, now(), ?)",
-                        walletNumber, appliedAmount, transactionAmount, fee, charge, appliedDirection, side, sessionId);
+                                + "(walletnumber, amount, transaction_amount, fee, charge, total_fee, credit_or_debit, actor, activity_date_time, session_id) "
+                                + "VALUES (?, ?, ?, ?, ?, ?, ?, ?, now(), ?)",
+                        walletNumber, appliedAmount, transactionAmount, fee, charge, toMoney(fee.add(charge)), appliedDirection, side, sessionId);
             } catch (DataAccessException insertEx) {
                 String undoSql = "dr".equals(appliedDirection)
                         ? "UPDATE ajiswitch_db.tbl_wallets SET balance = balance + ? WHERE walletnumber = ?"
@@ -6431,14 +6395,13 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                         continue;
                     }
                     BigDecimal chargeAmount = toMoney(decimalOrZero(chargeRow.get("charge_amount")));
-                    BigDecimal vatRate = decimalOrZero(chargeRow.get("vat"))
-                            .divide(BigDecimal.valueOf(100), 8, RoundingMode.HALF_UP);
+                    // tbl_charges.vat is an absolute amount per transfer (not a percentage).
+                    BigDecimal vatAmount = toMoney(decimalOrZero(chargeRow.get("vat")));
                     BigDecimal countBd = BigDecimal.valueOf(totalCount);
-                    BigDecimal feePerTransfer = toMoney(chargeAmount.multiply(vatRate));
 
-                    // Same amounts as one wallet row: charge is flat, VAT is that charge times the stored percentage.
+                    // Same amounts as one wallet row: charge and VAT are both flat per successful source transfer.
                     BigDecimal commission = toMoney(chargeAmount.multiply(countBd));
-                    BigDecimal totalVat = toMoney(feePerTransfer.multiply(countBd));
+                    BigDecimal totalVat = toMoney(vatAmount.multiply(countBd));
                     BigDecimal totalCommission = toMoney(commission.add(totalVat));
 
                     jdbcTemplate.update(
@@ -7013,15 +6976,7 @@ private WhereBuilder buildWhereBuilder(String session_id, String channel_code, S
                 logger.info(String.format("%s :: response_code update rowsAffected=%d -> %s", sid, upd, newCode));
                     if (upd > 0) {
                     updatedCount++;
-                    if ("00".equals(newCode)) {
-                        Object sourceInstObj = txn.get("source_institution_code");
-                        Object destInstObj = txn.get("destination_institution_code");
-                        postSwitchWalletMovement(
-                                sid,
-                                sourceInstObj == null ? "" : sourceInstObj.toString(),
-                                destInstObj == null ? "" : destInstObj.toString(),
-                                amount);
-                    }
+                    // Switch wallet posting removed: AjiPay already debits on successful FT.
                     try {
                         jdbcTemplate.update("DELETE FROM ajiswitch_db.tbl_tsq_retry WHERE session_id = ?", sid);
                     } catch (DataAccessException delEx) {

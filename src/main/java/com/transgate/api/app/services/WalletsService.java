@@ -664,7 +664,6 @@ public class WalletsService implements WalletsInterface {
             String SQL = "SELECT * FROM "+table
                     + "WHERE walletnumber = ? "
                     + "AND activity_date_time >= ? AND activity_date_time < ? "
-                    + "AND (actor IS NULL OR UPPER(actor) <> 'SYSTEM') "
                     + "ORDER BY id DESC LIMIT ? OFFSET ?";
 //            String SQL = "SELECT * FROM ajiswitch_db.tbl_wallet_activities "
 //                    + "WHERE walletnumber = ? "
@@ -675,8 +674,7 @@ public class WalletsService implements WalletsInterface {
             SQL = "SELECT COUNT(id) as totalRecords "
                     + "FROM "+table
                     + "WHERE walletnumber = ? "
-                    + "AND activity_date_time >= ? AND activity_date_time < ? "
-                    + "AND (actor IS NULL OR UPPER(actor) <> 'SYSTEM') ";
+                    + "AND activity_date_time >= ? AND activity_date_time < ? ";
 //            SQL = "SELECT COUNT(id) as totalRecords "
 //                    + "FROM ajiswitch_db.tbl_wallet_activities "
 //                    + "WHERE walletnumber = ? "
@@ -712,14 +710,14 @@ public class WalletsService implements WalletsInterface {
                     && endDate != null && !endDate.trim().isEmpty();
 
             StringBuilder sql = new StringBuilder();
-            sql.append("SELECT a.id, a.walletnumber, a.amount, a.transaction_amount, a.fee, a.charge, a.credit_or_debit, a.actor, a.activity_date_time, a.session_id, ")
+            sql.append("SELECT a.id, a.walletnumber, a.amount, a.transaction_amount, a.fee, a.charge, a.total_fee, a.credit_or_debit, a.actor, a.activity_date_time, a.session_id, ")
                     .append("w.financialinstitutioncode as financialInstitutionCode, ")
                     .append("COALESCE(NULLIF(b.name, ''), n.institution_name, '') as financialInstitutionName ")
                     .append("FROM ajiswitch_db.tbl_wallet_activities a ")
                     .append("LEFT JOIN ajiswitch_db.tbl_wallets w ON a.walletnumber = w.walletnumber ")
                     .append("LEFT JOIN tbl_financial_institutions b ON w.financialinstitutioncode = b.code ")
                     .append("LEFT JOIN ajiswitch_db.tbl_nodes n ON w.financialinstitutioncode = n.institution_code ")
-                    .append("WHERE (a.actor IS NULL OR UPPER(a.actor) <> 'SYSTEM') ");
+                    .append("WHERE 1=1 ");
 
             List<Object> params = new ArrayList<>();
             if (hasRange) {
@@ -735,7 +733,7 @@ public class WalletsService implements WalletsInterface {
 
             StringBuilder countSql = new StringBuilder();
             countSql.append("SELECT COUNT(a.id) as totalRecords FROM ajiswitch_db.tbl_wallet_activities a ")
-                    .append("WHERE (a.actor IS NULL OR UPPER(a.actor) <> 'SYSTEM') ");
+                    .append("WHERE 1=1 ");
             List<Object> countParams = new ArrayList<>();
             if (hasRange) {
                 countSql.append("AND a.activity_date_time >= ? AND a.activity_date_time < ? ");
@@ -778,7 +776,7 @@ public class WalletsService implements WalletsInterface {
                     .append("LEFT JOIN ajiswitch_db.tbl_wallets w ON a.walletnumber = w.walletnumber ")
                     .append("LEFT JOIN tbl_financial_institutions b ON w.financialinstitutioncode = b.code ")
                     .append("LEFT JOIN ajiswitch_db.tbl_nodes n ON w.financialinstitutioncode = n.institution_code ")
-                    .append("WHERE (a.actor IS NULL OR UPPER(a.actor) <> 'SYSTEM') ");
+                    .append("WHERE 1=1 ");
 
             List<Object> params = new ArrayList<>();
             if (hasRange) {
