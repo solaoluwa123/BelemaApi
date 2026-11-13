@@ -5,7 +5,6 @@
  */
 package com.transgate.api.app.services;
 
-import com.transgate.api.events.FinancialInstitutionCreatedEvent;
 import com.transgate.api.interfaces.FinancialInstitutionsInterface;
 import com.transgate.api.interfaces.UsersInterface;
 import com.transgate.api.models.FinancialInstitutionModel;
@@ -24,7 +23,6 @@ import java.util.logging.Logger;
 import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -45,10 +43,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     private UsersInterface usersInterface;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private OutboxEventService outboxEventService;
 
     @Autowired
-    private FiCreatedOutboxService fiCreatedOutboxService;
+    private ResponseTransactions responseTransactions;
 
     ResponseManager responseManager = new ResponseManager();
     
@@ -61,34 +59,6 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     private final AppEnvironmentConfig appConfig;
     public FinancialInstitutionsService(AppEnvironmentConfig appConfig) {
         this.appConfig = appConfig;
-    }
-
-    /** Persist outbox row then publish FI-created queue message after a live institution insert (never for pending-only). */
-    private void publishFiCreatedEvent(FinancialInstitutionModel institution) {
-        if (institution == null) {
-            return;
-        }
-        Long outboxId = null;
-        try {
-            FiCreatedOutboxService.Record outbox = fiCreatedOutboxService.recordPending(institution);
-            if (outbox != null) {
-                outboxId = outbox.getId();
-                if (outbox.alreadyHandled()) {
-                    logger.info("FI created outbox already handled for code=" + institution.getCode()
-                            + " status=" + outbox.getStatus() + "; skip publish");
-                    return;
-                }
-            }
-        } catch (Exception ex) {
-            logger.warning("FI created outbox insert failed for code="
-                    + institution.getCode() + ": " + ex.getMessage());
-        }
-        try {
-            eventPublisher.publishEvent(new FinancialInstitutionCreatedEvent(institution, outboxId));
-        } catch (Exception ex) {
-            logger.warning("FI created event publish failed for code="
-                    + institution.getCode() + ": " + ex.getMessage());
-        }
     }
 
     /** Decrypt pending AES password for queue payload (approve-create path). */
@@ -687,6 +657,10 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     
     @Override
     public ResponseEntity Create(String sessiontoken, FinancialInstitutionModel institution) {
+        return responseTransactions.run(() -> createInstitution(sessiontoken, institution));
+    }
+
+    private ResponseEntity createInstitution(String sessiontoken, FinancialInstitutionModel institution) {
         try {
             NetworkResponse networkResponse = new NetworkResponse();
             String SQL;
@@ -757,7 +731,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             institution.setIssettlementbank(isSettlement);
                             institution.setInstWithWallet(withWallet);
                             institution.setCbn_bank_account(cbnAccount);
-                            publishFiCreatedEvent(institution);
+                            outboxEventService.recordFiCreated(institution);
                             return responseManager.ResponseAccepted();
                         } else
                             return responseManager.ResponseInternalServerError();
@@ -1082,6 +1056,13 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
     
     @Override
     public ResponseEntity FinancialInstitutionApprovals(String sessiontoken, int id, String actionType, String username) {
+        if ("create".equals(actionType)) {
+            return responseTransactions.run(() -> applyInstitutionApproval(sessiontoken, id, actionType, username));
+        }
+        return applyInstitutionApproval(sessiontoken, id, actionType, username);
+    }
+
+    private ResponseEntity applyInstitutionApproval(String sessiontoken, int id, String actionType, String username) {
         try {
             String SQL;
             int userrole = GetUserRole(username, sessiontoken);
@@ -1174,7 +1155,7 @@ public class FinancialInstitutionsService implements FinancialInstitutionsInterf
                             SQL = "DELETE a, b FROM tbl_nodes_pendings a LEFT JOIN tbl_financial_institutions_pendings b ON a.institution_code = b.code WHERE a.id = ? AND b.actionType = 'create'";
                             retVal = jdbcTemplate.update(SQL, new Object[]{id});
                             if (retVal > 0 && retVal2 > 0) {
-                                publishFiCreatedEvent(pendingCreate);
+                                outboxEventService.recordFiCreated(pendingCreate);
                                 return responseManager.ResponseAccepted();
                             } else
                                 return responseManager.ResponseInternalServerError();

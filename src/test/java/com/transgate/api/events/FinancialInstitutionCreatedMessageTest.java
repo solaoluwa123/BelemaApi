@@ -41,25 +41,4 @@ class FinancialInstitutionCreatedMessageTest {
         assertFalse(json.has("serverIP"));
         assertFalse(json.has("url"));
     }
-
-    @Test
-    void outboxRetryRebuildsTheSamePayload() throws Exception {
-        FinancialInstitutionCreatedMessage message = FinancialInstitutionCreatedMessage.fromOutbox(
-                "Example Bank",
-                "000014",
-                "ops@examplebank.com",
-                "plain-password",
-                "abcdefghijklmnopqrstuvwxyz012345",
-                "2026-09-28T10:00:00Z");
-        JsonNode json = mapper.readTree(mapper.writeValueAsString(message));
-
-        assertEquals("FINANCIAL_INSTITUTION_CREATED", json.get("eventType").asText());
-        assertEquals("2026-09-28T10:00:00Z", json.get("createdAt").asText());
-        assertEquals("Example Bank", json.get("name").asText());
-        assertEquals("000014", json.get("code").asText());
-        assertEquals("ops@examplebank.com", json.get("email").asText());
-        assertEquals("plain-password", json.get("password").asText());
-        assertEquals("abcdefghijklmnopqrstuvwxyz012345", json.get("hashKey").asText());
-        assertEquals(7, json.size());
-    }
 }

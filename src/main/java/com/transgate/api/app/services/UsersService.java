@@ -19,9 +19,6 @@ import com.transgate.api.util.Mailers;
 import com.transgate.api.util.PasswordUtil;
 import com.transgate.api.util.PlatformRole;
 import com.transgate.api.util.Randomizer;
-import com.transgate.api.util.SupersoftMailer;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import com.warrenstrange.googleauth.GoogleAuthenticatorKey;
 import static java.lang.Integer.parseInt;
 import java.sql.ResultSet;
@@ -32,12 +29,10 @@ import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataAccessException;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.http.ResponseEntity;
@@ -61,14 +56,13 @@ public class UsersService implements UsersInterface {
     private AuditService auditService;
 
     @Autowired
-    private ApplicationEventPublisher eventPublisher;
+    private OutboxEventService outboxEventService;
 
     @Autowired
-    private SupersoftMailer supersoftMailer;
+    private ResponseTransactions responseTransactions;
 
     @Autowired
-    @Qualifier("mailExecutor")
-    private Executor mailExecutor;
+    private PasswordResetService passwordResetService;
 
     ResponseManager responseManager = new ResponseManager();
     Randomizer randomizer = new Randomizer();
@@ -147,34 +141,6 @@ public class UsersService implements UsersInterface {
             Mailers.sendMail(toEmail, "Your account credentials", body, "supersofttechltd2023@gmail.com", "");
         } catch (Exception ex) {
             logger.warn("Failed to send credentials email to {}: {}", toEmail, ex.getMessage());
-        }
-    }
-
-    private boolean sendPasswordRecoveryEmail(String toEmail, String ref, String token) {
-        try {
-            String base = appConfig.getFrontendBaseUrl();
-            String q = "ref=" + URLEncoder.encode(ref, StandardCharsets.UTF_8)
-                    + "&token=" + URLEncoder.encode(token, StandardCharsets.UTF_8)
-                    + "&email=" + URLEncoder.encode(toEmail, StandardCharsets.UTF_8);
-            String resetUrl = base + "/password-recovery/verify?" + q;
-            String html = "<!DOCTYPE html><html><body style=\"font-family: Arial, Helvetica, sans-serif; color: #222; line-height: 1.5;\">"
-                    + "<p>You requested a password reset for your Belema account.</p>"
-                    + "<p><a href=\"" + resetUrl + "\" style=\"display:inline-block;padding:10px 16px;background:#CEF445;color:#000;text-decoration:none;border-radius:4px;font-weight:bold;\">Reset password</a></p>"
-                    + "<p>Or copy this link into your browser:</p>"
-                    + "<p style=\"word-break:break-all;\"><a href=\"" + resetUrl + "\">" + resetUrl + "</a></p>"
-                    + "<p>This link expires once used. If you did not request this, ignore this email.</p>"
-                    + "</body></html>";
-            long started = System.currentTimeMillis();
-            boolean sent = supersoftMailer.sendHtmlMail(toEmail, "Reset your Belema password", html);
-            logger.info("Password recovery email to {} sent={} in {}ms",
-                    toEmail, sent, System.currentTimeMillis() - started);
-            if (!sent) {
-                logger.warn("Password recovery email was not accepted by SMTP for {}", toEmail);
-            }
-            return sent;
-        } catch (Exception ex) {
-            logger.warn("Failed to send password recovery email to {}: {}", toEmail, ex.getMessage());
-            return false;
         }
     }
 
@@ -1139,36 +1105,34 @@ public class UsersService implements UsersInterface {
     @Override
     public ResponseEntity ResetPassword(String code, String password, String token) {
         LoginResponse response = new LoginResponse();
+        if (password == null || !PasswordUtil.meetsPolicy(password)) {
+            response.setCode(400);
+            response.setStatus("failed");
+            response.setMessage("Password must be at least " + PasswordUtil.DEFAULT_LENGTH
+                    + " characters and include upper, lower, digit, and symbol.");
+            return responseManager.ResponseOk(response);
+        }
         try {
-            String SQL;
-            SQL = "SELECT a.password from sparkpayweb_db.tbl_users a "
-                    + "WHERE a.reference = ? AND a.enabled = 1";
-            String security = jdbcTemplate.queryForObject(SQL, new Object[]{code}, String.class);
-//            boolean comparePassword = BCrypt.checkpw(token, security);
-            if (security.equals(token)) {
-                String hashPassword = BCrypt.hashpw(password, BCrypt.gensalt());
-                String reference = randomizer.GenerateReference();
-                SQL = "UPDATE sparkpayweb_db.tbl_users SET password = ?, reference = ?, must_change_password = 0 WHERE reference = ?";
-                jdbcTemplate.update(SQL, new Object[]{hashPassword, reference, code});
-                response.setCode(200);
-                response.setMessage("Password reset complete");
-                response.setMustChangePassword(0);
-                return responseManager.ResponseOk(response);
-            } else {
-                response.setCode(404);
-                response.setStatus("failed");
-                response.setMessage("Invalid reset code");
-                return responseManager.ResponseOk(response);
+            switch (passwordResetService.resetPassword(code, token, password)) {
+                case RESET:
+                    response.setCode(200);
+                    response.setStatus("success");
+                    response.setMessage("Password reset complete");
+                    response.setMustChangePassword(0);
+                    return responseManager.ResponseOk(response);
+                case EXPIRED:
+                    response.setCode(400);
+                    response.setStatus("failed");
+                    response.setMessage("Reset link has expired. Please request a new one.");
+                    return responseManager.ResponseOk(response);
+                default:
+                    response.setCode(404);
+                    response.setStatus("failed");
+                    response.setMessage("Invalid reset code");
+                    return responseManager.ResponseOk(response);
             }
         } catch (DataAccessException ex) {
-            System.out.println(ex);
-            if ("Incorrect result size: expected 1, actual 0".equals(ex.getMessage())) {
-                response.setCode(400);
-                response.setStatus("failed");
-                response.setMessage("Unable to handle password reset");
-                return responseManager.ResponseOk(response);
-            }
-            System.out.println("error>>>>" + ex.getMessage());
+            logger.warn("ResetPassword failed: {}", ex.getMessage());
             return responseManager.ResponseUnathorized();
         }
     }
@@ -1253,12 +1217,8 @@ public class UsersService implements UsersInterface {
                 return responseManager.ResponseOk(response);
             }
             String accountEmail = usernames.get(0);
-            String code = randomizer.GenerateReference(45, "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890");
-            String ref = randomizer.GenerateReference(6, "ABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890");
-            SQL = "UPDATE sparkpayweb_db.tbl_users SET reference = ?, password = ? WHERE username = ?";
-            jdbcTemplate.update(SQL, new Object[]{ref, code, accountEmail});
-            logger.info("Password recovery token stored for {}; queueing reset email", accountEmail);
-            mailExecutor.execute(() -> sendPasswordRecoveryEmail(accountEmail, ref, code));
+            passwordResetService.requestReset(accountEmail);
+            logger.info("Password reset requested for {}; reset message queued", accountEmail);
             response.setCode(200);
             response.setStatus("success");
             response.setMessage("If an account exists, reset instructions have been sent.");
@@ -1396,6 +1356,12 @@ public class UsersService implements UsersInterface {
     @Override
     public ResponseEntity Create(String sessiontoken, String creator, String username, String firstname,
             String surname, String phone_number, String email_address, int roleid, String password) {
+        return responseTransactions.run(() -> createSystemUser(sessiontoken, creator, username, firstname,
+                surname, phone_number, email_address, roleid, password));
+    }
+
+    private ResponseEntity createSystemUser(String sessiontoken, String creator, String username, String firstname,
+            String surname, String phone_number, String email_address, int roleid, String password) {
         logger.info("Create invoked with sessiontoken: " + sessiontoken
                 + ", creator: " + creator
                 + ", username: " + username
@@ -1476,7 +1442,7 @@ public class UsersService implements UsersInterface {
                         logger.info("tbl_user_details insert returned: " + retval);
 
                         if (retval > 0) {
-                            eventPublisher.publishEvent(new UserCreatedEvent(
+                            outboxEventService.recordWelcomeEmail(new UserCreatedEvent(
                                     email_address, username, plainPassword, firstname, surname));
                             LoginResponse response = new LoginResponse();
                             response.setCode(201);
@@ -1580,6 +1546,13 @@ public class UsersService implements UsersInterface {
     public ResponseEntity CreateOther(String sessiontoken, String creator, String username,
             String firstname, String surname, String phone_number, String email_address,
             int roleid, String password, String institutionid, String institutionname) {
+        return responseTransactions.run(() -> createOtherUser(sessiontoken, creator, username, firstname,
+                surname, phone_number, email_address, roleid, password, institutionid, institutionname));
+    }
+
+    private ResponseEntity createOtherUser(String sessiontoken, String creator, String username,
+            String firstname, String surname, String phone_number, String email_address,
+            int roleid, String password, String institutionid, String institutionname) {
         try {
             logger.info("CreateOther invoked with: sessiontoken=" + sessiontoken
                     + ", creator=" + creator
@@ -1643,7 +1616,7 @@ public class UsersService implements UsersInterface {
 
                         if (retval > 0) {
                             mapOtherUserToInstitution(email_address, institutionid, institutionname, roleid);
-                            eventPublisher.publishEvent(new UserCreatedEvent(
+                            outboxEventService.recordWelcomeEmail(new UserCreatedEvent(
                                     email_address, username, plainPassword, firstname, surname,
                                     institutionid, institutionname));
 
@@ -2093,6 +2066,13 @@ public class UsersService implements UsersInterface {
 
     @Override
     public ResponseEntity UserApprovals(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode) {
+        if ("create".equals(actionType)) {
+            return responseTransactions.run(() -> applyUserApproval(sessiontoken, id, actionType, username, isContact, financialInstitutionCode));
+        }
+        return applyUserApproval(sessiontoken, id, actionType, username, isContact, financialInstitutionCode);
+    }
+
+    private ResponseEntity applyUserApproval(String sessiontoken, int id, String actionType, String username, boolean isContact, String financialInstitutionCode) {
         try {
             String SQL;
             int userrole = GetActorRole(sessiontoken);
@@ -2232,7 +2212,7 @@ public class UsersService implements UsersInterface {
                             if (retVal > 0 && retVal2 > 0) {
                                 String plainForMail = decryptPasswordCipher(pendingCipher);
                                 if (plainForMail != null && !plainForMail.isEmpty()) {
-                                    eventPublisher.publishEvent(new UserCreatedEvent(
+                                    outboxEventService.recordWelcomeEmail(new UserCreatedEvent(
                                             pendingUser.getEmail_address(),
                                             pendingUser.getUsername(),
                                             plainForMail,

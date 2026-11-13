@@ -36,19 +36,6 @@ public class FinancialInstitutionCreatedMessage {
         return msg;
     }
 
-    public static FinancialInstitutionCreatedMessage fromOutbox(
-            String name, String code, String email, String password, String hashKey, String createdAt) {
-        FinancialInstitutionCreatedMessage msg = new FinancialInstitutionCreatedMessage();
-        msg.setEventType(EVENT_TYPE);
-        msg.setCreatedAt(createdAt != null && !createdAt.isEmpty() ? createdAt : Instant.now().toString());
-        msg.setName(name);
-        msg.setCode(code);
-        msg.setEmail(email);
-        msg.setPassword(password);
-        msg.setHashKey(hashKey);
-        return msg;
-    }
-
     public String getEventType() {
         return eventType;
     }

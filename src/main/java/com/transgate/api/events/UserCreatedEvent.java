@@ -1,7 +1,8 @@
 package com.transgate.api.events;
 
 /**
- * Published when a live Belema user account is created (admin create or approved create).
+ * A live Belema user account that was just created (admin create or approved create); written to the
+ * welcome-email outbox.
  */
 public class UserCreatedEvent {
 
