@@ -164,4 +164,26 @@ public class AppEnvironmentConfig {
         }
         return url.trim().replaceAll("/+$", "");
     }
+
+    /**
+     * Comma-separated full switch refresh URLs, one per AjiPay instance.
+     * Example: {@code http://host1:1057/ajipayaccounts/refresh,http://host2:1057/ajipayaccounts/refresh}
+     */
+    public String getSwitchRefreshUrls() {
+        return env.getProperty("app.switch.refresh.urls", "");
+    }
+
+    /** Optional shared secret sent as {@code X-Refresh-Key} to each switch refresh endpoint. */
+    public String getSwitchRefreshKey() {
+        return env.getProperty("app.switch.refresh.key", "");
+    }
+
+    /** Per-instance connect/read timeout for switch refresh calls. */
+    public int getSwitchRefreshTimeoutMs() {
+        Integer timeout = env.getProperty("app.switch.refresh.timeout-ms", Integer.class);
+        if (timeout == null || timeout < 500) {
+            return 5000;
+        }
+        return timeout;
+    }
 }
